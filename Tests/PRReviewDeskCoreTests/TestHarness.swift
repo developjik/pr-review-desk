@@ -7,6 +7,7 @@ enum TestHarness {
             try ModelsTests.run()
             try DiffPositionMapperTests.run()
             try await GitHubClientTests.run()
+            try await CodexReviewAgentTests.run()
             print("PRReviewDeskCoreTests passed")
         } catch {
             fputs("PRReviewDeskCoreTests failed: \(error)\n", stderr)

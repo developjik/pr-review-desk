@@ -184,6 +184,35 @@ public struct InlineCommentDraft: Codable, Equatable, Identifiable, Hashable {
         self.severity = severity
         self.isSelected = isSelected
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case path
+        case position
+        case body
+        case severity
+        case isSelected = "is_selected"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        path = try container.decode(String.self, forKey: .path)
+        position = try container.decode(Int.self, forKey: .position)
+        body = try container.decode(String.self, forKey: .body)
+        severity = try container.decode(CommentSeverity.self, forKey: .severity)
+        isSelected = try container.decodeIfPresent(Bool.self, forKey: .isSelected) ?? true
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(path, forKey: .path)
+        try container.encode(position, forKey: .position)
+        try container.encode(body, forKey: .body)
+        try container.encode(severity, forKey: .severity)
+        try container.encode(isSelected, forKey: .isSelected)
+    }
 }
 
 public struct ReviewDraft: Codable, Equatable, Hashable {
