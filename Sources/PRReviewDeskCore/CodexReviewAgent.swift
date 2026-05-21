@@ -1,6 +1,6 @@
 import Foundation
 
-public struct CommandResult: Equatable, Hashable {
+public struct CommandResult: Equatable, Hashable, Sendable {
     public let exitCode: Int32
     public let standardOutput: String
     public let standardError: String
@@ -12,7 +12,7 @@ public struct CommandResult: Equatable, Hashable {
     }
 }
 
-public protocol CommandRunning {
+public protocol CommandRunning: Sendable {
     func run(
         executable: String,
         arguments: [String],
@@ -21,7 +21,7 @@ public protocol CommandRunning {
     ) async throws -> CommandResult
 }
 
-public enum CodexReviewError: Error, Equatable, CustomStringConvertible {
+public enum CodexReviewError: Error, Equatable, CustomStringConvertible, Sendable {
     case processFailed(exitCode: Int32, standardError: String)
     case missingOutput(URL)
     case noReviewableFiles
@@ -38,7 +38,7 @@ public enum CodexReviewError: Error, Equatable, CustomStringConvertible {
     }
 }
 
-public struct ProcessCommandRunner: CommandRunning {
+public struct ProcessCommandRunner: CommandRunning, Sendable {
     public init() {}
 
     public func run(
@@ -84,7 +84,7 @@ public struct ProcessCommandRunner: CommandRunning {
     }
 }
 
-public final class CodexReviewAgent {
+public final class CodexReviewAgent: @unchecked Sendable {
     private let commandRunner: CommandRunning
     private let workingDirectory: URL
     private let fileManager: FileManager

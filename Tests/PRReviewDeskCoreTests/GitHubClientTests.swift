@@ -92,7 +92,7 @@ enum GitHubClientTests {
     }
 }
 
-private final class FakeGitHubTransport: GitHubTransport {
+private final class FakeGitHubTransport: GitHubTransport, @unchecked Sendable {
     private let data: Data
     private let statusCode: Int
     private(set) var requests: [URLRequest] = []

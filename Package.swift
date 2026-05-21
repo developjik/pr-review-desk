@@ -9,10 +9,15 @@ let package = Package(
     ],
     products: [
         .library(name: "PRReviewDeskCore", targets: ["PRReviewDeskCore"]),
+        .executable(name: "PRReviewDeskApp", targets: ["PRReviewDeskApp"]),
         .executable(name: "PRReviewDeskCoreTests", targets: ["PRReviewDeskCoreTests"])
     ],
     targets: [
         .target(name: "PRReviewDeskCore"),
+        .executableTarget(
+            name: "PRReviewDeskApp",
+            dependencies: ["PRReviewDeskCore"]
+        ),
         .executableTarget(
             name: "PRReviewDeskCoreTests",
             dependencies: ["PRReviewDeskCore"],

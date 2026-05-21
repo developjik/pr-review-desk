@@ -88,7 +88,7 @@ enum CodexReviewAgentTests {
     }
 }
 
-private final class FakeCommandRunner: CommandRunning {
+private final class FakeCommandRunner: CommandRunning, @unchecked Sendable {
     private let outputJSON: String
     private(set) var executable = ""
     private(set) var arguments: [String] = []

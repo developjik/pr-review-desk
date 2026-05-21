@@ -1,6 +1,6 @@
 import Foundation
 
-public enum GitHubError: Error, Equatable, CustomStringConvertible {
+public enum GitHubError: Error, Equatable, CustomStringConvertible, Sendable {
     case invalidRepositoryFullName(String)
     case invalidResponse
     case requestFailed(statusCode: Int, message: String)
@@ -17,11 +17,11 @@ public enum GitHubError: Error, Equatable, CustomStringConvertible {
     }
 }
 
-public protocol GitHubTransport {
+public protocol GitHubTransport: Sendable {
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse)
 }
 
-public struct URLSessionGitHubTransport: GitHubTransport {
+public struct URLSessionGitHubTransport: GitHubTransport, Sendable {
     private let session: URLSession
 
     public init(session: URLSession = .shared) {
@@ -37,12 +37,10 @@ public struct URLSessionGitHubTransport: GitHubTransport {
     }
 }
 
-public final class GitHubClient {
+public final class GitHubClient: Sendable {
     private let token: String
     private let transport: GitHubTransport
     private let baseURL: URL
-    private let decoder: JSONDecoder
-    private let encoder: JSONEncoder
 
     public init(
         token: String,
@@ -52,8 +50,6 @@ public final class GitHubClient {
         self.token = token
         self.baseURL = baseURL
         self.transport = transport
-        decoder = JSONDecoder()
-        encoder = JSONEncoder()
     }
 
     public func listRepositories() async throws -> [Repository] {
@@ -119,14 +115,14 @@ public final class GitHubClient {
             path: "/repos/\(owner)/\(name)/pulls/\(pullRequest.number)/reviews"
         )
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try encoder.encode(payload)
+        request.httpBody = try JSONEncoder().encode(payload)
         try await sendWithoutDecoding(request)
     }
 
     private func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
         let (data, response) = try await transport.data(for: request)
         try validate(response: response, data: data)
-        return try decoder.decode(type, from: data)
+        return try JSONDecoder().decode(type, from: data)
     }
 
     private func sendWithoutDecoding(_ request: URLRequest) async throws {

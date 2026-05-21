@@ -1,6 +1,6 @@
 import Foundation
 
-public enum DiffPositionError: Error, Equatable, CustomStringConvertible {
+public enum DiffPositionError: Error, Equatable, CustomStringConvertible, Sendable {
     case invalidHunkHeader(String)
 
     public var description: String {
@@ -11,7 +11,7 @@ public enum DiffPositionError: Error, Equatable, CustomStringConvertible {
     }
 }
 
-public struct AnnotatedDiff: Equatable, Hashable {
+public struct AnnotatedDiff: Equatable, Hashable, Sendable {
     public let path: String
     public let annotatedPatch: String
     public let positionsByNewLine: [Int: Int]

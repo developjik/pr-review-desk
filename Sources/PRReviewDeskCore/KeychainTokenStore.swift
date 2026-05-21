@@ -1,13 +1,13 @@
 import Foundation
 import Security
 
-public protocol TokenStore {
+public protocol TokenStore: Sendable {
     func loadToken() throws -> String?
     func saveToken(_ token: String) throws
     func deleteToken() throws
 }
 
-public final class InMemoryTokenStore: TokenStore {
+public final class InMemoryTokenStore: TokenStore, @unchecked Sendable {
     private var token: String?
 
     public init(token: String? = nil) {
@@ -27,7 +27,7 @@ public final class InMemoryTokenStore: TokenStore {
     }
 }
 
-public enum KeychainTokenStoreError: Error, Equatable, CustomStringConvertible {
+public enum KeychainTokenStoreError: Error, Equatable, CustomStringConvertible, Sendable {
     case unexpectedStatus(OSStatus)
     case invalidTokenData
 
@@ -41,7 +41,7 @@ public enum KeychainTokenStoreError: Error, Equatable, CustomStringConvertible {
     }
 }
 
-public struct KeychainTokenStore: TokenStore {
+public struct KeychainTokenStore: TokenStore, Sendable {
     private let service: String
     private let account: String
 

@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Repository: Codable, Equatable, Identifiable, Hashable {
+public struct Repository: Codable, Equatable, Identifiable, Hashable, Sendable {
     public let id: Int
     public let owner: String
     public let name: String
@@ -49,7 +49,7 @@ public struct Repository: Codable, Equatable, Identifiable, Hashable {
     }
 }
 
-public struct PullRequest: Codable, Equatable, Identifiable, Hashable {
+public struct PullRequest: Codable, Equatable, Identifiable, Hashable, Sendable {
     public let id: Int
     public let number: Int
     public let title: String
@@ -109,7 +109,7 @@ public struct PullRequest: Codable, Equatable, Identifiable, Hashable {
     }
 }
 
-public struct PullRequestFile: Codable, Equatable, Identifiable, Hashable {
+public struct PullRequestFile: Codable, Equatable, Identifiable, Hashable, Sendable {
     public var id: String { path }
     public let path: String
     public let status: String
@@ -134,7 +134,7 @@ public struct PullRequestFile: Codable, Equatable, Identifiable, Hashable {
     }
 }
 
-public enum ReviewEvent: String, Codable, CaseIterable, Equatable, Hashable, Identifiable {
+public enum ReviewEvent: String, Codable, CaseIterable, Equatable, Hashable, Identifiable, Sendable {
     case comment = "COMMENT"
     case approve = "APPROVE"
     case requestChanges = "REQUEST_CHANGES"
@@ -153,7 +153,7 @@ public enum ReviewEvent: String, Codable, CaseIterable, Equatable, Hashable, Ide
     }
 }
 
-public enum CommentSeverity: String, Codable, CaseIterable, Equatable, Hashable, Identifiable {
+public enum CommentSeverity: String, Codable, CaseIterable, Equatable, Hashable, Identifiable, Sendable {
     case low
     case medium
     case high
@@ -161,7 +161,7 @@ public enum CommentSeverity: String, Codable, CaseIterable, Equatable, Hashable,
     public var id: String { rawValue }
 }
 
-public struct InlineCommentDraft: Codable, Equatable, Identifiable, Hashable {
+public struct InlineCommentDraft: Codable, Equatable, Identifiable, Hashable, Sendable {
     public var id: String
     public var path: String
     public var position: Int
@@ -215,7 +215,7 @@ public struct InlineCommentDraft: Codable, Equatable, Identifiable, Hashable {
     }
 }
 
-public struct ReviewDraft: Codable, Equatable, Hashable {
+public struct ReviewDraft: Codable, Equatable, Hashable, Sendable {
     public var summary: String
     public var risks: [String]
     public var inlineComments: [InlineCommentDraft]
@@ -233,7 +233,7 @@ public struct ReviewDraft: Codable, Equatable, Hashable {
     }
 }
 
-public struct ReviewSubmission: Equatable, Hashable {
+public struct ReviewSubmission: Equatable, Hashable, Sendable {
     public var event: ReviewEvent
     public var body: String
     public var comments: [InlineCommentDraft]
