@@ -23,6 +23,41 @@ The package tools version is kept at Swift 6.1 so the GitHub-hosted macOS runner
 
 ## Swift Test Status
 
-`swift test` is not the local verification gate yet. The current local Command Line Tools install cannot import `XCTest` or `Testing`, and the package keeps the test suite in an executable harness until that toolchain blocker is resolved.
+`swift test` is not the local verification gate yet. The package intentionally keeps the suite in the executable `PRReviewDeskCoreTests` harness until the local toolchain can run a standard SwiftPM test target.
 
-Issue #12 tracks the migration path to a standard SwiftPM test target.
+Local status observed on 2026-05-22:
+
+```bash
+xcode-select -p
+# /Library/Developer/CommandLineTools
+
+swift --version
+# Apple Swift version 6.2.3 ... Target: arm64-apple-macosx26.0
+
+swift -e 'import XCTest; print("XCTest import ok")'
+# error: no such module 'XCTest'
+
+swift -e 'import Testing; print("Testing import ok")'
+# error: no such module 'Testing'
+
+swift test
+# error: no tests found; create a target in the 'Tests' directory
+```
+
+The local blocker is the active Command Line Tools-only developer directory, which does not expose `XCTest` or `Testing` to this package. Installing and selecting a full Xcode developer directory should be verified with the import probes above before changing the gate:
+
+```bash
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+swift -e 'import XCTest; print("XCTest import ok")'
+swift -e 'import Testing; print("Testing import ok")'
+```
+
+For CI, prefer pinning a full-Xcode macOS image when migrating instead of relying on an implicit local setup. As of 2026-05-22, GitHub's `actions/runner-images` `macos-26` image documentation lists Xcode 26.2 as the default `/Applications/Xcode.app`, with additional Xcode 26.x bundles available: <https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md>.
+
+Migration path:
+
+1. Keep `scripts/verify.sh` and the executable harness as the only required gate until both local and CI import probes pass.
+2. Change `Package.swift` by replacing the `PRReviewDeskCoreTests` executable product/target with a `.testTarget` at the same `Tests/PRReviewDeskCoreTests` path.
+3. Replace `TestHarness.main()` with minimal XCTest or Swift Testing adapters that call the existing suite `run()` methods. This reuses the current test bodies instead of keeping a second duplicated suite.
+4. Update `scripts/verify.sh` to run `swift test` after the test target is green locally and in CI.
+5. Incrementally convert the suite `run()` methods into native XCTest or Swift Testing cases only after the gate is stable.
