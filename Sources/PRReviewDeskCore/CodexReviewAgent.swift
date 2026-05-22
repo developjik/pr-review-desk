@@ -190,9 +190,10 @@ public final class CodexReviewAgent: @unchecked Sendable {
     public func generateReview(
         repository: Repository,
         pullRequest: PullRequest,
-        files: [PullRequestFile]
+        files: [PullRequestFile],
+        context: PullRequestReviewContext = .empty
     ) async throws -> ReviewDraft {
-        let prompt = try makePrompt(repository: repository, pullRequest: pullRequest, files: files)
+        let prompt = try makePrompt(repository: repository, pullRequest: pullRequest, files: files, context: context)
         let tempDirectory = fileManager.temporaryDirectory
             .appendingPathComponent("PRReviewDeskCodex-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
@@ -254,7 +255,8 @@ public final class CodexReviewAgent: @unchecked Sendable {
     public func makePrompt(
         repository: Repository,
         pullRequest: PullRequest,
-        files: [PullRequestFile]
+        files: [PullRequestFile],
+        context: PullRequestReviewContext = .empty
     ) throws -> String {
         let annotatedDiffs = try files.compactMap { file -> AnnotatedDiff? in
             guard file.reviewability == .includedPatch,
@@ -287,6 +289,8 @@ public final class CodexReviewAgent: @unchecked Sendable {
         URL: \(pullRequest.htmlURL.absoluteString)
         Head SHA: \(pullRequest.headSha)
 
+        \(makeContextText(context))
+
         Review goals:
         - Focus on correctness, regressions, security, data loss, and missing tests.
         - Do not comment on style unless it creates a real maintenance risk.
@@ -298,6 +302,97 @@ public final class CodexReviewAgent: @unchecked Sendable {
 
         \(filesText)
         """
+    }
+
+    private func makeContextText(_ context: PullRequestReviewContext) -> String {
+        var lines = [
+            "Additional pull request context:",
+            "Context limits: PR body \(PromptContextLimits.bodyCharacters) characters, issue comments \(PromptContextLimits.issueCommentCount) x \(PromptContextLimits.commentCharacters) characters, review comments \(PromptContextLimits.reviewCommentCount) x \(PromptContextLimits.commentCharacters) characters, check runs \(PromptContextLimits.checkRunCount)."
+        ]
+
+        guard !context.isEmpty else {
+            lines.append("No additional PR body, comments, or checks were provided.")
+            return lines.joined(separator: "\n")
+        }
+
+        if let body = context.body?.trimmingCharacters(in: .whitespacesAndNewlines), !body.isEmpty {
+            lines.append("")
+            lines.append("PR body:")
+            lines.append(truncatedContextText(body, limit: PromptContextLimits.bodyCharacters))
+        }
+
+        if !context.issueComments.isEmpty {
+            lines.append("")
+            lines.append("Existing issue comments:")
+            for comment in context.issueComments.prefix(PromptContextLimits.issueCommentCount) {
+                let createdAt = comment.createdAt.map { " at \($0)" } ?? ""
+                lines.append("- @\(comment.author)\(createdAt): \(truncatedContextText(comment.body, limit: PromptContextLimits.commentCharacters))")
+            }
+            appendOmittedCount(
+                total: context.issueComments.count,
+                included: PromptContextLimits.issueCommentCount,
+                itemDescription: "issue comments",
+                to: &lines
+            )
+        }
+
+        if !context.reviewComments.isEmpty {
+            lines.append("")
+            lines.append("Existing review comments:")
+            for comment in context.reviewComments.prefix(PromptContextLimits.reviewCommentCount) {
+                let position = comment.position.map { "[pos \($0)]" } ?? "[no position]"
+                let createdAt = comment.createdAt.map { " at \($0)" } ?? ""
+                lines.append("- @\(comment.author) on \(comment.path) \(position)\(createdAt): \(truncatedContextText(comment.body, limit: PromptContextLimits.commentCharacters))")
+            }
+            appendOmittedCount(
+                total: context.reviewComments.count,
+                included: PromptContextLimits.reviewCommentCount,
+                itemDescription: "review comments",
+                to: &lines
+            )
+        }
+
+        if !context.checkRuns.isEmpty {
+            lines.append("")
+            lines.append("Check/status summary:")
+            for checkRun in context.checkRuns.prefix(PromptContextLimits.checkRunCount) {
+                let conclusion = checkRun.conclusion ?? "no conclusion"
+                let details = checkRun.detailsURL.map { " (\($0.absoluteString))" } ?? ""
+                lines.append("- \(checkRun.name): \(checkRun.status) / \(conclusion)\(details)")
+            }
+            appendOmittedCount(
+                total: context.checkRuns.count,
+                included: PromptContextLimits.checkRunCount,
+                itemDescription: "check runs",
+                to: &lines
+            )
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    private func truncatedContextText(_ text: String, limit: Int) -> String {
+        let redacted = SensitiveTextRedactor.redact(text).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard redacted.count > limit else {
+            return redacted
+        }
+
+        let endIndex = redacted.index(redacted.startIndex, offsetBy: limit)
+        return String(redacted[..<endIndex])
+            .trimmingCharacters(in: .whitespacesAndNewlines) + " ... [truncated]"
+    }
+
+    private func appendOmittedCount(
+        total: Int,
+        included: Int,
+        itemDescription: String,
+        to lines: inout [String]
+    ) {
+        guard total > included else {
+            return
+        }
+
+        lines.append("- ... \(total - included) more \(itemDescription) omitted by context limit.")
     }
 
     private func codexError(from error: CommandRunError) -> CodexReviewError {
@@ -352,4 +447,12 @@ public final class CodexReviewAgent: @unchecked Sendable {
       }
     }
     """
+}
+
+private enum PromptContextLimits {
+    static let bodyCharacters = 2_000
+    static let commentCharacters = 800
+    static let issueCommentCount = 6
+    static let reviewCommentCount = 6
+    static let checkRunCount = 10
 }

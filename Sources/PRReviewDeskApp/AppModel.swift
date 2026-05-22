@@ -428,11 +428,21 @@ final class AppModel: ObservableObject {
                 changedFiles = try await githubClient.pullRequestFiles(repository: selectedRepository, pullRequest: pullRequestForReview)
                 selectedChangedFilePath = changedFiles.first(where: { $0.path == previousSelectedFilePath })?.path ?? changedFiles.first?.path
             }
+            let reviewContext: PullRequestReviewContext
+            if let githubClient {
+                reviewContext = try await githubClient.pullRequestReviewContext(
+                    repository: selectedRepository,
+                    pullRequest: pullRequestForReview
+                )
+            } else {
+                reviewContext = .empty
+            }
             let coverageSummary = reviewCoverageSummary
             let generated = try await codexAgent.generateReview(
                 repository: selectedRepository,
                 pullRequest: pullRequestForReview,
-                files: changedFiles
+                files: changedFiles,
+                context: reviewContext
             )
             focusedInlineCommentTarget = nil
             reviewedHeadSha = pullRequestForReview.headSha
