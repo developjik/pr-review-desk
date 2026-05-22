@@ -31,8 +31,16 @@ final class AppModel: ObservableObject {
     @Published var selectedChangedFilePath: String?
     @Published var focusedInlineCommentTarget: InlineCommentFocusTarget?
     @Published var draft: ReviewDraft?
-    @Published var reviewBody = ""
-    @Published var selectedEvent: ReviewEvent = .comment
+    @Published var reviewBody = "" {
+        didSet {
+            persistCurrentDraftIfPossible()
+        }
+    }
+    @Published var selectedEvent: ReviewEvent = .comment {
+        didSet {
+            persistCurrentDraftIfPossible()
+        }
+    }
     @Published var statusMessage = "Enter a GitHub token or load one from Keychain."
     @Published var isWorking = false
     @Published var canCancelCurrentOperation = false
@@ -54,6 +62,7 @@ final class AppModel: ObservableObject {
     private static let privateRepositoryConsentAcknowledgementsKey = "privateRepositoryConsentAcknowledgements"
     private let credentialStore: CredentialStore
     private let codexAgent: CodexReviewAgent
+    private let reviewDraftStore: any ReviewDraftStore
     private let userDefaults: UserDefaults
     private var githubClient: GitHubClient?
     private var reviewedHeadSha: String?
@@ -159,10 +168,12 @@ final class AppModel: ObservableObject {
     init(
         credentialStore: CredentialStore = VersionedCredentialStore.keychainDefault(),
         codexAgent: CodexReviewAgent = CodexReviewAgent(),
+        reviewDraftStore: any ReviewDraftStore = FileReviewDraftStore.appDefault(),
         userDefaults: UserDefaults = .standard
     ) {
         self.credentialStore = credentialStore
         self.codexAgent = codexAgent
+        self.reviewDraftStore = reviewDraftStore
         self.userDefaults = userDefaults
         self.isPrivacyDisclosureAcknowledged = userDefaults.bool(forKey: Self.privacyDisclosureAcknowledgedKey)
         self.privateRepositoryConsentAcknowledgements = Set(
@@ -347,6 +358,7 @@ final class AppModel: ObservableObject {
             changedFiles = try await githubClient.pullRequestFiles(repository: selectedRepository, pullRequest: pullRequest)
             selectedChangedFilePath = changedFiles.first?.path
             statusMessage = "Loaded \(changedFiles.count) changed files. \(reviewCoverageSummary.statusMessage)"
+            try restoreDraftIfAvailable(repository: selectedRepository, pullRequest: pullRequest)
         }
     }
 
@@ -423,11 +435,12 @@ final class AppModel: ObservableObject {
                 files: changedFiles
             )
             focusedInlineCommentTarget = nil
-            draft = generated
-            reviewBody = composeReviewBody(from: generated)
             reviewedHeadSha = pullRequestForReview.headSha
             preflightHeadSha = pullRequestForReview.headSha
             selectedEvent = .comment
+            draft = generated
+            reviewBody = composeReviewBody(from: generated)
+            persistCurrentDraftIfPossible()
             if let warningMessage = coverageSummary.warningMessage {
                 statusMessage = "Generated review draft with \(generated.inlineComments.count) inline comments. \(warningMessage)"
             } else {
@@ -496,6 +509,7 @@ final class AppModel: ObservableObject {
             return
         }
         draft?.inlineComments[index].isSelected = isSelected
+        persistCurrentDraftIfPossible()
     }
 
     func setInlineCommentBody(id: String, body: String) {
@@ -503,6 +517,7 @@ final class AppModel: ObservableObject {
             return
         }
         draft?.inlineComments[index].body = body
+        persistCurrentDraftIfPossible()
     }
 
     func focusInlineComment(_ comment: InlineCommentDraft) {
@@ -535,6 +550,19 @@ final class AppModel: ObservableObject {
 
     func dismissRecoverableError() {
         recoverableError = nil
+    }
+
+    func discardCurrentDraft() {
+        if let key = currentDraftKey {
+            try? reviewDraftStore.deleteDraft(key: key)
+        }
+
+        draft = nil
+        reviewBody = ""
+        reviewedHeadSha = nil
+        focusedInlineCommentTarget = nil
+        selectedEvent = .comment
+        statusMessage = "Discarded review draft."
     }
 
     func confirmPrivateRepositoryConsentAndGenerate() {
@@ -594,6 +622,55 @@ final class AppModel: ObservableObject {
             forKey: Self.privateRepositoryConsentAcknowledgementsKey
         )
         privateRepositoryConsentAcknowledgementCount = privateRepositoryConsentAcknowledgements.count
+    }
+
+    private var currentDraftKey: ReviewDraftKey? {
+        guard let selectedRepository, let selectedPullRequest, let reviewedHeadSha else {
+            return nil
+        }
+
+        return ReviewDraftKey(
+            repositoryFullName: selectedRepository.fullName,
+            pullRequestNumber: selectedPullRequest.number,
+            headSha: reviewedHeadSha
+        )
+    }
+
+    private func restoreDraftIfAvailable(repository: Repository, pullRequest: PullRequest) throws {
+        guard let storedDraft = try reviewDraftStore.loadLatestDraft(
+            repositoryFullName: repository.fullName,
+            pullRequestNumber: pullRequest.number
+        ) else {
+            return
+        }
+
+        focusedInlineCommentTarget = nil
+        reviewedHeadSha = storedDraft.key.headSha
+        preflightHeadSha = pullRequest.headSha
+        draft = storedDraft.draft
+        reviewBody = storedDraft.reviewBody
+        selectedEvent = storedDraft.selectedEvent
+
+        if storedDraft.key.headSha == pullRequest.headSha {
+            statusMessage = "Restored saved review draft."
+        } else {
+            statusMessage = "Restored stale review draft from \(storedDraft.key.headSha.prefix(8)); regenerate before submitting."
+        }
+    }
+
+    private func persistCurrentDraftIfPossible() {
+        guard let key = currentDraftKey, let draft else {
+            return
+        }
+
+        let storedDraft = StoredReviewDraft(
+            key: key,
+            draft: draft,
+            reviewBody: reviewBody,
+            selectedEvent: selectedEvent,
+            savedAt: Date()
+        )
+        try? reviewDraftStore.saveDraft(storedDraft)
     }
 
     private var tokenValidationReadiness: ReadinessProbeState {
