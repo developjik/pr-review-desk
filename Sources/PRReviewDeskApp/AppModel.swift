@@ -32,7 +32,7 @@ final class AppModel: ObservableObject {
     @Published var codexCLIStatus = "Not checked."
     @Published var isSubmitConfirmationPresented = false
 
-    private let tokenStore: TokenStore
+    private let credentialStore: CredentialStore
     private let codexAgent: CodexReviewAgent
     private var githubClient: GitHubClient?
     private var reviewedHeadSha: String?
@@ -117,20 +117,20 @@ final class AppModel: ObservableObject {
     }
 
     init(
-        tokenStore: TokenStore = KeychainTokenStore(),
+        credentialStore: CredentialStore = PersonalAccessTokenCredentialStore.keychainDefault(),
         codexAgent: CodexReviewAgent = CodexReviewAgent()
     ) {
-        self.tokenStore = tokenStore
+        self.credentialStore = credentialStore
         self.codexAgent = codexAgent
     }
 
     func loadStoredToken() {
         do {
-            guard let token = try tokenStore.loadToken(), !token.isEmpty else {
+            guard let credential = try credentialStore.loadCredential(), !credential.accessToken.isEmpty else {
                 hasToken = false
                 return
             }
-            configureGitHubClient(token: token)
+            configureGitHubClient()
             tokenInput = ""
             hasToken = true
             statusMessage = "GitHub token loaded from Keychain."
@@ -147,8 +147,8 @@ final class AppModel: ObservableObject {
         }
 
         do {
-            try tokenStore.saveToken(trimmed)
-            configureGitHubClient(token: trimmed)
+            try credentialStore.saveCredential(.personalAccessToken(trimmed))
+            configureGitHubClient()
             tokenInput = ""
             hasToken = true
             statusMessage = "GitHub token saved."
@@ -160,7 +160,7 @@ final class AppModel: ObservableObject {
 
     func deleteStoredToken() {
         do {
-            try tokenStore.deleteToken()
+            try credentialStore.deleteCredential()
             githubClient = nil
             hasToken = false
             repositories = []
@@ -432,9 +432,9 @@ final class AppModel: ObservableObject {
         recoverableError = nil
     }
 
-    private func configureGitHubClient(token: String) {
+    private func configureGitHubClient() {
         githubClient = GitHubClient(
-            accessTokenProvider: StaticAccessTokenProvider(credential: .personalAccessToken(token))
+            accessTokenProvider: CredentialStoreAccessTokenProvider(credentialStore: credentialStore)
         )
     }
 
