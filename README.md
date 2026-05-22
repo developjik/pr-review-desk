@@ -21,6 +21,21 @@ The executable `PRReviewDeskCoreTests` target is the current test harness. It do
 
 The package tools version is kept at Swift 6.1 so the GitHub-hosted macOS runner can execute the same gate without installing an additional toolchain. Newer local Swift toolchains can still build the package.
 
+## Release Candidate Gate
+
+CI pins the macOS runner to `macos-26` instead of `macos-latest` so the release candidate gate does not silently move between major runner images. Each run prints the selected developer directory, Xcode version, Swift version, and a Foundation import probe before building.
+
+Run the same release candidate checks locally before publishing a build:
+
+```bash
+scripts/verify.sh
+swift build -c release --product PRReviewDeskApp
+scripts/package-app.sh
+scripts/validate-package.sh
+```
+
+`scripts/validate-package.sh` checks the generated `.build/app/PRReviewDesk.app` bundle structure, `Info.plist`, executable bit, bundle identifier, package type, principal class, and version metadata.
+
 ## Swift Test Status
 
 `swift test` is not the local verification gate yet. The package intentionally keeps the suite in the executable `PRReviewDeskCoreTests` harness until the local toolchain can run a standard SwiftPM test target.

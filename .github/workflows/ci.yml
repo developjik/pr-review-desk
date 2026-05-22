@@ -10,14 +10,27 @@ on:
 
 jobs:
   verify:
-    name: Verify SwiftPM app and harness
-    runs-on: macos-latest
+    name: Verify SwiftPM app, harness, and package
+    runs-on: macos-26
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Show Swift version
-        run: swift --version
+      - name: Show toolchain
+        run: |
+          xcode-select -p
+          xcodebuild -version
+          swift --version
+          swift -e 'import Foundation; print("Foundation import ok")'
 
       - name: Run verification gate
         run: scripts/verify.sh
+
+      - name: Build release app
+        run: swift build -c release --product PRReviewDeskApp
+
+      - name: Package app
+        run: scripts/package-app.sh
+
+      - name: Validate package
+        run: scripts/validate-package.sh
