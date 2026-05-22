@@ -5,6 +5,7 @@ enum CodexReviewAgentTests {
     static func run() async throws {
         try await testGenerateReviewRunsCodexExecWithSchemaAndAnnotatedPatch()
         try testReviewDraftDecodesCodexOutputWithoutLocalFields()
+        try await testProcessCommandRunnerReturnsWhenChildKeepsStdoutOpen()
     }
 
     private static func testGenerateReviewRunsCodexExecWithSchemaAndAnnotatedPatch() async throws {
@@ -85,6 +86,23 @@ enum CodexReviewAgentTests {
         try expectEqual(draft.inlineComments[0].position, 4)
         try expectTrue(draft.inlineComments[0].isSelected)
         try expectTrue(!draft.inlineComments[0].id.isEmpty)
+    }
+
+    private static func testProcessCommandRunnerReturnsWhenChildKeepsStdoutOpen() async throws {
+        let runner = ProcessCommandRunner()
+        let start = Date()
+
+        let result = try await runner.run(
+            executable: "sh",
+            arguments: ["-c", "sleep 3 & printf done"],
+            standardInput: "",
+            workingDirectory: nil
+        )
+
+        let elapsed = Date().timeIntervalSince(start)
+        try expectEqual(result.exitCode, 0)
+        try expectEqual(result.standardOutput, "done")
+        try expectTrue(elapsed < 1.5)
     }
 }
 

@@ -47,24 +47,29 @@ public struct ProcessCommandRunner: CommandRunning, Sendable {
         standardInput: String,
         workingDirectory: URL?
     ) async throws -> CommandResult {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PRReviewDeskProcess-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: temporaryDirectory)
+        }
+
+        let stdoutURL = temporaryDirectory.appendingPathComponent("stdout.txt")
+        let stderrURL = temporaryDirectory.appendingPathComponent("stderr.txt")
+        FileManager.default.createFile(atPath: stdoutURL.path, contents: nil)
+        FileManager.default.createFile(atPath: stderrURL.path, contents: nil)
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = [executable] + arguments
         process.currentDirectoryURL = workingDirectory
 
         let stdin = Pipe()
-        let stdout = Pipe()
-        let stderr = Pipe()
+        let stdout = try FileHandle(forWritingTo: stdoutURL)
+        let stderr = try FileHandle(forWritingTo: stderrURL)
         process.standardInput = stdin
         process.standardOutput = stdout
         process.standardError = stderr
-
-        let stdoutTask = Task {
-            stdout.fileHandleForReading.readDataToEndOfFile()
-        }
-        let stderrTask = Task {
-            stderr.fileHandleForReading.readDataToEndOfFile()
-        }
 
         try process.run()
         if let inputData = standardInput.data(using: .utf8) {
@@ -72,9 +77,11 @@ public struct ProcessCommandRunner: CommandRunning, Sendable {
         }
         try? stdin.fileHandleForWriting.close()
         process.waitUntilExit()
+        try? stdout.close()
+        try? stderr.close()
 
-        let stdoutData = await stdoutTask.value
-        let stderrData = await stderrTask.value
+        let stdoutData = try Data(contentsOf: stdoutURL)
+        let stderrData = try Data(contentsOf: stderrURL)
 
         return CommandResult(
             exitCode: process.terminationStatus,
