@@ -132,6 +132,105 @@ public struct PullRequestFile: Codable, Equatable, Identifiable, Hashable, Senda
         case deletions
         case patch
     }
+
+    public var reviewability: PullRequestFileReviewability {
+        guard let patch, !patch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            if additions == 0 && deletions == 0 {
+                return .omitted(reason: .metadataOnly)
+            }
+            return .omitted(reason: .patchUnavailable)
+        }
+
+        return .includedPatch
+    }
+}
+
+public enum PullRequestFileReviewability: Equatable, Hashable, Sendable {
+    case includedPatch
+    case omitted(reason: PullRequestFileOmissionReason)
+}
+
+public enum PullRequestFileOmissionReason: String, Codable, Equatable, Hashable, Sendable {
+    case patchUnavailable
+    case metadataOnly
+
+    public var displayName: String {
+        switch self {
+        case .patchUnavailable:
+            return "Patch unavailable from GitHub"
+        case .metadataOnly:
+            return "Metadata-only change"
+        }
+    }
+}
+
+public struct ReviewCoverageSummary: Equatable, Sendable {
+    public let files: [PullRequestFile]
+
+    public init(files: [PullRequestFile]) {
+        self.files = files
+    }
+
+    public var totalFileCount: Int {
+        files.count
+    }
+
+    public var reviewableFiles: [PullRequestFile] {
+        files.filter { $0.reviewability == .includedPatch }
+    }
+
+    public var omittedFiles: [PullRequestFile] {
+        files.filter { file in
+            if case .omitted = file.reviewability {
+                return true
+            }
+            return false
+        }
+    }
+
+    public var reviewableFileCount: Int {
+        reviewableFiles.count
+    }
+
+    public var omittedFileCount: Int {
+        omittedFiles.count
+    }
+
+    public var omittedAdditions: Int {
+        omittedFiles.reduce(0) { $0 + $1.additions }
+    }
+
+    public var omittedDeletions: Int {
+        omittedFiles.reduce(0) { $0 + $1.deletions }
+    }
+
+    public var warningMessage: String? {
+        guard omittedFileCount > 0 else {
+            return nil
+        }
+
+        return "\(omittedFileCount) of \(totalFileCount) changed files do not have reviewable patches and will not be sent to Codex."
+    }
+
+    public var generationBlockReason: String? {
+        guard reviewableFileCount == 0 else {
+            return nil
+        }
+
+        return "No changed files have reviewable patches for Codex."
+    }
+
+    public var statusMessage: String {
+        if let generationBlockReason {
+            return generationBlockReason
+        }
+
+        if let warningMessage {
+            return warningMessage
+        }
+
+        return "All \(totalFileCount) changed files have reviewable patches for Codex."
+    }
 }
 
 public enum ReviewEvent: String, Codable, CaseIterable, Equatable, Hashable, Identifiable, Sendable {

@@ -28,6 +28,10 @@ final class AppModel: ObservableObject {
         draft?.inlineComments.filter(\.isSelected).count ?? 0
     }
 
+    var reviewCoverageSummary: ReviewCoverageSummary {
+        ReviewCoverageSummary(files: changedFiles)
+    }
+
     init(
         tokenStore: TokenStore = KeychainTokenStore(),
         codexAgent: CodexReviewAgent = CodexReviewAgent()
@@ -111,7 +115,7 @@ final class AppModel: ObservableObject {
 
         await runWorking("Loading changed files...") {
             changedFiles = try await githubClient.pullRequestFiles(repository: selectedRepository, pullRequest: pullRequest)
-            statusMessage = "Loaded \(changedFiles.count) changed files."
+            statusMessage = "Loaded \(changedFiles.count) changed files. \(reviewCoverageSummary.statusMessage)"
         }
     }
 
@@ -155,6 +159,7 @@ final class AppModel: ObservableObject {
             if let githubClient {
                 changedFiles = try await githubClient.pullRequestFiles(repository: selectedRepository, pullRequest: pullRequestForReview)
             }
+            let coverageSummary = reviewCoverageSummary
             let generated = try await codexAgent.generateReview(
                 repository: selectedRepository,
                 pullRequest: pullRequestForReview,
@@ -164,7 +169,11 @@ final class AppModel: ObservableObject {
             reviewBody = composeReviewBody(from: generated)
             reviewedHeadSha = pullRequestForReview.headSha
             selectedEvent = .comment
-            statusMessage = "Generated review draft with \(generated.inlineComments.count) inline comments."
+            if let warningMessage = coverageSummary.warningMessage {
+                statusMessage = "Generated review draft with \(generated.inlineComments.count) inline comments. \(warningMessage)"
+            } else {
+                statusMessage = "Generated review draft with \(generated.inlineComments.count) inline comments."
+            }
         }
     }
 

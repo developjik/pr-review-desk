@@ -5,6 +5,9 @@ enum ModelsTests {
     static func run() throws {
         try testRepositoryDecodesOwnerAndName()
         try testPullRequestDecodesHeadSha()
+        try testPullRequestFileReviewabilityClassifiesPatchCoverage()
+        try testReviewCoverageSummaryCountsOmittedFiles()
+        try testReviewCoverageSummaryBlocksWhenNothingIsReviewable()
         try testReviewDraftRoundTripsThroughJSON()
         testReviewEventUsesGitHubValues()
     }
@@ -48,6 +51,89 @@ enum ModelsTests {
         try expectEqual(pullRequest.title, "Add review workflow")
         try expectEqual(pullRequest.author, "contributor")
         try expectEqual(pullRequest.headSha, "abc123")
+    }
+
+    private static func testPullRequestFileReviewabilityClassifiesPatchCoverage() throws {
+        let included = PullRequestFile(
+            path: "Sources/App.swift",
+            status: "modified",
+            additions: 3,
+            deletions: 1,
+            patch: "@@ -1 +1 @@"
+        )
+        let unavailable = PullRequestFile(
+            path: "Assets/logo.png",
+            status: "modified",
+            additions: 1,
+            deletions: 1,
+            patch: nil
+        )
+        let metadataOnly = PullRequestFile(
+            path: "Sources/Renamed.swift",
+            status: "renamed",
+            additions: 0,
+            deletions: 0,
+            patch: nil
+        )
+
+        try expectEqual(included.reviewability, .includedPatch)
+        try expectEqual(unavailable.reviewability, .omitted(reason: .patchUnavailable))
+        try expectEqual(metadataOnly.reviewability, .omitted(reason: .metadataOnly))
+    }
+
+    private static func testReviewCoverageSummaryCountsOmittedFiles() throws {
+        let files = [
+            PullRequestFile(
+                path: "Sources/App.swift",
+                status: "modified",
+                additions: 3,
+                deletions: 1,
+                patch: "@@ -1 +1 @@"
+            ),
+            PullRequestFile(
+                path: "Assets/logo.png",
+                status: "modified",
+                additions: 10,
+                deletions: 2,
+                patch: nil
+            ),
+            PullRequestFile(
+                path: "Sources/Renamed.swift",
+                status: "renamed",
+                additions: 0,
+                deletions: 0,
+                patch: nil
+            )
+        ]
+
+        let summary = ReviewCoverageSummary(files: files)
+
+        try expectEqual(summary.totalFileCount, 3)
+        try expectEqual(summary.reviewableFileCount, 1)
+        try expectEqual(summary.omittedFileCount, 2)
+        try expectEqual(summary.omittedAdditions, 10)
+        try expectEqual(summary.omittedDeletions, 2)
+        try expectEqual(summary.warningMessage, "2 of 3 changed files do not have reviewable patches and will not be sent to Codex.")
+        try expectEqual(summary.generationBlockReason, nil)
+    }
+
+    private static func testReviewCoverageSummaryBlocksWhenNothingIsReviewable() throws {
+        let files = [
+            PullRequestFile(
+                path: "Assets/logo.png",
+                status: "modified",
+                additions: 10,
+                deletions: 2,
+                patch: nil
+            )
+        ]
+
+        let summary = ReviewCoverageSummary(files: files)
+
+        try expectEqual(summary.totalFileCount, 1)
+        try expectEqual(summary.reviewableFileCount, 0)
+        try expectEqual(summary.omittedFileCount, 1)
+        try expectEqual(summary.generationBlockReason, "No changed files have reviewable patches for Codex.")
     }
 
     private static func testReviewDraftRoundTripsThroughJSON() throws {
