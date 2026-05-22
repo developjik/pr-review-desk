@@ -5,12 +5,13 @@ struct MainView: View {
     @ObservedObject var model: AppModel
 
     var body: some View {
-        NavigationSplitView {
+        HSplitView {
             repositorySidebar
-        } content: {
+                .frame(minWidth: 260, idealWidth: 300)
             pullRequestList
-        } detail: {
+                .frame(minWidth: 320, idealWidth: 380)
             reviewPane
+                .frame(minWidth: 520)
         }
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 0) {
@@ -53,7 +54,13 @@ struct MainView: View {
                 .help("Refresh repositories")
                 .disabled(model.isWorking || !model.hasToken)
             }
-            List(model.repositories, selection: repositorySelection) { repository in
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("Search repositories", text: $model.repositorySearchText)
+                    .textFieldStyle(.roundedBorder)
+            }
+            List(model.filteredRepositories, selection: repositorySelection) { repository in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(repository.name)
                         .font(.body)
@@ -65,7 +72,6 @@ struct MainView: View {
             }
         }
         .padding()
-        .navigationSplitViewColumnWidth(min: 260, ideal: 300)
     }
 
     private var tokenSection: some View {
@@ -105,7 +111,13 @@ struct MainView: View {
             Text(model.selectedRepository?.fullName ?? "Select a repository")
                 .font(.headline)
                 .lineLimit(1)
-            List(model.pullRequests, selection: pullRequestSelection) { pullRequest in
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("Search pull requests", text: $model.pullRequestSearchText)
+                    .textFieldStyle(.roundedBorder)
+            }
+            List(model.filteredPullRequests, selection: pullRequestSelection) { pullRequest in
                 VStack(alignment: .leading, spacing: 4) {
                     Text("#\(pullRequest.number) \(pullRequest.title)")
                         .font(.body)
@@ -118,7 +130,6 @@ struct MainView: View {
             }
         }
         .padding()
-        .navigationSplitViewColumnWidth(min: 320, ideal: 380)
     }
 
     private var reviewPane: some View {
