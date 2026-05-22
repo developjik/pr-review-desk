@@ -126,6 +126,10 @@ public protocol OAuthCredentialStoring: CredentialStore {
     func saveCredential(_ credential: GitHubCredential, metadata: GitHubCredentialMetadata) throws
 }
 
+public protocol StoredGitHubCredentialLoading: Sendable {
+    func loadStoredCredential() throws -> StoredGitHubCredential?
+}
+
 public struct VersionedCredentialStore: CredentialStore, Sendable {
     private let tokenStore: any TokenStore
     private let now: @Sendable () -> Date
@@ -218,6 +222,7 @@ public struct VersionedCredentialStore: CredentialStore, Sendable {
 }
 
 extension VersionedCredentialStore: OAuthCredentialStoring {}
+extension VersionedCredentialStore: StoredGitHubCredentialLoading {}
 
 public struct PersonalAccessTokenCredentialStore: CredentialStore, Sendable {
     private let tokenStore: any TokenStore

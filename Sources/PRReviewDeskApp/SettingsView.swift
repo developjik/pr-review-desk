@@ -17,6 +17,16 @@ struct SettingsView: View {
                         .foregroundStyle(model.hasToken ? .green : .secondary)
                 }
 
+                HStack {
+                    Text("Granted scopes")
+                    Spacer()
+                    Text(model.grantedGitHubScopes.isEmpty ? "Unknown" : model.grantedGitHubScopes.joined(separator: ", "))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.trailing)
+                        .textSelection(.enabled)
+                }
+
                 SecureField("Personal access token", text: $model.tokenInput)
 
                 HStack {

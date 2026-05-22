@@ -31,6 +31,7 @@ final class AppModel: ObservableObject {
     @Published var oauthStatus = "Not started."
     @Published var oauthAuthorization: OAuthDeviceAuthorization?
     @Published var isOAuthSignInPending = false
+    @Published var grantedGitHubScopes: [String] = []
     @Published var hasToken = false
     @Published var repositories: [Repository] = []
     @Published var selectedRepository: Repository?
@@ -75,6 +76,8 @@ final class AppModel: ObservableObject {
     private static let privateRepositoryConsentAcknowledgementsKey = "privateRepositoryConsentAcknowledgements"
     private let credentialStore: CredentialStore
     private let oauthCredentialStore: any OAuthCredentialStoring
+    private let storedCredentialLoader: (any StoredGitHubCredentialLoading)?
+    private let credentialMetadataStore: (any OAuthCredentialStoring)?
     private let oauthDeviceFlowClient: GitHubOAuthDeviceFlowClient
     private let codexAgent: CodexReviewAgent
     private let reviewDraftStore: any ReviewDraftStore
@@ -144,7 +147,7 @@ final class AppModel: ObservableObject {
     }
 
     var canGenerateReview: Bool {
-        commandAvailability.canGenerateReview
+        commandAvailability.canGenerateReview && selectedRepositoryAccessDecision.isAllowed
     }
 
     var canSubmitReview: Bool {
@@ -152,11 +155,11 @@ final class AppModel: ObservableObject {
     }
 
     var canWatchSelectedPullRequest: Bool {
-        hasToken && selectedRepository != nil && selectedPullRequest != nil
+        hasToken && selectedRepository != nil && selectedPullRequest != nil && selectedRepositoryAccessDecision.isAllowed
     }
 
     var canWatchSelectedRepository: Bool {
-        hasToken && selectedRepository != nil && !pullRequests.isEmpty
+        hasToken && selectedRepository != nil && !pullRequests.isEmpty && selectedRepositoryAccessDecision.isAllowed
     }
 
     var readinessChecklist: ReadinessChecklist {
@@ -200,10 +203,15 @@ final class AppModel: ObservableObject {
         userDefaults: UserDefaults = .standard
     ) {
         let defaultCredentialStore = VersionedCredentialStore.keychainDefault()
-        self.credentialStore = credentialStore ?? defaultCredentialStore
-        self.oauthCredentialStore = oauthCredentialStore
-            ?? (credentialStore as? any OAuthCredentialStoring)
+        let resolvedCredentialStore = credentialStore ?? defaultCredentialStore
+        let resolvedOAuthCredentialStore = oauthCredentialStore
+            ?? (resolvedCredentialStore as? any OAuthCredentialStoring)
             ?? defaultCredentialStore
+        self.credentialStore = resolvedCredentialStore
+        self.oauthCredentialStore = resolvedOAuthCredentialStore
+        self.storedCredentialLoader = (resolvedCredentialStore as? any StoredGitHubCredentialLoading)
+            ?? (resolvedOAuthCredentialStore as? any StoredGitHubCredentialLoading)
+        self.credentialMetadataStore = resolvedCredentialStore as? any OAuthCredentialStoring
         self.oauthDeviceFlowClient = oauthDeviceFlowClient
         self.codexAgent = codexAgent
         self.reviewDraftStore = reviewDraftStore
@@ -219,10 +227,13 @@ final class AppModel: ObservableObject {
         do {
             guard let credential = try credentialStore.loadCredential(), !credential.accessToken.isEmpty else {
                 hasToken = false
+                grantedGitHubScopes = []
+                tokenValidationStatus = "No token saved."
                 return
             }
             configureGitHubClient()
             tokenInput = ""
+            grantedGitHubScopes = loadStoredGitHubScopes()
             hasToken = true
             statusMessage = "GitHub token loaded from Keychain."
         } catch {
@@ -241,6 +252,8 @@ final class AppModel: ObservableObject {
             try credentialStore.saveCredential(.personalAccessToken(trimmed))
             configureGitHubClient()
             tokenInput = ""
+            grantedGitHubScopes = []
+            tokenValidationStatus = "Not validated."
             hasToken = true
             statusMessage = "GitHub token saved."
             await refreshRepositories()
@@ -261,6 +274,7 @@ final class AppModel: ObservableObject {
             changedFiles = []
             draft = nil
             reviewBody = ""
+            grantedGitHubScopes = []
             tokenValidationStatus = "No token saved."
             statusMessage = "GitHub token deleted."
         } catch {
@@ -312,8 +326,25 @@ final class AppModel: ObservableObject {
 
         await runWorking("Validating GitHub token...") {
             let validation = try await githubClient.validateToken()
-            let scopes = validation.scopes.isEmpty ? "no scopes reported" : validation.scopes.joined(separator: ", ")
-            tokenValidationStatus = "Valid for @\(validation.login). Scopes: \(scopes)."
+            grantedGitHubScopes = validation.scopes
+            if let credential = try credentialStore.loadCredential(),
+               let credentialMetadataStore {
+                try credentialMetadataStore.saveCredential(
+                    credential,
+                    metadata: GitHubCredentialMetadata(
+                        login: validation.login,
+                        scopes: validation.scopes,
+                        tokenType: "Bearer"
+                    )
+                )
+            }
+
+            let scopes = scopeSummary(validation.scopes)
+            if let message = selectedRepositoryAccessMessage {
+                tokenValidationStatus = "Valid for @\(validation.login). Scopes: \(scopes). \(message)"
+            } else {
+                tokenValidationStatus = "Valid for @\(validation.login). Scopes: \(scopes)."
+            }
         }
     }
 
@@ -436,6 +467,11 @@ final class AppModel: ObservableObject {
             return
         }
 
+        if let selectedRepository,
+           denyIfRepositoryAccessInsufficient(for: selectedRepository, operation: "Generate review") {
+            return
+        }
+
         if let consentRequest = privateRepositoryConsentRequestForSelectedRepository() {
             pendingPrivateRepositoryConsentContinuation = .generateCurrentReview
             pendingPrivateRepositoryConsent = consentRequest
@@ -447,8 +483,13 @@ final class AppModel: ObservableObject {
     }
 
     func startWatchingSelectedPullRequest() {
-        guard canWatchSelectedPullRequest else {
+        guard hasToken && selectedRepository != nil && selectedPullRequest != nil else {
             statusMessage = "Select a pull request to watch."
+            return
+        }
+
+        if let selectedRepository,
+           denyIfRepositoryAccessInsufficient(for: selectedRepository, operation: "Watch pull request") {
             return
         }
 
@@ -463,8 +504,13 @@ final class AppModel: ObservableObject {
     }
 
     func startWatchingSelectedRepository() {
-        guard canWatchSelectedRepository else {
+        guard hasToken && selectedRepository != nil && !pullRequests.isEmpty else {
             statusMessage = "Select a repository with open pull requests to watch."
+            return
+        }
+
+        if let selectedRepository,
+           denyIfRepositoryAccessInsufficient(for: selectedRepository, operation: "Watch repository") {
             return
         }
 
@@ -539,6 +585,10 @@ final class AppModel: ObservableObject {
     func generateReview() async {
         guard let selectedRepository, let selectedPullRequest else {
             statusMessage = "Select a pull request first."
+            return
+        }
+
+        if denyIfRepositoryAccessInsufficient(for: selectedRepository, operation: "Generate review") {
             return
         }
 
@@ -758,6 +808,55 @@ final class AppModel: ObservableObject {
         statusMessage = "Copied codex login. Run it in Terminal, then check Codex readiness."
     }
 
+    private var selectedRepositoryAccessDecision: GitHubRepositoryAccessDecision {
+        guard let selectedRepository else {
+            return .allowed
+        }
+
+        return repositoryAccessDecision(for: selectedRepository)
+    }
+
+    private var selectedRepositoryAccessMessage: String? {
+        let decision = selectedRepositoryAccessDecision
+        guard let reason = decision.reason else {
+            return nil
+        }
+
+        return "\(reason) \(decision.recoverySuggestion)"
+    }
+
+    private func repositoryAccessDecision(for repository: Repository) -> GitHubRepositoryAccessDecision {
+        GitHubRepositoryAccessPolicy.reviewAccess(for: repository, scopes: grantedGitHubScopes)
+    }
+
+    private func denyIfRepositoryAccessInsufficient(for repository: Repository, operation: String) -> Bool {
+        let decision = repositoryAccessDecision(for: repository)
+        guard let reason = decision.reason else {
+            return false
+        }
+
+        statusMessage = reason
+        recoverableError = RecoverableErrorDetails(
+            operation: operation,
+            summary: reason,
+            details: "\(reason)\n\(decision.recoverySuggestion)",
+            recoverySuggestion: decision.recoverySuggestion
+        )
+        return true
+    }
+
+    private func scopeSummary(_ scopes: [String]) -> String {
+        scopes.isEmpty ? "no scopes reported" : scopes.joined(separator: ", ")
+    }
+
+    private func loadStoredGitHubScopes() -> [String] {
+        guard let storedCredential = try? storedCredentialLoader?.loadStoredCredential() else {
+            return []
+        }
+
+        return storedCredential.scopes
+    }
+
     private func configureGitHubClient() {
         githubClient = GitHubClient(
             accessTokenProvider: CredentialStoreAccessTokenProvider(credentialStore: credentialStore)
@@ -788,9 +887,11 @@ final class AppModel: ObservableObject {
             )
 
             switch completion {
-            case .success:
+            case let .success(token):
                 configureGitHubClient()
                 tokenInput = ""
+                grantedGitHubScopes = token.scopes
+                tokenValidationStatus = "OAuth token saved. Validate to confirm login. Scopes: \(scopeSummary(token.scopes))."
                 hasToken = true
                 oauthStatus = "Authorized with GitHub."
                 statusMessage = "GitHub OAuth token saved."
@@ -875,6 +976,20 @@ final class AppModel: ObservableObject {
             if Task.isCancelled {
                 statusMessage = "Background review queue cancelled."
                 return
+            }
+
+            let accessDecision = repositoryAccessDecision(for: item.repository)
+            if !accessDecision.isAllowed {
+                let summary = accessDecision.reason ?? "GitHub OAuth scope required."
+                backgroundReviewQueue.markFailed(id: item.id, message: summary)
+                recoverableError = RecoverableErrorDetails(
+                    operation: "Background review for #\(item.pullRequest.number)",
+                    summary: summary,
+                    details: "\(summary)\n\(accessDecision.recoverySuggestion)",
+                    recoverySuggestion: accessDecision.recoverySuggestion
+                )
+                statusMessage = "Background review blocked for #\(item.pullRequest.number)."
+                continue
             }
 
             if let consentRequest = PrivateRepositoryConsentPolicy.request(
@@ -1058,6 +1173,10 @@ final class AppModel: ObservableObject {
             return .unknown("Load or save a GitHub token before validating scopes.")
         }
 
+        if let message = selectedRepositoryAccessMessage {
+            return .needsAction(message)
+        }
+
         if tokenValidationStatus.hasPrefix("Valid for @") {
             return .ready(tokenValidationStatus)
         }
@@ -1218,6 +1337,9 @@ final class AppModel: ObservableObject {
         case ReviewSubmissionValidationError.invalidInlineComments:
             return "Deselect invalid comments, refresh safety, or regenerate the draft."
         case GitHubError.requestFailed:
+            if !selectedRepositoryAccessDecision.isAllowed {
+                return selectedRepositoryAccessDecision.recoverySuggestion
+            }
             return "Check GitHub access, token scopes, and the repository state, then retry."
         default:
             return "Check the details, adjust the input if needed, then retry."
