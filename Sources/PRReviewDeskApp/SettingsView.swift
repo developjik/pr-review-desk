@@ -44,6 +44,53 @@ struct SettingsView: View {
                     .disabled(model.isWorking || !model.hasToken)
                 }
 
+                Divider()
+
+                TextField("OAuth App client ID", text: $model.oauthClientID)
+                    .textFieldStyle(.roundedBorder)
+
+                HStack {
+                    Button {
+                        model.startOAuthDeviceSignIn()
+                    } label: {
+                        Label("Sign in with GitHub", systemImage: "person.crop.circle.badge.checkmark")
+                    }
+                    .disabled(model.isOAuthSignInPending || model.oauthClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    if model.isOAuthSignInPending {
+                        Button {
+                            model.cancelOAuthDeviceSignIn()
+                        } label: {
+                            Label("Cancel", systemImage: "xmark.circle")
+                        }
+                    }
+
+                    if let authorization = model.oauthAuthorization {
+                        Button {
+                            model.copyOAuthUserCode()
+                        } label: {
+                            Label("Copy Code", systemImage: "doc.on.doc")
+                        }
+
+                        Link("Open GitHub", destination: authorization.verificationURI)
+                    }
+                }
+
+                if let authorization = model.oauthAuthorization {
+                    HStack {
+                        Text("Device code")
+                        Spacer()
+                        Text(authorization.userCode)
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+                    }
+                }
+
+                Text(model.oauthStatus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 HStack {
                     Text(model.tokenValidationStatus)
                         .foregroundStyle(.secondary)
