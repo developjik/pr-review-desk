@@ -5,6 +5,7 @@ enum DiffPositionMapperTests {
     static func run() throws {
         try testSingleHunkMapsNewLinesToGitHubPositions()
         try testMultipleHunksContinuePositionsWithinFile()
+        try testAnnotatedLinesExposeDiffPositionsForNavigation()
     }
 
     private static func testSingleHunkMapsNewLinesToGitHubPositions() throws {
@@ -44,5 +45,19 @@ enum DiffPositionMapperTests {
         try expectEqual(annotated.position(forNewLine: 30), 4)
         try expectEqual(annotated.position(forNewLine: 31), 5)
         try expectEqual(annotated.position(forNewLine: 20), nil)
+    }
+
+    private static func testAnnotatedLinesExposeDiffPositionsForNavigation() throws {
+        let patch = """
+        @@ -1,2 +1,2 @@
+        -old
+        +new
+         context
+        """
+
+        let annotated = try DiffPositionMapper.annotate(path: "Sources/App.swift", patch: patch)
+
+        try expectEqual(annotated.lines.map(\.position), [nil, 1, 2, 3])
+        try expectEqual(annotated.lines.first { $0.position == 2 }?.text, "[pos 2] +new")
     }
 }

@@ -11,15 +11,41 @@ public enum DiffPositionError: Error, Equatable, CustomStringConvertible, Sendab
     }
 }
 
+public struct AnnotatedDiffLine: Identifiable, Equatable, Hashable, Sendable {
+    public var id: Int { index }
+
+    public let index: Int
+    public let position: Int?
+    public let text: String
+
+    public init(index: Int, position: Int?, text: String) {
+        self.index = index
+        self.position = position
+        self.text = text
+    }
+}
+
 public struct AnnotatedDiff: Equatable, Hashable, Sendable {
     public let path: String
     public let annotatedPatch: String
     public let positionsByNewLine: [Int: Int]
+    public let lines: [AnnotatedDiffLine]
 
-    public init(path: String, annotatedPatch: String, positionsByNewLine: [Int: Int]) {
+    public init(
+        path: String,
+        annotatedPatch: String,
+        positionsByNewLine: [Int: Int],
+        lines: [AnnotatedDiffLine]? = nil
+    ) {
         self.path = path
         self.annotatedPatch = annotatedPatch
         self.positionsByNewLine = positionsByNewLine
+        self.lines = lines ?? annotatedPatch
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .enumerated()
+            .map { index, line in
+                AnnotatedDiffLine(index: index, position: nil, text: String(line))
+            }
     }
 
     public func position(forNewLine line: Int) -> Int? {
@@ -33,26 +59,34 @@ public enum DiffPositionMapper {
         var position = 0
         var positionsByNewLine: [Int: Int] = [:]
         var annotatedLines: [String] = []
+        var diffLines: [AnnotatedDiffLine] = []
+
+        func appendLine(_ text: String, position: Int? = nil) {
+            annotatedLines.append(text)
+            diffLines.append(
+                AnnotatedDiffLine(index: diffLines.count, position: position, text: text)
+            )
+        }
 
         for line in patch.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
             if line.hasPrefix("@@") {
                 currentNewLine = try parseNewStart(from: line)
-                annotatedLines.append(line)
+                appendLine(line)
                 continue
             }
 
             guard let newLine = currentNewLine else {
-                annotatedLines.append(line)
+                appendLine(line)
                 continue
             }
 
             if line.hasPrefix("\\") {
-                annotatedLines.append(line)
+                appendLine(line)
                 continue
             }
 
             position += 1
-            annotatedLines.append("[pos \(position)] \(line)")
+            appendLine("[pos \(position)] \(line)", position: position)
 
             if line.hasPrefix("-") {
                 continue
@@ -65,7 +99,8 @@ public enum DiffPositionMapper {
         return AnnotatedDiff(
             path: path,
             annotatedPatch: annotatedLines.joined(separator: "\n"),
-            positionsByNewLine: positionsByNewLine
+            positionsByNewLine: positionsByNewLine,
+            lines: diffLines
         )
     }
 
