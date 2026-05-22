@@ -43,7 +43,7 @@ struct PrivateRepositoryConsentSheet: View {
                 Button {
                     onAcknowledge()
                 } label: {
-                    Label("Acknowledge and Generate", systemImage: "checkmark.shield")
+                    Label("Acknowledge", systemImage: "checkmark.shield")
                 }
                 .buttonStyle(.borderedProminent)
             }
