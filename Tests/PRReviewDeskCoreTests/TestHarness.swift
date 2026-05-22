@@ -13,6 +13,7 @@ enum TestHarness {
             try InlineCommentNavigationTests.run()
             try ReviewDraftStoreTests.run()
             try BackgroundReviewQueueTests.run()
+            try GitHubRepositoryAccessPolicyTests.run()
             try await GitHubClientTests.run()
             try await GitHubOAuthDeviceFlowClientTests.run()
             try await CodexReviewAgentTests.run()
