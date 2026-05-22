@@ -19,6 +19,8 @@ final class AppModel: ObservableObject {
     @Published var selectedRepository: Repository?
     @Published var pullRequests: [PullRequest] = []
     @Published var selectedPullRequest: PullRequest?
+    @Published var repositorySearchText = ""
+    @Published var pullRequestSearchText = ""
     @Published var changedFiles: [PullRequestFile] = []
     @Published var selectedChangedFilePath: String?
     @Published var draft: ReviewDraft?
@@ -53,6 +55,14 @@ final class AppModel: ObservableObject {
 
     var selectedInlineCommentCount: Int {
         draft?.inlineComments.filter(\.isSelected).count ?? 0
+    }
+
+    var filteredRepositories: [Repository] {
+        SearchFilter.repositories(repositories, matching: repositorySearchText)
+    }
+
+    var filteredPullRequests: [PullRequest] {
+        SearchFilter.pullRequests(pullRequests, matching: pullRequestSearchText)
     }
 
     var reviewCoverageSummary: ReviewCoverageSummary {
@@ -262,12 +272,28 @@ final class AppModel: ObservableObject {
             return
         }
 
+        let previousRepository = selectedRepository
+        let previousPullRequest = selectedPullRequest
+
         await runWorking("Loading repositories...") {
             repositories = try await githubClient.listRepositories()
-            selectedRepository = repositories.first
+            selectedRepository = StableSelection.repository(
+                afterRefresh: repositories,
+                previousSelection: previousRepository
+            )
             statusMessage = repositories.isEmpty ? "No repositories found." : "Loaded \(repositories.count) repositories."
+
             if let selectedRepository {
-                try await loadPullRequests(repository: selectedRepository)
+                if selectedRepository.id != previousRepository?.id {
+                    clearPullRequestContext(clearPullRequests: true)
+                }
+
+                try await loadPullRequests(
+                    repository: selectedRepository,
+                    preserving: selectedRepository.id == previousRepository?.id ? previousPullRequest : nil
+                )
+            } else {
+                clearPullRequestContext(clearPullRequests: true)
             }
         }
     }
@@ -290,13 +316,7 @@ final class AppModel: ObservableObject {
 
     func selectRepository(_ repository: Repository) async {
         selectedRepository = repository
-        selectedPullRequest = nil
-        changedFiles = []
-        selectedChangedFilePath = nil
-        draft = nil
-        reviewBody = ""
-        reviewedHeadSha = nil
-        preflightHeadSha = nil
+        clearPullRequestContext(clearPullRequests: true)
 
         await runWorking("Loading open pull requests...") {
             try await loadPullRequests(repository: repository)
@@ -589,12 +609,41 @@ final class AppModel: ObservableObject {
         return .needsAction(codexLoginStatus)
     }
 
-    private func loadPullRequests(repository: Repository) async throws {
+    private func loadPullRequests(
+        repository: Repository,
+        preserving previousPullRequest: PullRequest? = nil
+    ) async throws {
         guard let githubClient else {
             return
         }
+
         pullRequests = try await githubClient.listOpenPullRequests(repository: repository)
+        let preservedPullRequest = StableSelection.pullRequest(
+            afterRefresh: pullRequests,
+            previousSelection: previousPullRequest
+        )
+        if previousPullRequest != nil {
+            if let preservedPullRequest {
+                selectedPullRequest = preservedPullRequest
+            } else {
+                clearPullRequestContext(clearPullRequests: false)
+            }
+        }
+
         statusMessage = pullRequests.isEmpty ? "No open pull requests." : "Loaded \(pullRequests.count) open pull requests."
+    }
+
+    private func clearPullRequestContext(clearPullRequests: Bool) {
+        if clearPullRequests {
+            pullRequests = []
+        }
+        selectedPullRequest = nil
+        changedFiles = []
+        selectedChangedFilePath = nil
+        draft = nil
+        reviewBody = ""
+        reviewedHeadSha = nil
+        preflightHeadSha = nil
     }
 
     private func refreshCurrentPullRequest() async {
