@@ -7,6 +7,8 @@ enum KeychainTokenStoreTests {
         try testPersonalAccessTokenCredentialStoreWrapsExistingTokenStore()
         try testStaticAccessTokenProviderBuildsBearerAuthorization()
         try testCredentialStoreAccessTokenProviderReadsCurrentCredential()
+        try testVersionedCredentialStoreMigratesRawPersonalAccessToken()
+        try testVersionedCredentialStoreRoundTripsEnvelopeMetadata()
         try testKeychainStoreCanBeConstructedWithoutTouchingSecrets()
     }
 
@@ -49,6 +51,50 @@ enum KeychainTokenStoreTests {
         try credentialStore.saveCredential(.personalAccessToken("second-token"))
 
         try expectEqual(try provider.authorizationHeader(), "Bearer second-token")
+    }
+
+    private static func testVersionedCredentialStoreMigratesRawPersonalAccessToken() throws {
+        let tokenStore = InMemoryTokenStore(token: "legacy-token")
+        let store = VersionedCredentialStore(tokenStore: tokenStore)
+
+        try expectEqual(try store.loadCredential(), .personalAccessToken("legacy-token"))
+
+        let storedToken = try unwrap(try tokenStore.loadToken())
+        try expectTrue(storedToken.contains(#""version":1"#))
+        try expectTrue(storedToken.contains(#""kind":"personalAccessToken""#))
+        try expectTrue(storedToken.contains(#""accessToken":"legacy-token""#))
+
+        let record = try unwrap(try store.loadStoredCredential())
+        try expectEqual(record.credential, .personalAccessToken("legacy-token"))
+        try expectEqual(record.login, nil)
+        try expectEqual(record.scopes, [])
+        try expectEqual(record.tokenType, "Bearer")
+    }
+
+    private static func testVersionedCredentialStoreRoundTripsEnvelopeMetadata() throws {
+        let tokenStore = InMemoryTokenStore()
+        let store = VersionedCredentialStore(tokenStore: tokenStore)
+        let expiration = Date(timeIntervalSince1970: 1_800_000_000)
+
+        try store.saveCredential(
+            .oauthUserToken("oauth-token"),
+            metadata: GitHubCredentialMetadata(
+                login: "developjik",
+                scopes: ["repo", "read:org"],
+                tokenType: "Bearer",
+                expiresAt: expiration
+            )
+        )
+
+        try expectEqual(try store.loadCredential(), .oauthUserToken("oauth-token"))
+        let record = try unwrap(try store.loadStoredCredential())
+        try expectEqual(record.version, 1)
+        try expectEqual(record.credential, .oauthUserToken("oauth-token"))
+        try expectEqual(record.login, "developjik")
+        try expectEqual(record.scopes, ["repo", "read:org"])
+        try expectEqual(record.tokenType, "Bearer")
+        try expectEqual(record.expiresAt, expiration)
+        try expectTrue(record.updatedAt >= record.createdAt)
     }
 
     private static func testKeychainStoreCanBeConstructedWithoutTouchingSecrets() throws {
