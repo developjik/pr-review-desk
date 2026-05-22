@@ -113,7 +113,7 @@ struct MainView: View {
                     reviewCoverageBanner(model.reviewCoverageSummary)
                 }
                 reviewControls
-                draftEditor
+                reviewWorkspace
             } else {
                 ContentUnavailableView(
                     "No Pull Request Selected",
@@ -151,6 +151,112 @@ struct MainView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(hasOmittedFiles ? .orange.opacity(0.45) : .green.opacity(0.35))
+        }
+    }
+
+    @ViewBuilder
+    private var reviewWorkspace: some View {
+        if model.changedFiles.isEmpty {
+            draftEditor
+        } else {
+            HSplitView {
+                changedFilesPane
+                    .frame(minWidth: 240, idealWidth: 280)
+                selectedFileDetail
+                    .frame(minWidth: 360, idealWidth: 520)
+                draftEditor
+                    .frame(minWidth: 360)
+            }
+        }
+    }
+
+    private var changedFilesPane: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Changed Files")
+                .font(.headline)
+            List(model.changedFiles, selection: changedFileSelection) { file in
+                changedFileRow(file)
+                    .tag(file.path)
+            }
+        }
+    }
+
+    private func changedFileRow(_ file: PullRequestFile) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(file.path)
+                .font(.body)
+                .lineLimit(2)
+            HStack(spacing: 8) {
+                Text(file.status)
+                Text("+\(file.additions)")
+                    .foregroundStyle(.green)
+                Text("-\(file.deletions)")
+                    .foregroundStyle(.red)
+                if case let .omitted(reason) = file.reviewability {
+                    Label(reason.displayName, systemImage: "exclamationmark.triangle")
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(.orange)
+                        .help(reason.displayName)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 3)
+    }
+
+    @ViewBuilder
+    private var selectedFileDetail: some View {
+        if let file = model.selectedChangedFile {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(file.path)
+                            .font(.headline)
+                            .lineLimit(2)
+                        Text("\(file.status)  +\(file.additions)  -\(file.deletions)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if let reviewedHeadSha = model.reviewedHeadShaForDisplay {
+                        Text("Draft \(reviewedHeadSha.prefix(8))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("No draft SHA")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                ScrollView {
+                    Text(selectedFilePatchText(file))
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(.quaternary)
+                }
+
+                let comments = commentsForFile(file)
+                if !comments.isEmpty {
+                    Text("Inline Comments")
+                        .font(.headline)
+                    ForEach(comments) { comment in
+                        inlineCommentRow(comment)
+                    }
+                }
+            }
+        } else {
+            ContentUnavailableView(
+                "No File Selected",
+                systemImage: "doc.text",
+                description: Text("Select a changed file.")
+            )
         }
     }
 
@@ -236,8 +342,15 @@ struct MainView: View {
             if let draft = model.draft, !draft.inlineComments.isEmpty {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(draft.inlineComments) { comment in
-                            inlineCommentRow(comment)
+                        ForEach(commentsGroupedByPath(draft.inlineComments), id: \.path) { group in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(group.path)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                ForEach(group.comments) { comment in
+                                    inlineCommentRow(comment)
+                                }
+                            }
                         }
                     }
                     .padding(.vertical, 2)
@@ -247,6 +360,39 @@ struct MainView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func selectedFilePatchText(_ file: PullRequestFile) -> String {
+        switch file.reviewability {
+        case .includedPatch:
+            guard let patch = file.patch else {
+                return ""
+            }
+            do {
+                return try DiffPositionMapper.annotate(path: file.path, patch: patch).annotatedPatch
+            } catch {
+                return patch
+            }
+        case let .omitted(reason):
+            return "\(reason.displayName). This file was not sent to Codex because GitHub did not provide reviewable patch content."
+        }
+    }
+
+    private func commentsForFile(_ file: PullRequestFile) -> [InlineCommentDraft] {
+        (model.draft?.inlineComments ?? [])
+            .filter { $0.path == file.path }
+            .sorted { $0.position < $1.position }
+    }
+
+    private func commentsGroupedByPath(_ comments: [InlineCommentDraft]) -> [(path: String, comments: [InlineCommentDraft])] {
+        Dictionary(grouping: comments, by: \.path)
+            .map { path, comments in
+                (
+                    path: path,
+                    comments: comments.sorted { $0.position < $1.position }
+                )
+            }
+            .sorted { $0.path < $1.path }
     }
 
     private func inlineCommentRow(_ comment: InlineCommentDraft) -> some View {
@@ -322,6 +468,15 @@ struct MainView: View {
                 Task {
                     await model.selectPullRequest(pullRequest)
                 }
+            }
+        )
+    }
+
+    private var changedFileSelection: Binding<String?> {
+        Binding(
+            get: { model.selectedChangedFilePath },
+            set: { path in
+                model.selectedChangedFilePath = path
             }
         )
     }
