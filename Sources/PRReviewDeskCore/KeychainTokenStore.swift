@@ -7,6 +7,98 @@ public protocol TokenStore: Sendable {
     func deleteToken() throws
 }
 
+public enum GitHubCredential: Equatable, Hashable, Sendable {
+    case personalAccessToken(String)
+    case oauthUserToken(String)
+    case githubAppInstallationToken(String)
+
+    public var accessToken: String {
+        switch self {
+        case let .personalAccessToken(token),
+             let .oauthUserToken(token),
+             let .githubAppInstallationToken(token):
+            return token
+        }
+    }
+}
+
+public enum CredentialStoreError: Error, Equatable, CustomStringConvertible, Sendable {
+    case unsupportedCredentialKind
+
+    public var description: String {
+        switch self {
+        case .unsupportedCredentialKind:
+            return "This credential store only supports personal access tokens"
+        }
+    }
+}
+
+public protocol CredentialStore: Sendable {
+    func loadCredential() throws -> GitHubCredential?
+    func saveCredential(_ credential: GitHubCredential) throws
+    func deleteCredential() throws
+}
+
+public struct PersonalAccessTokenCredentialStore: CredentialStore, Sendable {
+    private let tokenStore: any TokenStore
+
+    public init(tokenStore: any TokenStore) {
+        self.tokenStore = tokenStore
+    }
+
+    public func loadCredential() throws -> GitHubCredential? {
+        guard let token = try tokenStore.loadToken() else {
+            return nil
+        }
+
+        return .personalAccessToken(token)
+    }
+
+    public func saveCredential(_ credential: GitHubCredential) throws {
+        guard case let .personalAccessToken(token) = credential else {
+            throw CredentialStoreError.unsupportedCredentialKind
+        }
+
+        try tokenStore.saveToken(token)
+    }
+
+    public func deleteCredential() throws {
+        try tokenStore.deleteToken()
+    }
+}
+
+public protocol AccessTokenProvider: Sendable {
+    func authorizationHeader() throws -> String
+}
+
+public struct StaticAccessTokenProvider: AccessTokenProvider, Sendable {
+    private let credential: GitHubCredential
+
+    public init(credential: GitHubCredential) {
+        self.credential = credential
+    }
+
+    public func authorizationHeader() throws -> String {
+        "Bearer \(credential.accessToken)"
+    }
+}
+
+public struct CredentialStoreAccessTokenProvider: AccessTokenProvider, Sendable {
+    private let credentialStore: any CredentialStore
+
+    public init(credentialStore: any CredentialStore) {
+        self.credentialStore = credentialStore
+    }
+
+    public func authorizationHeader() throws -> String {
+        guard let credential = try credentialStore.loadCredential() else {
+            throw CredentialStoreError.unsupportedCredentialKind
+        }
+
+        return "Bearer \(credential.accessToken)"
+    }
+}
+
 public final class InMemoryTokenStore: TokenStore, @unchecked Sendable {
     private var token: String?
 
