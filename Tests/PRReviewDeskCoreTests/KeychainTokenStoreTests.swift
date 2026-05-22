@@ -11,8 +11,8 @@ enum KeychainTokenStoreTests {
         let store = InMemoryTokenStore()
 
         try expectEqual(try store.loadToken(), nil)
-        try store.saveToken("ghp_test")
-        try expectEqual(try store.loadToken(), "ghp_test")
+        try store.saveToken("test-token")
+        try expectEqual(try store.loadToken(), "test-token")
         try store.deleteToken()
         try expectEqual(try store.loadToken(), nil)
     }
