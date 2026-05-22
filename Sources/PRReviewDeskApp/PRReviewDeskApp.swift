@@ -14,6 +14,30 @@ struct PRReviewDeskApp: App {
                 }
         }
         .windowStyle(.titleBar)
+        .commands {
+            CommandMenu("Review") {
+                Button("Refresh") {
+                    Task {
+                        await model.refreshActiveScope()
+                    }
+                }
+                .keyboardShortcut("r", modifiers: [.command])
+                .disabled(!model.canRefreshActiveScope)
+
+                Button("Generate Review") {
+                    model.startGenerateReview()
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(!model.canGenerateReview)
+
+                Divider()
+
+                Button("Submit Review") {
+                    model.requestSubmitReview()
+                }
+                .disabled(!model.canSubmitReview)
+            }
+        }
 
         Settings {
             SettingsView(model: model)

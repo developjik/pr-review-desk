@@ -5,6 +5,7 @@ enum TestHarness {
     static func main() async {
         do {
             try ModelsTests.run()
+            try ReviewCommandAvailabilityTests.run()
             try DiffPositionMapperTests.run()
             try await GitHubClientTests.run()
             try await CodexReviewAgentTests.run()
