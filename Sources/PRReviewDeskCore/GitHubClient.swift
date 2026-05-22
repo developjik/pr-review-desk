@@ -117,6 +117,35 @@ public final class GitHubClient: Sendable {
         return try await sendPaginated(request, as: [PullRequestFile].self)
     }
 
+    public func pullRequestReviewContext(
+        repository: Repository,
+        pullRequest: PullRequest
+    ) async throws -> PullRequestReviewContext {
+        let (owner, name) = try repositoryParts(repository)
+        let issueCommentsRequest = try makeRequest(
+            method: "GET",
+            path: "/repos/\(owner)/\(name)/issues/\(pullRequest.number)/comments",
+            queryItems: [URLQueryItem(name: "per_page", value: "30")]
+        )
+        let reviewCommentsRequest = try makeRequest(
+            method: "GET",
+            path: "/repos/\(owner)/\(name)/pulls/\(pullRequest.number)/comments",
+            queryItems: [URLQueryItem(name: "per_page", value: "30")]
+        )
+        let checkRunsRequest = try makeRequest(
+            method: "GET",
+            path: "/repos/\(owner)/\(name)/commits/\(pullRequest.headSha)/check-runs",
+            queryItems: [URLQueryItem(name: "per_page", value: "20")]
+        )
+
+        return PullRequestReviewContext(
+            body: pullRequest.body,
+            issueComments: try await send(issueCommentsRequest, as: [PullRequestConversationComment].self),
+            reviewComments: try await send(reviewCommentsRequest, as: [PullRequestReviewCommentContext].self),
+            checkRuns: try await send(checkRunsRequest, as: CheckRunsResponse.self).checkRuns
+        )
+    }
+
     public func validateToken() async throws -> GitHubTokenValidation {
         let request = try makeRequest(method: "GET", path: "/user")
         let (data, response) = try await dataForRead(request)
@@ -335,6 +364,14 @@ private struct ReviewPayload: Encodable {
         case commitID = "commit_id"
         case body
         case comments
+    }
+}
+
+private struct CheckRunsResponse: Decodable {
+    let checkRuns: [PullRequestCheckRunContext]
+
+    private enum CodingKeys: String, CodingKey {
+        case checkRuns = "check_runs"
     }
 }
 

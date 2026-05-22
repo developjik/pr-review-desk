@@ -4,11 +4,13 @@ import PRReviewDeskCore
 enum CodexReviewAgentTests {
     static func run() async throws {
         try await testGenerateReviewRunsCodexExecWithSchemaAndAnnotatedPatch()
+        try await testGenerateReviewPassesPullRequestContextToCodexPrompt()
         try await testGenerateReviewPassesDefaultTimeoutToRunner()
         try await testGenerateReviewMapsMissingCodexExecutable()
         try await testGenerateReviewMapsCommandTimeout()
         try await testGenerateReviewMapsCommandCancellation()
         try testMakePromptOmitsFilesWithoutReviewablePatches()
+        try testMakePromptIncludesBoundedPullRequestContext()
         try testReviewDraftDecodesCodexOutputWithoutLocalFields()
         try await testProcessCommandRunnerReturnsWhenChildKeepsStdoutOpen()
         try await testProcessCommandRunnerCleansTemporaryDirectoryAfterFailedCommand()
@@ -74,6 +76,33 @@ enum CodexReviewAgentTests {
         try expectTrue(runner.arguments.contains("--output-last-message"))
         try expectTrue(runner.standardInput.contains("Improve review flow"))
         try expectTrue(runner.standardInput.contains("[pos 2] +let new = true"))
+    }
+
+    private static func testGenerateReviewPassesPullRequestContextToCodexPrompt() async throws {
+        let runner = FakeCommandRunner(outputJSON: minimalReviewJSON)
+        let agent = CodexReviewAgent(commandRunner: runner, workingDirectory: URL(fileURLWithPath: "/tmp/review-desk"))
+        let context = PullRequestReviewContext(
+            body: "This PR changes release validation behavior.",
+            issueComments: [
+                PullRequestConversationComment(
+                    author: "maintainer",
+                    body: "Please check the package validator path.",
+                    createdAt: "2026-05-22T08:00:00Z"
+                )
+            ],
+            reviewComments: [],
+            checkRuns: []
+        )
+
+        _ = try await agent.generateReview(
+            repository: repository,
+            pullRequest: pullRequest,
+            files: reviewableFiles,
+            context: context
+        )
+
+        try expectTrue(runner.standardInput.contains("This PR changes release validation behavior."))
+        try expectTrue(runner.standardInput.contains("Please check the package validator path."))
     }
 
     private static func testGenerateReviewPassesDefaultTimeoutToRunner() async throws {
@@ -143,6 +172,66 @@ enum CodexReviewAgentTests {
 
         try expectTrue(prompt.contains("Sources/App.swift"))
         try expectTrue(!prompt.contains("Assets/logo.png"))
+    }
+
+    private static func testMakePromptIncludesBoundedPullRequestContext() throws {
+        let agent = CodexReviewAgent(commandRunner: FakeCommandRunner(outputJSON: minimalReviewJSON))
+        let bodyTail = "BODY_TAIL_SHOULD_NOT_APPEAR"
+        let longBody = String(repeating: "release-validation-body ", count: 120) + bodyTail
+        let longCommentTail = "COMMENT_TAIL_SHOULD_NOT_APPEAR"
+        let longComment = String(repeating: "comment-context ", count: 80) + longCommentTail
+        let context = PullRequestReviewContext(
+            body: "api_key=ghp_abcdefghijklmnopqrstuvwxyz0123456789\n\(longBody)",
+            issueComments: (1...7).map { (index: Int) in
+                PullRequestConversationComment(
+                    author: "issue-user-\(index)",
+                    body: index == 1 ? longComment : "issue comment \(index)",
+                    createdAt: "2026-05-22T08:0\(index):00Z"
+                )
+            },
+            reviewComments: (1...7).map { (index: Int) in
+                PullRequestReviewCommentContext(
+                    author: "reviewer-\(index)",
+                    path: "Sources/App.swift",
+                    position: index,
+                    body: "review comment \(index)",
+                    createdAt: "2026-05-22T09:0\(index):00Z"
+                )
+            },
+            checkRuns: (1...12).map { (index: Int) in
+                PullRequestCheckRunContext(
+                    name: "ci-\(index)",
+                    status: "completed",
+                    conclusion: index == 1 ? "failure" : "success",
+                    detailsURL: URL(string: "https://github.com/developjik/desk/actions/runs/\(index)")
+                )
+            }
+        )
+
+        let prompt = try agent.makePrompt(
+            repository: repository,
+            pullRequest: pullRequest,
+            files: reviewableFiles,
+            context: context
+        )
+
+        try expectTrue(prompt.contains("Additional pull request context:"))
+        try expectTrue(prompt.contains("Context limits: PR body 2000 characters, issue comments 6 x 800 characters, review comments 6 x 800 characters, check runs 10."))
+        try expectTrue(prompt.contains("PR body:"))
+        try expectTrue(prompt.contains("release-validation-body"))
+        try expectTrue(prompt.contains("[REDACTED_TOKEN]"))
+        try expectTrue(prompt.contains("Existing issue comments:"))
+        try expectTrue(prompt.contains("@issue-user-1 at 2026-05-22T08:01:00Z"))
+        try expectTrue(prompt.contains("Existing review comments:"))
+        try expectTrue(prompt.contains("@reviewer-1 on Sources/App.swift [pos 1]"))
+        try expectTrue(prompt.contains("Check/status summary:"))
+        try expectTrue(prompt.contains("ci-1: completed / failure"))
+        try expectTrue(prompt.contains("... [truncated]"))
+        try expectTrue(!prompt.contains(bodyTail))
+        try expectTrue(!prompt.contains(longCommentTail))
+        try expectTrue(!prompt.contains("@issue-user-7"))
+        try expectTrue(!prompt.contains("@reviewer-7"))
+        try expectTrue(!prompt.contains("ci-11"))
     }
 
     private static func testReviewDraftDecodesCodexOutputWithoutLocalFields() throws {

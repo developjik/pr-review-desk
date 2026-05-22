@@ -5,6 +5,7 @@ enum ModelsTests {
     static func run() throws {
         try testRepositoryDecodesOwnerAndName()
         try testPullRequestDecodesHeadSha()
+        try testPullRequestDecodesBodyWhenAvailable()
         try testPullRequestFileReviewabilityClassifiesPatchCoverage()
         try testReviewCoverageSummaryCountsOmittedFiles()
         try testReviewCoverageSummaryBlocksWhenNothingIsReviewable()
@@ -52,6 +53,24 @@ enum ModelsTests {
         try expectEqual(pullRequest.title, "Add review workflow")
         try expectEqual(pullRequest.author, "contributor")
         try expectEqual(pullRequest.headSha, "abc123")
+    }
+
+    private static func testPullRequestDecodesBodyWhenAvailable() throws {
+        let json = """
+        {
+          "id": 7,
+          "number": 12,
+          "title": "Add review workflow",
+          "body": "Please review the retry handling and release notes.",
+          "html_url": "https://github.com/developjik/desk/pull/12",
+          "user": { "login": "contributor" },
+          "head": { "sha": "abc123" }
+        }
+        """.data(using: .utf8)!
+
+        let pullRequest = try JSONDecoder().decode(PullRequest.self, from: json)
+
+        try expectEqual(pullRequest.body, "Please review the retry handling and release notes.")
     }
 
     private static func testPullRequestFileReviewabilityClassifiesPatchCoverage() throws {

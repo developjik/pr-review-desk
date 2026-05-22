@@ -9,6 +9,7 @@ enum GitHubClientTests {
         try await testListRepositoriesRetriesTransientServerFailure()
         try await testListOpenPullRequestsFollowsNextLink()
         try await testPullRequestFilesFollowsNextLink()
+        try await testPullRequestReviewContextFetchesConversationAndChecks()
         try await testValidateTokenReturnsLoginAndScopes()
         try await testSubmitReviewDoesNotRetryTransientServerFailure()
         try await testSubmitReviewEncodesEventBodyAndInlineComments()
@@ -225,6 +226,91 @@ enum GitHubClientTests {
         try expectEqual(secondRequest.url?.path, "/repos/developjik/desk/pulls/12/files")
         try expectEqual(try queryValue("per_page", in: secondRequest), "100")
         try expectEqual(try queryValue("page", in: secondRequest), "2")
+    }
+
+    private static func testPullRequestReviewContextFetchesConversationAndChecks() async throws {
+        let transport = FakeGitHubTransport(responses: [
+            FakeGitHubResponse(
+                data: """
+                [
+                  {
+                    "user": { "login": "maintainer" },
+                    "body": "Please confirm release validation.",
+                    "created_at": "2026-05-22T08:00:00Z"
+                  }
+                ]
+                """
+            ),
+            FakeGitHubResponse(
+                data: """
+                [
+                  {
+                    "user": { "login": "reviewer" },
+                    "path": "Sources/App.swift",
+                    "position": 4,
+                    "body": "This branch needs a regression test.",
+                    "created_at": "2026-05-22T09:00:00Z"
+                  }
+                ]
+                """
+            ),
+            FakeGitHubResponse(
+                data: """
+                {
+                  "total_count": 1,
+                  "check_runs": [
+                    {
+                      "name": "verify",
+                      "status": "completed",
+                      "conclusion": "failure",
+                      "details_url": "https://github.com/developjik/desk/actions/runs/1"
+                    }
+                  ]
+                }
+                """
+            )
+        ])
+        let client = GitHubClient(token: "secret", transport: transport)
+        let repository = Repository(
+            id: 1,
+            owner: "developjik",
+            name: "desk",
+            fullName: "developjik/desk",
+            isPrivate: false
+        )
+        let pullRequest = PullRequest(
+            id: 7,
+            number: 12,
+            title: "Add workflow",
+            body: "PR body from details endpoint",
+            htmlURL: URL(string: "https://github.com/developjik/desk/pull/12")!,
+            author: "contributor",
+            headSha: "abc123"
+        )
+
+        let context = try await client.pullRequestReviewContext(repository: repository, pullRequest: pullRequest)
+
+        try expectEqual(context.body, "PR body from details endpoint")
+        try expectEqual(context.issueComments.count, 1)
+        try expectEqual(context.issueComments[0].author, "maintainer")
+        try expectEqual(context.issueComments[0].body, "Please confirm release validation.")
+        try expectEqual(context.issueComments[0].createdAt, "2026-05-22T08:00:00Z")
+        try expectEqual(context.reviewComments.count, 1)
+        try expectEqual(context.reviewComments[0].author, "reviewer")
+        try expectEqual(context.reviewComments[0].path, "Sources/App.swift")
+        try expectEqual(context.reviewComments[0].position, 4)
+        try expectEqual(context.checkRuns.count, 1)
+        try expectEqual(context.checkRuns[0].name, "verify")
+        try expectEqual(context.checkRuns[0].status, "completed")
+        try expectEqual(context.checkRuns[0].conclusion, "failure")
+
+        try expectEqual(transport.requests.count, 3)
+        try expectEqual(transport.requests[0].url?.path, "/repos/developjik/desk/issues/12/comments")
+        try expectEqual(try queryValue("per_page", in: transport.requests[0]), "30")
+        try expectEqual(transport.requests[1].url?.path, "/repos/developjik/desk/pulls/12/comments")
+        try expectEqual(try queryValue("per_page", in: transport.requests[1]), "30")
+        try expectEqual(transport.requests[2].url?.path, "/repos/developjik/desk/commits/abc123/check-runs")
+        try expectEqual(try queryValue("per_page", in: transport.requests[2]), "20")
     }
 
     private static func testValidateTokenReturnsLoginAndScopes() async throws {

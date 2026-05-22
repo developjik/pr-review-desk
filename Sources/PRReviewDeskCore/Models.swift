@@ -53,14 +53,16 @@ public struct PullRequest: Codable, Equatable, Identifiable, Hashable, Sendable 
     public let id: Int
     public let number: Int
     public let title: String
+    public let body: String?
     public let htmlURL: URL
     public let author: String
     public let headSha: String
 
-    public init(id: Int, number: Int, title: String, htmlURL: URL, author: String, headSha: String) {
+    public init(id: Int, number: Int, title: String, body: String? = nil, htmlURL: URL, author: String, headSha: String) {
         self.id = id
         self.number = number
         self.title = title
+        self.body = body
         self.htmlURL = htmlURL
         self.author = author
         self.headSha = headSha
@@ -70,6 +72,7 @@ public struct PullRequest: Codable, Equatable, Identifiable, Hashable, Sendable 
         case id
         case number
         case title
+        case body
         case htmlURL = "html_url"
         case user
         case head
@@ -91,6 +94,7 @@ public struct PullRequest: Codable, Equatable, Identifiable, Hashable, Sendable 
         id = try container.decode(Int.self, forKey: .id)
         number = try container.decode(Int.self, forKey: .number)
         title = try container.decode(String.self, forKey: .title)
+        body = try container.decodeIfPresent(String.self, forKey: .body)
         htmlURL = try container.decode(URL.self, forKey: .htmlURL)
         author = try userContainer.decode(String.self, forKey: .login)
         headSha = try headContainer.decode(String.self, forKey: .sha)
@@ -101,11 +105,154 @@ public struct PullRequest: Codable, Equatable, Identifiable, Hashable, Sendable 
         try container.encode(id, forKey: .id)
         try container.encode(number, forKey: .number)
         try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(body, forKey: .body)
         try container.encode(htmlURL, forKey: .htmlURL)
         var userContainer = container.nestedContainer(keyedBy: UserKeys.self, forKey: .user)
         try userContainer.encode(author, forKey: .login)
         var headContainer = container.nestedContainer(keyedBy: HeadKeys.self, forKey: .head)
         try headContainer.encode(headSha, forKey: .sha)
+    }
+}
+
+public struct PullRequestConversationComment: Codable, Equatable, Hashable, Sendable {
+    public let author: String
+    public let body: String
+    public let createdAt: String?
+
+    public init(author: String, body: String, createdAt: String?) {
+        self.author = author
+        self.body = body
+        self.createdAt = createdAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case user
+        case body
+        case createdAt = "created_at"
+    }
+
+    private enum UserKeys: String, CodingKey {
+        case login
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let userContainer = try container.nestedContainer(keyedBy: UserKeys.self, forKey: .user)
+
+        author = try userContainer.decode(String.self, forKey: .login)
+        body = try container.decode(String.self, forKey: .body)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        var userContainer = container.nestedContainer(keyedBy: UserKeys.self, forKey: .user)
+        try userContainer.encode(author, forKey: .login)
+        try container.encode(body, forKey: .body)
+        try container.encodeIfPresent(createdAt, forKey: .createdAt)
+    }
+}
+
+public struct PullRequestReviewCommentContext: Codable, Equatable, Hashable, Sendable {
+    public let author: String
+    public let path: String
+    public let position: Int?
+    public let body: String
+    public let createdAt: String?
+
+    public init(author: String, path: String, position: Int?, body: String, createdAt: String?) {
+        self.author = author
+        self.path = path
+        self.position = position
+        self.body = body
+        self.createdAt = createdAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case user
+        case path
+        case position
+        case body
+        case createdAt = "created_at"
+    }
+
+    private enum UserKeys: String, CodingKey {
+        case login
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let userContainer = try container.nestedContainer(keyedBy: UserKeys.self, forKey: .user)
+
+        author = try userContainer.decode(String.self, forKey: .login)
+        path = try container.decode(String.self, forKey: .path)
+        position = try container.decodeIfPresent(Int.self, forKey: .position)
+        body = try container.decode(String.self, forKey: .body)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        var userContainer = container.nestedContainer(keyedBy: UserKeys.self, forKey: .user)
+        try userContainer.encode(author, forKey: .login)
+        try container.encode(path, forKey: .path)
+        try container.encodeIfPresent(position, forKey: .position)
+        try container.encode(body, forKey: .body)
+        try container.encodeIfPresent(createdAt, forKey: .createdAt)
+    }
+}
+
+public struct PullRequestCheckRunContext: Codable, Equatable, Hashable, Sendable {
+    public let name: String
+    public let status: String
+    public let conclusion: String?
+    public let detailsURL: URL?
+
+    public init(name: String, status: String, conclusion: String?, detailsURL: URL?) {
+        self.name = name
+        self.status = status
+        self.conclusion = conclusion
+        self.detailsURL = detailsURL
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case status
+        case conclusion
+        case detailsURL = "details_url"
+    }
+}
+
+public struct PullRequestReviewContext: Equatable, Hashable, Sendable {
+    public static let empty = PullRequestReviewContext(
+        body: nil,
+        issueComments: [],
+        reviewComments: [],
+        checkRuns: []
+    )
+
+    public let body: String?
+    public let issueComments: [PullRequestConversationComment]
+    public let reviewComments: [PullRequestReviewCommentContext]
+    public let checkRuns: [PullRequestCheckRunContext]
+
+    public init(
+        body: String?,
+        issueComments: [PullRequestConversationComment],
+        reviewComments: [PullRequestReviewCommentContext],
+        checkRuns: [PullRequestCheckRunContext]
+    ) {
+        self.body = body
+        self.issueComments = issueComments
+        self.reviewComments = reviewComments
+        self.checkRuns = checkRuns
+    }
+
+    public var isEmpty: Bool {
+        body?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+            && issueComments.isEmpty
+            && reviewComments.isEmpty
+            && checkRuns.isEmpty
     }
 }
 

@@ -37,6 +37,7 @@ enum PrivateRepositoryConsentTests {
         try expectEqual(request.repositoryFullName, "developjik/private-desk")
         try expectTrue(request.outboundDataDescriptions.contains("PR metadata"))
         try expectTrue(request.outboundDataDescriptions.contains("Reviewable patch content"))
+        try expectTrue(request.outboundDataDescriptions.contains("PR body, existing comments, and check status summaries"))
 
         try expectEqual(
             PrivateRepositoryConsentPolicy.request(
