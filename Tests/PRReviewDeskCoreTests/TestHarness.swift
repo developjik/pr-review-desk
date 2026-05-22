@@ -7,6 +7,7 @@ enum TestHarness {
             try ModelsTests.run()
             try ReviewCommandAvailabilityTests.run()
             try ReadinessChecklistTests.run()
+            try PrivateRepositoryConsentTests.run()
             try DiffPositionMapperTests.run()
             try await GitHubClientTests.run()
             try await CodexReviewAgentTests.run()

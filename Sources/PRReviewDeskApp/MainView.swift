@@ -20,6 +20,17 @@ struct MainView: View {
                 statusBar
             }
         }
+        .sheet(item: $model.pendingPrivateRepositoryConsent) { request in
+            PrivateRepositoryConsentSheet(
+                request: request,
+                onCancel: {
+                    model.cancelPrivateRepositoryConsent()
+                },
+                onAcknowledge: {
+                    model.confirmPrivateRepositoryConsentAndGenerate()
+                }
+            )
+        }
     }
 
     private var repositorySidebar: some View {
