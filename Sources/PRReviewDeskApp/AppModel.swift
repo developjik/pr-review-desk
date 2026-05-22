@@ -27,6 +27,10 @@ private enum PrivateRepositoryConsentContinuation {
 @MainActor
 final class AppModel: ObservableObject {
     @Published var tokenInput = ""
+    @Published var oauthClientID = ""
+    @Published var oauthStatus = "Not started."
+    @Published var oauthAuthorization: OAuthDeviceAuthorization?
+    @Published var isOAuthSignInPending = false
     @Published var hasToken = false
     @Published var repositories: [Repository] = []
     @Published var selectedRepository: Repository?
@@ -70,6 +74,8 @@ final class AppModel: ObservableObject {
     private static let privacyDisclosureAcknowledgedKey = "privacyDisclosureAcknowledged"
     private static let privateRepositoryConsentAcknowledgementsKey = "privateRepositoryConsentAcknowledgements"
     private let credentialStore: CredentialStore
+    private let oauthCredentialStore: any OAuthCredentialStoring
+    private let oauthDeviceFlowClient: GitHubOAuthDeviceFlowClient
     private let codexAgent: CodexReviewAgent
     private let reviewDraftStore: any ReviewDraftStore
     private let userDefaults: UserDefaults
@@ -77,6 +83,7 @@ final class AppModel: ObservableObject {
     private var reviewedHeadSha: String?
     private var currentOperationTask: Task<Void, Never>?
     private var backgroundQueueTask: Task<Void, Never>?
+    private var oauthSignInTask: Task<Void, Never>?
     private var privateRepositoryConsentAcknowledgements: Set<String> = []
     private var pendingPrivateRepositoryConsentContinuation: PrivateRepositoryConsentContinuation?
 
@@ -185,12 +192,19 @@ final class AppModel: ObservableObject {
     }
 
     init(
-        credentialStore: CredentialStore = VersionedCredentialStore.keychainDefault(),
+        credentialStore: (any CredentialStore)? = nil,
+        oauthCredentialStore: (any OAuthCredentialStoring)? = nil,
+        oauthDeviceFlowClient: GitHubOAuthDeviceFlowClient = GitHubOAuthDeviceFlowClient(),
         codexAgent: CodexReviewAgent = CodexReviewAgent(),
         reviewDraftStore: any ReviewDraftStore = FileReviewDraftStore.appDefault(),
         userDefaults: UserDefaults = .standard
     ) {
-        self.credentialStore = credentialStore
+        let defaultCredentialStore = VersionedCredentialStore.keychainDefault()
+        self.credentialStore = credentialStore ?? defaultCredentialStore
+        self.oauthCredentialStore = oauthCredentialStore
+            ?? (credentialStore as? any OAuthCredentialStoring)
+            ?? defaultCredentialStore
+        self.oauthDeviceFlowClient = oauthDeviceFlowClient
         self.codexAgent = codexAgent
         self.reviewDraftStore = reviewDraftStore
         self.userDefaults = userDefaults
@@ -252,6 +266,42 @@ final class AppModel: ObservableObject {
         } catch {
             statusMessage = "Could not delete token: \(error)"
         }
+    }
+
+    func startOAuthDeviceSignIn() {
+        guard !isOAuthSignInPending else {
+            return
+        }
+
+        let clientID = oauthClientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clientID.isEmpty else {
+            oauthStatus = "Enter an OAuth App client ID first."
+            return
+        }
+
+        oauthSignInTask = Task { @MainActor [weak self] in
+            await self?.runOAuthDeviceSignIn(clientID: clientID)
+            self?.oauthSignInTask = nil
+        }
+    }
+
+    func cancelOAuthDeviceSignIn() {
+        guard isOAuthSignInPending else {
+            return
+        }
+
+        oauthStatus = "Cancelling GitHub sign-in..."
+        oauthSignInTask?.cancel()
+    }
+
+    func copyOAuthUserCode() {
+        guard let userCode = oauthAuthorization?.userCode else {
+            return
+        }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(userCode, forType: .string)
+        oauthStatus = "Copied GitHub device code."
     }
 
     func validateCurrentToken() async {
@@ -712,6 +762,56 @@ final class AppModel: ObservableObject {
         githubClient = GitHubClient(
             accessTokenProvider: CredentialStoreAccessTokenProvider(credentialStore: credentialStore)
         )
+    }
+
+    private func runOAuthDeviceSignIn(clientID: String) async {
+        isOAuthSignInPending = true
+        oauthAuthorization = nil
+        oauthStatus = "Starting GitHub sign-in..."
+        defer {
+            isOAuthSignInPending = false
+        }
+
+        do {
+            let authorization = try await oauthDeviceFlowClient.startDeviceFlow(
+                clientID: clientID,
+                scopes: ["repo"]
+            )
+            oauthAuthorization = authorization
+            oauthStatus = "Pending GitHub authorization. Enter code \(authorization.userCode)."
+            NSWorkspace.shared.open(authorization.verificationURI)
+
+            let completion = try await oauthDeviceFlowClient.pollUntilAuthorized(
+                authorization: authorization,
+                clientID: clientID,
+                credentialStore: oauthCredentialStore
+            )
+
+            switch completion {
+            case .success:
+                configureGitHubClient()
+                tokenInput = ""
+                hasToken = true
+                oauthStatus = "Authorized with GitHub."
+                statusMessage = "GitHub OAuth token saved."
+                await refreshRepositories()
+            case .expiredToken:
+                oauthStatus = "GitHub sign-in code expired. Start again."
+            case .accessDenied:
+                oauthStatus = "GitHub sign-in was denied."
+            case .cancelled:
+                oauthStatus = "GitHub sign-in cancelled."
+            }
+        } catch {
+            let details = SensitiveTextRedactor.redact("\(error)")
+            oauthStatus = "GitHub sign-in failed: \(firstLine(details))"
+            recoverableError = RecoverableErrorDetails(
+                operation: "GitHub sign-in",
+                summary: firstLine(details),
+                details: details,
+                recoverySuggestion: "Check the OAuth App client ID and network access, then start sign-in again."
+            )
+        }
     }
 
     private func privateRepositoryConsentRequestForSelectedRepository() -> PrivateRepositoryConsentRequest? {

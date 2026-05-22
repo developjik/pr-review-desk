@@ -128,7 +128,7 @@ public struct GitHubOAuthDeviceFlowClient: Sendable {
     public func pollUntilAuthorized(
         authorization: OAuthDeviceAuthorization,
         clientID: String,
-        credentialStore: VersionedCredentialStore,
+        credentialStore: any OAuthCredentialStoring,
         sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { seconds in
             try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
         }
