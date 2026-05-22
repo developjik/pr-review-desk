@@ -24,6 +24,8 @@ struct MainView: View {
 
     private var repositorySidebar: some View {
         VStack(alignment: .leading, spacing: 12) {
+            ReadinessChecklistView(model: model)
+            Divider()
             tokenSection
             Divider()
             HStack {
@@ -119,11 +121,16 @@ struct MainView: View {
                 reviewControls
                 reviewWorkspace
             } else {
-                ContentUnavailableView(
-                    "No Pull Request Selected",
-                    systemImage: "text.badge.plus",
-                    description: Text("Choose a repository and open pull request.")
-                )
+                VStack(alignment: .leading, spacing: 18) {
+                    ReadinessChecklistView(model: model)
+                        .frame(maxWidth: 520, alignment: .leading)
+
+                    ContentUnavailableView(
+                        "No Pull Request Selected",
+                        systemImage: "text.badge.plus",
+                        description: Text("Choose a repository and open pull request.")
+                    )
+                }
             }
         }
         .padding()

@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import SwiftUI
 import PRReviewDeskCore
 
@@ -30,10 +31,18 @@ final class AppModel: ObservableObject {
     @Published var recoverableError: RecoverableErrorDetails?
     @Published var tokenValidationStatus = "Not validated."
     @Published var codexCLIStatus = "Not checked."
+    @Published var codexLoginStatus = "Not checked."
     @Published var isSubmitConfirmationPresented = false
+    @Published var isPrivacyDisclosureAcknowledged = false {
+        didSet {
+            userDefaults.set(isPrivacyDisclosureAcknowledged, forKey: Self.privacyDisclosureAcknowledgedKey)
+        }
+    }
 
+    private static let privacyDisclosureAcknowledgedKey = "privacyDisclosureAcknowledged"
     private let credentialStore: CredentialStore
     private let codexAgent: CodexReviewAgent
+    private let userDefaults: UserDefaults
     private var githubClient: GitHubClient?
     private var reviewedHeadSha: String?
     private var currentOperationTask: Task<Void, Never>?
@@ -94,6 +103,16 @@ final class AppModel: ObservableObject {
         commandAvailability.canSubmitReview
     }
 
+    var readinessChecklist: ReadinessChecklist {
+        ReadinessChecklist(
+            hasGitHubCredential: hasToken,
+            tokenValidation: tokenValidationReadiness,
+            codexCLI: codexCLIReadiness,
+            codexLogin: codexLoginReadiness,
+            isPrivacyDisclosureAcknowledged: isPrivacyDisclosureAcknowledged
+        )
+    }
+
     private var hasSubmittableDraft: Bool {
         draft != nil && submitSafetyState.canSubmit
     }
@@ -118,10 +137,13 @@ final class AppModel: ObservableObject {
 
     init(
         credentialStore: CredentialStore = VersionedCredentialStore.keychainDefault(),
-        codexAgent: CodexReviewAgent = CodexReviewAgent()
+        codexAgent: CodexReviewAgent = CodexReviewAgent(),
+        userDefaults: UserDefaults = .standard
     ) {
         self.credentialStore = credentialStore
         self.codexAgent = codexAgent
+        self.userDefaults = userDefaults
+        self.isPrivacyDisclosureAcknowledged = userDefaults.bool(forKey: Self.privacyDisclosureAcknowledgedKey)
     }
 
     func loadStoredToken() {
@@ -192,7 +214,8 @@ final class AppModel: ObservableObject {
 
     func refreshCodexCLIStatus() async {
         await runWorking("Checking Codex CLI...") {
-            let result = try await ProcessCommandRunner().run(
+            let runner = ProcessCommandRunner()
+            let result = try await runner.run(
                 executable: "which",
                 arguments: ["codex"],
                 standardInput: "",
@@ -202,8 +225,25 @@ final class AppModel: ObservableObject {
 
             if result.exitCode == 0 {
                 codexCLIStatus = "Found at \(result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines))."
+                let loginResult = try await runner.run(
+                    executable: "codex",
+                    arguments: ["login", "status"],
+                    standardInput: "",
+                    workingDirectory: nil,
+                    timeout: 5
+                )
+
+                if loginResult.exitCode == 0 {
+                    codexLoginStatus = loginResult.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+                } else {
+                    let details = SensitiveTextRedactor.redact(loginResult.standardError)
+                    codexLoginStatus = details.isEmpty
+                        ? "Not logged in. Run `codex login` in Terminal."
+                        : "Not logged in. \(details)"
+                }
             } else {
                 codexCLIStatus = "Not found on PATH."
+                codexLoginStatus = "Install or expose Codex CLI before checking login."
             }
         }
     }
@@ -432,10 +472,61 @@ final class AppModel: ObservableObject {
         recoverableError = nil
     }
 
+    func acknowledgePrivacyDisclosure() {
+        isPrivacyDisclosureAcknowledged = true
+        statusMessage = "Privacy disclosure acknowledged."
+    }
+
+    func copyCodexLoginCommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("codex login", forType: .string)
+        statusMessage = "Copied codex login. Run it in Terminal, then check Codex readiness."
+    }
+
     private func configureGitHubClient() {
         githubClient = GitHubClient(
             accessTokenProvider: CredentialStoreAccessTokenProvider(credentialStore: credentialStore)
         )
+    }
+
+    private var tokenValidationReadiness: ReadinessProbeState {
+        guard hasToken else {
+            return .unknown("Load or save a GitHub token before validating scopes.")
+        }
+
+        if tokenValidationStatus.hasPrefix("Valid for @") {
+            return .ready(tokenValidationStatus)
+        }
+
+        if tokenValidationStatus == "Not validated." {
+            return .unknown("Validate the token to confirm login and scopes.")
+        }
+
+        return .needsAction(tokenValidationStatus)
+    }
+
+    private var codexCLIReadiness: ReadinessProbeState {
+        if codexCLIStatus.hasPrefix("Found at ") {
+            return .ready(codexCLIStatus)
+        }
+
+        if codexCLIStatus == "Not checked." {
+            return .unknown("Check whether the Codex CLI is available on PATH.")
+        }
+
+        return .needsAction(codexCLIStatus)
+    }
+
+    private var codexLoginReadiness: ReadinessProbeState {
+        if codexLoginStatus.hasPrefix("Logged in") {
+            return .ready(codexLoginStatus)
+        }
+
+        if codexLoginStatus == "Not checked." {
+            return .unknown("Check Codex login status. If needed, run `codex login` in Terminal.")
+        }
+
+        return .needsAction(codexLoginStatus)
     }
 
     private func loadPullRequests(repository: Repository) async throws {
