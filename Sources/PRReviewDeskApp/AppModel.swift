@@ -28,6 +28,8 @@ final class AppModel: ObservableObject {
     @Published var canCancelCurrentOperation = false
     @Published var preflightHeadSha: String?
     @Published var recoverableError: RecoverableErrorDetails?
+    @Published var tokenValidationStatus = "Not validated."
+    @Published var codexCLIStatus = "Not checked."
 
     private let tokenStore: TokenStore
     private let codexAgent: CodexReviewAgent
@@ -131,6 +133,56 @@ final class AppModel: ObservableObject {
             await refreshRepositories()
         } catch {
             statusMessage = "Could not save token: \(error)"
+        }
+    }
+
+    func deleteStoredToken() {
+        do {
+            try tokenStore.deleteToken()
+            githubClient = nil
+            hasToken = false
+            repositories = []
+            pullRequests = []
+            selectedRepository = nil
+            selectedPullRequest = nil
+            changedFiles = []
+            draft = nil
+            reviewBody = ""
+            tokenValidationStatus = "No token saved."
+            statusMessage = "GitHub token deleted."
+        } catch {
+            statusMessage = "Could not delete token: \(error)"
+        }
+    }
+
+    func validateCurrentToken() async {
+        guard let githubClient else {
+            tokenValidationStatus = "Load or save a GitHub token first."
+            return
+        }
+
+        await runWorking("Validating GitHub token...") {
+            let validation = try await githubClient.validateToken()
+            let scopes = validation.scopes.isEmpty ? "no scopes reported" : validation.scopes.joined(separator: ", ")
+            tokenValidationStatus = "Valid for @\(validation.login). Scopes: \(scopes)."
+        }
+    }
+
+    func refreshCodexCLIStatus() async {
+        await runWorking("Checking Codex CLI...") {
+            let result = try await ProcessCommandRunner().run(
+                executable: "which",
+                arguments: ["codex"],
+                standardInput: "",
+                workingDirectory: nil,
+                timeout: 2
+            )
+
+            if result.exitCode == 0 {
+                codexCLIStatus = "Found at \(result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines))."
+            } else {
+                codexCLIStatus = "Not found on PATH."
+            }
         }
     }
 

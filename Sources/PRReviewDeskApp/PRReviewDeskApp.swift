@@ -14,5 +14,9 @@ struct PRReviewDeskApp: App {
                 }
         }
         .windowStyle(.titleBar)
+
+        Settings {
+            SettingsView(model: model)
+        }
     }
 }
