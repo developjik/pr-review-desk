@@ -62,7 +62,7 @@ public final class GitHubClient: Sendable {
                 URLQueryItem(name: "per_page", value: "100")
             ]
         )
-        return try await send(request, as: [Repository].self)
+        return try await sendPaginated(request, as: [Repository].self)
     }
 
     public func listOpenPullRequests(repository: Repository) async throws -> [PullRequest] {
@@ -75,7 +75,7 @@ public final class GitHubClient: Sendable {
                 URLQueryItem(name: "per_page", value: "100")
             ]
         )
-        return try await send(request, as: [PullRequest].self)
+        return try await sendPaginated(request, as: [PullRequest].self)
     }
 
     public func pullRequestDetails(repository: Repository, number: Int) async throws -> PullRequest {
@@ -91,7 +91,7 @@ public final class GitHubClient: Sendable {
             path: "/repos/\(owner)/\(name)/pulls/\(pullRequest.number)/files",
             queryItems: [URLQueryItem(name: "per_page", value: "100")]
         )
-        return try await send(request, as: [PullRequestFile].self)
+        return try await sendPaginated(request, as: [PullRequestFile].self)
     }
 
     public func submitReview(
@@ -126,6 +126,21 @@ public final class GitHubClient: Sendable {
         return try JSONDecoder().decode(type, from: data)
     }
 
+    private func sendPaginated<T: Decodable>(_ request: URLRequest, as type: [T].Type) async throws -> [T] {
+        var nextRequest: URLRequest? = request
+        var items: [T] = []
+
+        while let currentRequest = nextRequest {
+            let (data, response) = try await transport.data(for: currentRequest)
+            try validate(response: response, data: data)
+            let pageItems = try JSONDecoder().decode(type, from: data)
+            items.append(contentsOf: pageItems)
+            nextRequest = nextPageURL(from: response).map { makeRequest(method: "GET", url: $0) }
+        }
+
+        return items
+    }
+
     private func sendWithoutDecoding(_ request: URLRequest) async throws {
         let (data, response) = try await transport.data(for: request)
         try validate(response: response, data: data)
@@ -151,11 +166,78 @@ public final class GitHubClient: Sendable {
 
         var request = URLRequest(url: components.url!)
         request.httpMethod = method
+        applyDefaultHeaders(to: &request)
+        return request
+    }
+
+    private func makeRequest(method: String, url: URL) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        applyDefaultHeaders(to: &request)
+        return request
+    }
+
+    private func applyDefaultHeaders(to request: inout URLRequest) {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         request.setValue("PRReviewDesk", forHTTPHeaderField: "User-Agent")
-        return request
+    }
+
+    private func nextPageURL(from response: HTTPURLResponse) -> URL? {
+        guard let linkHeader = response.value(forHTTPHeaderField: "Link") else {
+            return nil
+        }
+
+        for part in linkHeaderParts(linkHeader) {
+            let link = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard link.contains("rel=\"next\"") else {
+                continue
+            }
+            guard let openIndex = link.firstIndex(of: "<"),
+                  let closeIndex = link[openIndex...].firstIndex(of: ">")
+            else {
+                return nil
+            }
+            let urlString = String(link[link.index(after: openIndex)..<closeIndex])
+            guard let url = URL(string: urlString, relativeTo: baseURL),
+                  url.scheme == baseURL.scheme,
+                  url.host == baseURL.host
+            else {
+                return nil
+            }
+            return url.absoluteURL
+        }
+
+        return nil
+    }
+
+    private func linkHeaderParts(_ header: String) -> [String] {
+        var parts: [String] = []
+        var current = ""
+        var isInsideURL = false
+
+        for character in header {
+            switch character {
+            case "<":
+                isInsideURL = true
+                current.append(character)
+            case ">":
+                isInsideURL = false
+                current.append(character)
+            case "," where !isInsideURL:
+                parts.append(current)
+                current = ""
+            default:
+                current.append(character)
+            }
+        }
+
+        if !current.isEmpty {
+            parts.append(current)
+        }
+
+        return parts
     }
 
     private func repositoryParts(_ repository: Repository) throws -> (String, String) {
