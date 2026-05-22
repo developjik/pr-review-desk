@@ -99,7 +99,7 @@ public final class CodexReviewAgent: @unchecked Sendable {
 
     public init(
         commandRunner: CommandRunning = ProcessCommandRunner(),
-        workingDirectory: URL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+        workingDirectory: URL = FileManager.default.temporaryDirectory,
         fileManager: FileManager = .default
     ) {
         self.commandRunner = commandRunner
@@ -129,10 +129,16 @@ public final class CodexReviewAgent: @unchecked Sendable {
             executable: "codex",
             arguments: [
                 "exec",
+                "--ignore-user-config",
+                "--ignore-rules",
+                "--cd",
+                workingDirectory.path,
                 "--skip-git-repo-check",
                 "--sandbox",
                 "read-only",
                 "--ephemeral",
+                "-c",
+                "model_reasoning_effort=\"low\"",
                 "--output-schema",
                 schemaURL.path,
                 "--output-last-message",
