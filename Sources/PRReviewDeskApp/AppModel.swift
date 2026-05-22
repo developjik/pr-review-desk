@@ -38,14 +38,18 @@ final class AppModel: ObservableObject {
             userDefaults.set(isPrivacyDisclosureAcknowledged, forKey: Self.privacyDisclosureAcknowledgedKey)
         }
     }
+    @Published var pendingPrivateRepositoryConsent: PrivateRepositoryConsentRequest?
+    @Published private(set) var privateRepositoryConsentAcknowledgementCount = 0
 
     private static let privacyDisclosureAcknowledgedKey = "privacyDisclosureAcknowledged"
+    private static let privateRepositoryConsentAcknowledgementsKey = "privateRepositoryConsentAcknowledgements"
     private let credentialStore: CredentialStore
     private let codexAgent: CodexReviewAgent
     private let userDefaults: UserDefaults
     private var githubClient: GitHubClient?
     private var reviewedHeadSha: String?
     private var currentOperationTask: Task<Void, Never>?
+    private var privateRepositoryConsentAcknowledgements: Set<String> = []
 
     var selectedInlineCommentCount: Int {
         draft?.inlineComments.filter(\.isSelected).count ?? 0
@@ -144,6 +148,10 @@ final class AppModel: ObservableObject {
         self.codexAgent = codexAgent
         self.userDefaults = userDefaults
         self.isPrivacyDisclosureAcknowledged = userDefaults.bool(forKey: Self.privacyDisclosureAcknowledgedKey)
+        self.privateRepositoryConsentAcknowledgements = Set(
+            userDefaults.stringArray(forKey: Self.privateRepositoryConsentAcknowledgementsKey) ?? []
+        )
+        self.privateRepositoryConsentAcknowledgementCount = privateRepositoryConsentAcknowledgements.count
     }
 
     func loadStoredToken() {
@@ -319,6 +327,16 @@ final class AppModel: ObservableObject {
             return
         }
 
+        if let consentRequest = privateRepositoryConsentRequestForSelectedRepository() {
+            pendingPrivateRepositoryConsent = consentRequest
+            statusMessage = "Private repository consent required before generating Codex review."
+            return
+        }
+
+        enqueueGenerateReview()
+    }
+
+    private func enqueueGenerateReview() {
         currentOperationTask = Task { @MainActor [weak self] in
             await self?.generateReview()
             self?.currentOperationTask = nil
@@ -472,6 +490,29 @@ final class AppModel: ObservableObject {
         recoverableError = nil
     }
 
+    func confirmPrivateRepositoryConsentAndGenerate() {
+        guard let request = pendingPrivateRepositoryConsent else {
+            return
+        }
+
+        privateRepositoryConsentAcknowledgements.insert(request.repositoryFullName)
+        savePrivateRepositoryConsentAcknowledgements()
+        pendingPrivateRepositoryConsent = nil
+        statusMessage = "Private repository consent remembered for \(request.repositoryFullName)."
+        enqueueGenerateReview()
+    }
+
+    func cancelPrivateRepositoryConsent() {
+        pendingPrivateRepositoryConsent = nil
+        statusMessage = "Private repository consent cancelled. Codex review was not generated."
+    }
+
+    func clearPrivateRepositoryConsentAcknowledgements() {
+        privateRepositoryConsentAcknowledgements = []
+        savePrivateRepositoryConsentAcknowledgements()
+        statusMessage = "Cleared remembered private repository consent."
+    }
+
     func acknowledgePrivacyDisclosure() {
         isPrivacyDisclosureAcknowledged = true
         statusMessage = "Privacy disclosure acknowledged."
@@ -487,6 +528,25 @@ final class AppModel: ObservableObject {
         githubClient = GitHubClient(
             accessTokenProvider: CredentialStoreAccessTokenProvider(credentialStore: credentialStore)
         )
+    }
+
+    private func privateRepositoryConsentRequestForSelectedRepository() -> PrivateRepositoryConsentRequest? {
+        guard let selectedRepository else {
+            return nil
+        }
+
+        return PrivateRepositoryConsentPolicy.request(
+            for: selectedRepository,
+            acknowledgedRepositories: privateRepositoryConsentAcknowledgements
+        )
+    }
+
+    private func savePrivateRepositoryConsentAcknowledgements() {
+        userDefaults.set(
+            Array(privateRepositoryConsentAcknowledgements).sorted(),
+            forKey: Self.privateRepositoryConsentAcknowledgementsKey
+        )
+        privateRepositoryConsentAcknowledgementCount = privateRepositoryConsentAcknowledgements.count
     }
 
     private var tokenValidationReadiness: ReadinessProbeState {

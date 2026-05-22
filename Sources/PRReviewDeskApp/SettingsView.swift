@@ -79,6 +79,20 @@ struct SettingsView: View {
                 Text("When you generate a review, PR metadata and reviewable patch content may be sent to Codex and OpenAI. Omitted files without GitHub patch content are not sent to Codex by this app.")
                     .fixedSize(horizontal: false, vertical: true)
                 Toggle("I acknowledge this disclosure", isOn: $model.isPrivacyDisclosureAcknowledged)
+
+                HStack {
+                    Text("Private repository consent")
+                    Spacer()
+                    Text("\(model.privateRepositoryConsentAcknowledgementCount) remembered")
+                        .foregroundStyle(.secondary)
+                }
+
+                Button(role: .destructive) {
+                    model.clearPrivateRepositoryConsentAcknowledgements()
+                } label: {
+                    Label("Clear Remembered Private Repository Consent", systemImage: "trash")
+                }
+                .disabled(model.privateRepositoryConsentAcknowledgementCount == 0)
             }
         }
         .formStyle(.grouped)
