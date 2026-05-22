@@ -7,6 +7,7 @@ enum ReviewSubmissionValidatorTests {
         try testRejectsSelectedInlineCommentOutsideFetchedDiff()
         try testAllowsSelectedInlineCommentInsideFetchedDiff()
         try testIgnoresUnselectedInlineCommentOutsideFetchedDiff()
+        try testSafetyStateReportsStaleAndInvalidSelectedComments()
     }
 
     private static func testRejectsStalePullRequestHead() throws {
@@ -144,5 +145,48 @@ enum ReviewSubmissionValidatorTests {
             draft: draft,
             files: files
         )
+    }
+
+    private static func testSafetyStateReportsStaleAndInvalidSelectedComments() throws {
+        let draft = ReviewDraft(
+            summary: "Summary",
+            risks: [],
+            inlineComments: [
+                InlineCommentDraft(
+                    id: "bad-comment",
+                    path: "Sources/App.swift",
+                    position: 99,
+                    body: "Invalid position",
+                    severity: .high,
+                    isSelected: true
+                )
+            ]
+        )
+        let files = [
+            PullRequestFile(
+                path: "Sources/App.swift",
+                status: "modified",
+                additions: 1,
+                deletions: 0,
+                patch: """
+                @@ -1,1 +1,2 @@
+                 let old = true
+                +let new = true
+                """
+            )
+        ]
+
+        let state = try ReviewSubmissionValidator.safetyState(
+            reviewedHeadSha: "old-sha",
+            currentHeadSha: "new-sha",
+            draft: draft,
+            files: files
+        )
+
+        try expectTrue(state.isStale)
+        try expectTrue(!state.canSubmit)
+        try expectEqual(state.invalidSelectedInlineComments, [
+            InvalidInlineComment(path: "Sources/App.swift", position: 99)
+        ])
     }
 }

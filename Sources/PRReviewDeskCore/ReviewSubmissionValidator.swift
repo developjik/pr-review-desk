@@ -10,6 +10,40 @@ public struct InvalidInlineComment: Equatable, Hashable, Sendable {
     }
 }
 
+public struct ReviewSubmissionSafetyState: Equatable, Hashable, Sendable {
+    public let reviewedHeadSha: String?
+    public let currentHeadSha: String?
+    public let selectedInlineCommentCount: Int
+    public let invalidSelectedInlineComments: [InvalidInlineComment]
+
+    public init(
+        reviewedHeadSha: String?,
+        currentHeadSha: String?,
+        selectedInlineCommentCount: Int,
+        invalidSelectedInlineComments: [InvalidInlineComment]
+    ) {
+        self.reviewedHeadSha = reviewedHeadSha
+        self.currentHeadSha = currentHeadSha
+        self.selectedInlineCommentCount = selectedInlineCommentCount
+        self.invalidSelectedInlineComments = invalidSelectedInlineComments
+    }
+
+    public var isStale: Bool {
+        guard let reviewedHeadSha, let currentHeadSha else {
+            return false
+        }
+
+        return reviewedHeadSha != currentHeadSha
+    }
+
+    public var canSubmit: Bool {
+        reviewedHeadSha != nil
+            && currentHeadSha != nil
+            && !isStale
+            && invalidSelectedInlineComments.isEmpty
+    }
+}
+
 public enum ReviewSubmissionValidationError: Error, Equatable, CustomStringConvertible, Sendable {
     case staleHead(reviewed: String, current: String)
     case invalidInlineComments([InvalidInlineComment])
@@ -32,10 +66,28 @@ public enum ReviewSubmissionValidator {
         draft: ReviewDraft,
         files: [PullRequestFile]
     ) throws {
-        guard reviewedHeadSha == currentHeadSha else {
+        let state = try safetyState(
+            reviewedHeadSha: reviewedHeadSha,
+            currentHeadSha: currentHeadSha,
+            draft: draft,
+            files: files
+        )
+
+        guard !state.isStale else {
             throw ReviewSubmissionValidationError.staleHead(reviewed: reviewedHeadSha, current: currentHeadSha)
         }
 
+        if !state.invalidSelectedInlineComments.isEmpty {
+            throw ReviewSubmissionValidationError.invalidInlineComments(state.invalidSelectedInlineComments)
+        }
+    }
+
+    public static func safetyState(
+        reviewedHeadSha: String?,
+        currentHeadSha: String?,
+        draft: ReviewDraft?,
+        files: [PullRequestFile]
+    ) throws -> ReviewSubmissionSafetyState {
         let validPositionsByPath = try files.reduce(into: [String: Set<Int>]()) { result, file in
             guard let patch = file.patch, !patch.isEmpty else {
                 return
@@ -43,8 +95,8 @@ public enum ReviewSubmissionValidator {
             result[file.path] = try diffPositions(in: patch)
         }
 
-        let invalidComments = draft.inlineComments
-            .filter(\.isSelected)
+        let selectedComments = draft?.inlineComments.filter(\.isSelected) ?? []
+        let invalidComments = selectedComments
             .filter { comment in
                 !(validPositionsByPath[comment.path]?.contains(comment.position) ?? false)
             }
@@ -52,9 +104,12 @@ public enum ReviewSubmissionValidator {
                 InvalidInlineComment(path: comment.path, position: comment.position)
             }
 
-        if !invalidComments.isEmpty {
-            throw ReviewSubmissionValidationError.invalidInlineComments(invalidComments)
-        }
+        return ReviewSubmissionSafetyState(
+            reviewedHeadSha: reviewedHeadSha,
+            currentHeadSha: currentHeadSha,
+            selectedInlineCommentCount: selectedComments.count,
+            invalidSelectedInlineComments: invalidComments
+        )
     }
 
     private static func diffPositions(in patch: String) throws -> Set<Int> {

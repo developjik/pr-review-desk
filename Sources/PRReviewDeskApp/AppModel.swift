@@ -18,6 +18,7 @@ final class AppModel: ObservableObject {
     @Published var statusMessage = "Enter a GitHub token or load one from Keychain."
     @Published var isWorking = false
     @Published var canCancelCurrentOperation = false
+    @Published var preflightHeadSha: String?
 
     private let tokenStore: TokenStore
     private let codexAgent: CodexReviewAgent
@@ -44,6 +45,42 @@ final class AppModel: ObservableObject {
 
     var reviewedHeadShaForDisplay: String? {
         reviewedHeadSha
+    }
+
+    var submitSafetyState: ReviewSubmissionSafetyState {
+        (try? ReviewSubmissionValidator.safetyState(
+            reviewedHeadSha: reviewedHeadSha,
+            currentHeadSha: preflightHeadSha ?? selectedPullRequest?.headSha,
+            draft: draft,
+            files: changedFiles
+        )) ?? ReviewSubmissionSafetyState(
+            reviewedHeadSha: reviewedHeadSha,
+            currentHeadSha: preflightHeadSha ?? selectedPullRequest?.headSha,
+            selectedInlineCommentCount: selectedInlineCommentCount,
+            invalidSelectedInlineComments: []
+        )
+    }
+
+    var canSubmitReview: Bool {
+        draft != nil && submitSafetyState.canSubmit && !isWorking
+    }
+
+    var submitSafetyMessage: String {
+        let state = submitSafetyState
+
+        guard draft != nil else {
+            return "Generate a review draft before submitting."
+        }
+
+        if state.isStale {
+            return "Draft is stale. Regenerate before submitting."
+        }
+
+        if !state.invalidSelectedInlineComments.isEmpty {
+            return "\(state.invalidSelectedInlineComments.count) selected inline comments target invalid diff positions."
+        }
+
+        return "Ready to submit."
     }
 
     init(
@@ -112,6 +149,7 @@ final class AppModel: ObservableObject {
         draft = nil
         reviewBody = ""
         reviewedHeadSha = nil
+        preflightHeadSha = nil
 
         await runWorking("Loading open pull requests...") {
             try await loadPullRequests(repository: repository)
@@ -124,6 +162,7 @@ final class AppModel: ObservableObject {
         reviewBody = ""
         reviewedHeadSha = nil
         selectedChangedFilePath = nil
+        preflightHeadSha = pullRequest.headSha
 
         guard let selectedRepository, let githubClient else {
             return
@@ -187,12 +226,38 @@ final class AppModel: ObservableObject {
             draft = generated
             reviewBody = composeReviewBody(from: generated)
             reviewedHeadSha = pullRequestForReview.headSha
+            preflightHeadSha = pullRequestForReview.headSha
             selectedEvent = .comment
             if let warningMessage = coverageSummary.warningMessage {
                 statusMessage = "Generated review draft with \(generated.inlineComments.count) inline comments. \(warningMessage)"
             } else {
                 statusMessage = "Generated review draft with \(generated.inlineComments.count) inline comments."
             }
+        }
+    }
+
+    func refreshSubmitSafety() async {
+        guard let selectedRepository, let selectedPullRequest, let githubClient else {
+            statusMessage = "Select a pull request first."
+            return
+        }
+
+        await runWorking("Refreshing submit safety...") {
+            let previousSelectedFilePath = selectedChangedFilePath
+            let currentPullRequest = try await githubClient.pullRequestDetails(
+                repository: selectedRepository,
+                number: selectedPullRequest.number
+            )
+            let currentFiles = try await githubClient.pullRequestFiles(
+                repository: selectedRepository,
+                pullRequest: currentPullRequest
+            )
+
+            self.selectedPullRequest = currentPullRequest
+            changedFiles = currentFiles
+            selectedChangedFilePath = changedFiles.first(where: { $0.path == previousSelectedFilePath })?.path ?? changedFiles.first?.path
+            preflightHeadSha = currentPullRequest.headSha
+            statusMessage = "Submit safety refreshed. \(submitSafetyMessage)"
         }
     }
 
@@ -236,6 +301,16 @@ final class AppModel: ObservableObject {
             return
         }
         draft?.inlineComments[index].body = body
+    }
+
+    func isInlineCommentInvalid(_ comment: InlineCommentDraft) -> Bool {
+        guard comment.isSelected else {
+            return false
+        }
+
+        return submitSafetyState.invalidSelectedInlineComments.contains {
+            $0.path == comment.path && $0.position == comment.position
+        }
     }
 
     private func configureGitHubClient(token: String) {
