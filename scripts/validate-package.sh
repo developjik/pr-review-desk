@@ -2,9 +2,18 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_DIR="${1:-$ROOT_DIR/.build/app/PRReviewDesk.app}"
+source "$ROOT_DIR/scripts/app-metadata.sh"
+
+APP_DIR="${1:-$ROOT_DIR/.build/app/$APP_BUNDLE_NAME.app}"
 PLIST="$APP_DIR/Contents/Info.plist"
-EXECUTABLE="$APP_DIR/Contents/MacOS/PRReviewDeskApp"
+EXECUTABLE="$APP_DIR/Contents/MacOS/$APP_EXECUTABLE_NAME"
+
+clean_code_signing_xattrs() {
+  /usr/bin/xattr -cr "$APP_DIR" 2>/dev/null || true
+  /usr/bin/xattr -d com.apple.FinderInfo "$APP_DIR" 2>/dev/null || true
+  /usr/bin/xattr -d com.apple.ResourceFork "$APP_DIR" 2>/dev/null || true
+  /usr/bin/xattr -d 'com.apple.fileprovider.fpfs#P' "$APP_DIR" 2>/dev/null || true
+}
 
 if [[ ! -d "$APP_DIR" ]]; then
   echo "Missing app bundle: $APP_DIR" >&2
@@ -38,17 +47,14 @@ assert_plist_value() {
   fi
 }
 
-assert_plist_value "CFBundleExecutable" "PRReviewDeskApp"
-assert_plist_value "CFBundleIdentifier" "com.developjik.PRReviewDesk"
+assert_plist_value "CFBundleExecutable" "$APP_EXECUTABLE_NAME"
+assert_plist_value "CFBundleIdentifier" "$APP_BUNDLE_IDENTIFIER"
 assert_plist_value "CFBundlePackageType" "APPL"
+assert_plist_value "CFBundleShortVersionString" "$APP_MARKETING_VERSION"
+assert_plist_value "CFBundleVersion" "$APP_BUILD_NUMBER"
+assert_plist_value "LSMinimumSystemVersion" "$APP_MINIMUM_SYSTEM_VERSION"
 assert_plist_value "NSPrincipalClass" "NSApplication"
-
-short_version="$(plist_value "CFBundleShortVersionString")"
-bundle_version="$(plist_value "CFBundleVersion")"
-
-if [[ -z "$short_version" || -z "$bundle_version" ]]; then
-  echo "Bundle version metadata must be present" >&2
-  exit 1
-fi
+clean_code_signing_xattrs
+codesign --verify --deep --strict --verbose=2 "$APP_DIR" >/dev/null
 
 echo "Validated package: $APP_DIR"

@@ -34,7 +34,7 @@ scripts/package-app.sh
 scripts/validate-package.sh
 ```
 
-`scripts/validate-package.sh` checks the generated `.build/app/PRReviewDesk.app` bundle structure, `Info.plist`, executable bit, bundle identifier, package type, principal class, and version metadata.
+`scripts/package-app.sh` builds a release bundle by default, writes bundle metadata from `scripts/app-metadata.sh`, lints the generated `Info.plist`, and ad-hoc signs the app for local distribution readiness. When the checkout is inside iCloud Drive, `.build/app` is symlinked to a temporary output directory so macOS FileProvider metadata does not break strict code-signing verification. `scripts/validate-package.sh` checks the generated `.build/app/PRReviewDesk.app` bundle structure, `Info.plist`, executable bit, bundle identifier, package type, principal class, version metadata, and code signature.
 
 ## Swift Test Status
 
