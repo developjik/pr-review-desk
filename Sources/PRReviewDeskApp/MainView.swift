@@ -374,6 +374,14 @@ struct MainView: View {
                 } message: {
                     Text("This will post a \(model.selectedEvent.displayName) review with \(model.selectedInlineCommentCount) selected inline comments to GitHub.")
                 }
+
+                if model.draft != nil {
+                    Button(role: .destructive) {
+                        model.discardCurrentDraft()
+                    } label: {
+                        Label("Discard", systemImage: "trash")
+                    }
+                }
             }
 
             if model.draft != nil {
