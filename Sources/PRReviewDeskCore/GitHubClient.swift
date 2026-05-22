@@ -107,6 +107,7 @@ public final class GitHubClient: Sendable {
             }
         let payload = ReviewPayload(
             event: submission.event.rawValue,
+            commitID: submission.commitID,
             body: submission.body,
             comments: selectedComments
         )
@@ -168,8 +169,16 @@ public final class GitHubClient: Sendable {
 
 private struct ReviewPayload: Encodable {
     let event: String
+    let commitID: String
     let body: String
     let comments: [ReviewCommentPayload]
+
+    private enum CodingKeys: String, CodingKey {
+        case event
+        case commitID = "commit_id"
+        case body
+        case comments
+    }
 }
 
 private struct ReviewCommentPayload: Encodable {

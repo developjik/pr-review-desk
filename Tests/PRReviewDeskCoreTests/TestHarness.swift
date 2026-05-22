@@ -8,6 +8,8 @@ enum TestHarness {
             try DiffPositionMapperTests.run()
             try await GitHubClientTests.run()
             try await CodexReviewAgentTests.run()
+            try ReviewSubmissionValidatorTests.run()
+            try await ReviewSubmissionWorkflowTests.run()
             try KeychainTokenStoreTests.run()
             print("PRReviewDeskCoreTests passed")
         } catch {

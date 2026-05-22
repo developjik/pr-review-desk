@@ -236,11 +236,13 @@ public struct ReviewDraft: Codable, Equatable, Hashable, Sendable {
 public struct ReviewSubmission: Equatable, Hashable, Sendable {
     public var event: ReviewEvent
     public var body: String
+    public var commitID: String
     public var comments: [InlineCommentDraft]
 
-    public init(event: ReviewEvent, body: String, comments: [InlineCommentDraft]) {
+    public init(event: ReviewEvent, body: String, commitID: String, comments: [InlineCommentDraft]) {
         self.event = event
         self.body = body
+        self.commitID = commitID
         self.comments = comments
     }
 }

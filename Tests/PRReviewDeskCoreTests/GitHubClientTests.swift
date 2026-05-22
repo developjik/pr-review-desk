@@ -54,6 +54,7 @@ enum GitHubClientTests {
         let submission = ReviewSubmission(
             event: .requestChanges,
             body: "Please address the inline notes.",
+            commitID: "abc123",
             comments: [
                 InlineCommentDraft(
                     id: "comment-1",
@@ -83,6 +84,7 @@ enum GitHubClientTests {
         let object = try JSONSerialization.jsonObject(with: body) as? [String: Any]
         let payload = try unwrap(object)
         try expectEqual(payload["event"] as? String, "REQUEST_CHANGES")
+        try expectEqual(payload["commit_id"] as? String, "abc123")
         try expectEqual(payload["body"] as? String, "Please address the inline notes.")
         let comments = try unwrap(payload["comments"] as? [[String: Any]])
         try expectEqual(comments.count, 1)

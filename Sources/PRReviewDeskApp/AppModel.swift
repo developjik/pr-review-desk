@@ -20,6 +20,11 @@ final class AppModel: ObservableObject {
     private let tokenStore: TokenStore
     private let codexAgent: CodexReviewAgent
     private var githubClient: GitHubClient?
+    private var reviewedHeadSha: String?
+
+    var selectedInlineCommentCount: Int {
+        draft?.inlineComments.filter(\.isSelected).count ?? 0
+    }
 
     init(
         tokenStore: TokenStore = KeychainTokenStore(),
@@ -85,6 +90,7 @@ final class AppModel: ObservableObject {
         changedFiles = []
         draft = nil
         reviewBody = ""
+        reviewedHeadSha = nil
 
         await runWorking("Loading open pull requests...") {
             try await loadPullRequests(repository: repository)
@@ -95,6 +101,7 @@ final class AppModel: ObservableObject {
         selectedPullRequest = pullRequest
         draft = nil
         reviewBody = ""
+        reviewedHeadSha = nil
 
         guard let selectedRepository, let githubClient else {
             return
@@ -113,38 +120,56 @@ final class AppModel: ObservableObject {
         }
 
         await runWorking("Generating Codex review draft...") {
-            if changedFiles.isEmpty, let githubClient {
-                changedFiles = try await githubClient.pullRequestFiles(repository: selectedRepository, pullRequest: selectedPullRequest)
+            let pullRequestForReview: PullRequest
+            if let githubClient {
+                pullRequestForReview = try await githubClient.pullRequestDetails(
+                    repository: selectedRepository,
+                    number: selectedPullRequest.number
+                )
+                self.selectedPullRequest = pullRequestForReview
+            } else {
+                pullRequestForReview = selectedPullRequest
+            }
+
+            if let githubClient {
+                changedFiles = try await githubClient.pullRequestFiles(repository: selectedRepository, pullRequest: pullRequestForReview)
             }
             let generated = try await codexAgent.generateReview(
                 repository: selectedRepository,
-                pullRequest: selectedPullRequest,
+                pullRequest: pullRequestForReview,
                 files: changedFiles
             )
             draft = generated
             reviewBody = composeReviewBody(from: generated)
+            reviewedHeadSha = pullRequestForReview.headSha
             selectedEvent = .comment
             statusMessage = "Generated review draft with \(generated.inlineComments.count) inline comments."
         }
     }
 
     func submitReview() async {
+        guard !isWorking else {
+            return
+        }
+
         guard let selectedRepository, let selectedPullRequest, let draft, let githubClient else {
             statusMessage = "Generate a review draft before submitting."
             return
         }
 
-        let submission = ReviewSubmission(
-            event: selectedEvent,
-            body: reviewBody,
-            comments: draft.inlineComments
-        )
+        guard let reviewedHeadSha else {
+            statusMessage = "Generate a fresh review draft before submitting."
+            return
+        }
 
         await runWorking("Submitting review to GitHub...") {
-            try await githubClient.submitReview(
+            try await ReviewSubmissionWorkflow(api: githubClient).submitReview(
                 repository: selectedRepository,
                 pullRequest: selectedPullRequest,
-                submission: submission
+                reviewedHeadSha: reviewedHeadSha,
+                draft: draft,
+                body: reviewBody,
+                event: selectedEvent
             )
             statusMessage = "Submitted \(selectedEvent.displayName) review to GitHub."
         }

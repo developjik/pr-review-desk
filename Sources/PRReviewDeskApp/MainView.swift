@@ -3,6 +3,7 @@ import PRReviewDeskCore
 
 struct MainView: View {
     @ObservedObject var model: AppModel
+    @State private var isSubmitConfirmationPresented = false
 
     var body: some View {
         NavigationSplitView {
@@ -157,13 +158,25 @@ struct MainView: View {
             .frame(width: 360)
 
             Button {
-                Task {
-                    await model.submitReview()
-                }
+                submitReview()
             } label: {
-                Label("Submit Review", systemImage: "paperplane")
+                Label("Submit Review (\(model.selectedInlineCommentCount))", systemImage: "paperplane")
             }
             .disabled(model.isWorking || model.draft == nil)
+            .confirmationDialog(
+                "Submit \(model.selectedEvent.displayName) review?",
+                isPresented: $isSubmitConfirmationPresented,
+                titleVisibility: .visible
+            ) {
+                Button("Submit \(model.selectedEvent.displayName) Review") {
+                    Task {
+                        await model.submitReview()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will post a \(model.selectedEvent.displayName) review with \(model.selectedInlineCommentCount) selected inline comments to GitHub.")
+            }
         }
     }
 
@@ -282,6 +295,16 @@ struct MainView: View {
             return .orange
         case .high:
             return .red
+        }
+    }
+
+    private func submitReview() {
+        if model.selectedEvent == .comment {
+            Task {
+                await model.submitReview()
+            }
+        } else {
+            isSubmitConfirmationPresented = true
         }
     }
 }
