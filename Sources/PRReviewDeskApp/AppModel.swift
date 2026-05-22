@@ -11,6 +11,12 @@ struct RecoverableErrorDetails: Identifiable, Equatable {
     let recoverySuggestion: String
 }
 
+struct InlineCommentFocusTarget: Equatable, Sendable {
+    let commentID: String
+    let path: String
+    let position: Int
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var tokenInput = ""
@@ -23,6 +29,7 @@ final class AppModel: ObservableObject {
     @Published var pullRequestSearchText = ""
     @Published var changedFiles: [PullRequestFile] = []
     @Published var selectedChangedFilePath: String?
+    @Published var focusedInlineCommentTarget: InlineCommentFocusTarget?
     @Published var draft: ReviewDraft?
     @Published var reviewBody = ""
     @Published var selectedEvent: ReviewEvent = .comment
@@ -329,6 +336,7 @@ final class AppModel: ObservableObject {
         reviewBody = ""
         reviewedHeadSha = nil
         selectedChangedFilePath = nil
+        focusedInlineCommentTarget = nil
         preflightHeadSha = pullRequest.headSha
 
         guard let selectedRepository, let githubClient else {
@@ -414,6 +422,7 @@ final class AppModel: ObservableObject {
                 pullRequest: pullRequestForReview,
                 files: changedFiles
             )
+            focusedInlineCommentTarget = nil
             draft = generated
             reviewBody = composeReviewBody(from: generated)
             reviewedHeadSha = pullRequestForReview.headSha
@@ -494,6 +503,24 @@ final class AppModel: ObservableObject {
             return
         }
         draft?.inlineComments[index].body = body
+    }
+
+    func focusInlineComment(_ comment: InlineCommentDraft) {
+        selectedChangedFilePath = comment.path
+        focusedInlineCommentTarget = InlineCommentFocusTarget(
+            commentID: comment.id,
+            path: comment.path,
+            position: comment.position
+        )
+        statusMessage = "Focused \(comment.path) at diff position \(comment.position)."
+    }
+
+    func isFocusedInlineComment(_ comment: InlineCommentDraft) -> Bool {
+        focusedInlineCommentTarget?.commentID == comment.id
+    }
+
+    func inlineCommentCount(for file: PullRequestFile) -> InlineCommentFileCount {
+        InlineCommentFileCount.count(for: file.path, comments: draft?.inlineComments ?? [])
     }
 
     func isInlineCommentInvalid(_ comment: InlineCommentDraft) -> Bool {
@@ -643,6 +670,7 @@ final class AppModel: ObservableObject {
         draft = nil
         reviewBody = ""
         reviewedHeadSha = nil
+        focusedInlineCommentTarget = nil
         preflightHeadSha = nil
     }
 

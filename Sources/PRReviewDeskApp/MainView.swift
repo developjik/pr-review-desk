@@ -215,7 +215,10 @@ struct MainView: View {
     }
 
     private func changedFileRow(_ file: PullRequestFile) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let inlineCommentCount = model.inlineCommentCount(for: file)
+        let inlineCommentCountColor: Color = inlineCommentCount.selected == inlineCommentCount.total ? .secondary : .orange
+
+        return VStack(alignment: .leading, spacing: 4) {
             Text(file.path)
                 .font(.body)
                 .lineLimit(2)
@@ -230,6 +233,11 @@ struct MainView: View {
                         .labelStyle(.iconOnly)
                         .foregroundStyle(.orange)
                         .help(reason.displayName)
+                }
+                if inlineCommentCount.total > 0 {
+                    Label(inlineCommentCount.displayText, systemImage: "text.bubble")
+                        .foregroundStyle(inlineCommentCountColor)
+                        .help("\(inlineCommentCount.selected) selected of \(inlineCommentCount.total) inline comments")
                 }
             }
             .font(.caption)
@@ -263,12 +271,23 @@ struct MainView: View {
                     }
                 }
 
-                ScrollView {
-                    Text(selectedFilePatchText(file))
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                let annotatedDiff = annotatedDiff(for: file)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(annotatedDiff.lines) { line in
+                                diffLineView(line, isHighlighted: isFocusedDiffLine(line, in: file))
+                                    .id(diffLineScrollID(line))
+                            }
+                        }
                         .padding(8)
+                    }
+                    .onAppear {
+                        scrollToFocusedDiffPosition(proxy: proxy, file: file)
+                    }
+                    .onChange(of: model.focusedInlineCommentTarget) { _, _ in
+                        scrollToFocusedDiffPosition(proxy: proxy, file: file)
+                    }
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: 6)
@@ -280,7 +299,7 @@ struct MainView: View {
                     Text("Inline Comments")
                         .font(.headline)
                     ForEach(comments) { comment in
-                        inlineCommentRow(comment, isInvalid: model.isInlineCommentInvalid(comment))
+                        inlineCommentReferenceRow(comment)
                     }
                 }
             }
@@ -443,20 +462,65 @@ struct MainView: View {
         }
     }
 
-    private func selectedFilePatchText(_ file: PullRequestFile) -> String {
+    private func annotatedDiff(for file: PullRequestFile) -> AnnotatedDiff {
         switch file.reviewability {
         case .includedPatch:
             guard let patch = file.patch else {
-                return ""
+                return AnnotatedDiff(path: file.path, annotatedPatch: "", positionsByNewLine: [:])
             }
             do {
-                return try DiffPositionMapper.annotate(path: file.path, patch: patch).annotatedPatch
+                return try DiffPositionMapper.annotate(path: file.path, patch: patch)
             } catch {
-                return patch
+                return AnnotatedDiff(path: file.path, annotatedPatch: patch, positionsByNewLine: [:])
             }
         case let .omitted(reason):
-            return "\(reason.displayName). This file was not sent to Codex because GitHub did not provide reviewable patch content."
+            return AnnotatedDiff(
+                path: file.path,
+                annotatedPatch: "\(reason.displayName). This file was not sent to Codex because GitHub did not provide reviewable patch content.",
+                positionsByNewLine: [:]
+            )
         }
+    }
+
+    private func diffLineView(_ line: AnnotatedDiffLine, isHighlighted: Bool) -> some View {
+        Text(line.text.isEmpty ? " " : line.text)
+            .font(.system(.caption, design: .monospaced))
+            .textSelection(.enabled)
+            .padding(.vertical, 1)
+            .padding(.horizontal, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isHighlighted ? Color.accentColor.opacity(0.18) : Color.clear)
+            .overlay(alignment: .leading) {
+                if isHighlighted {
+                    Rectangle()
+                        .fill(Color.accentColor)
+                        .frame(width: 3)
+                }
+            }
+    }
+
+    private func isFocusedDiffLine(_ line: AnnotatedDiffLine, in file: PullRequestFile) -> Bool {
+        guard let target = model.focusedInlineCommentTarget else {
+            return false
+        }
+
+        return target.path == file.path && line.position == target.position
+    }
+
+    private func diffLineScrollID(_ line: AnnotatedDiffLine) -> String {
+        if let position = line.position {
+            return "position-\(position)"
+        }
+
+        return "line-\(line.index)"
+    }
+
+    private func scrollToFocusedDiffPosition(proxy: ScrollViewProxy, file: PullRequestFile) {
+        guard let target = model.focusedInlineCommentTarget, target.path == file.path else {
+            return
+        }
+
+        proxy.scrollTo("position-\(target.position)", anchor: .center)
     }
 
     private func commentsForFile(_ file: PullRequestFile) -> [InlineCommentDraft] {
@@ -478,18 +542,29 @@ struct MainView: View {
 
     private func inlineCommentRow(_ comment: InlineCommentDraft, isInvalid: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Toggle(isOn: Binding(
-                get: { comment.isSelected },
-                set: { model.setInlineCommentSelection(id: comment.id, isSelected: $0) }
-            )) {
-                HStack {
-                    Text(comment.path)
-                        .fontWeight(.medium)
-                    Text("pos \(comment.position)")
-                        .foregroundStyle(.secondary)
-                    Text(comment.severity.rawValue)
-                        .foregroundStyle(severityColor(comment.severity))
+            HStack {
+                Toggle(isOn: Binding(
+                    get: { comment.isSelected },
+                    set: { model.setInlineCommentSelection(id: comment.id, isSelected: $0) }
+                )) {
+                    HStack {
+                        Text(comment.path)
+                            .fontWeight(.medium)
+                        Text("pos \(comment.position)")
+                            .foregroundStyle(.secondary)
+                        Text(comment.severity.rawValue)
+                            .foregroundStyle(severityColor(comment.severity))
+                    }
                 }
+
+                Spacer()
+
+                Button {
+                    model.focusInlineComment(comment)
+                } label: {
+                    Image(systemName: "scope")
+                }
+                .help("Reveal in diff")
             }
             if isInvalid {
                 Text("Invalid selected target. Refresh safety or regenerate before submitting.")
@@ -512,11 +587,47 @@ struct MainView: View {
             if isInvalid {
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(.red.opacity(0.7))
+            } else if model.isFocusedInlineComment(comment) {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.accentColor.opacity(0.7))
             } else {
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(.quaternary)
             }
         }
+    }
+
+    private func inlineCommentReferenceRow(_ comment: InlineCommentDraft) -> some View {
+        Button {
+            model.focusInlineComment(comment)
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("pos \(comment.position)")
+                        .fontWeight(.medium)
+                    Text(comment.severity.rawValue)
+                        .foregroundStyle(severityColor(comment.severity))
+                    if !comment.isSelected {
+                        Text("not selected")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(.caption)
+
+                Text(comment.body)
+                    .lineLimit(2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(8)
+            .background(model.isFocusedInlineComment(comment) ? Color.accentColor.opacity(0.12) : Color.clear)
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(model.isFocusedInlineComment(comment) ? Color.accentColor.opacity(0.6) : Color.secondary.opacity(0.25))
+            }
+        }
+        .buttonStyle(.plain)
+        .help("Reveal inline comment target in diff")
     }
 
     private var statusBar: some View {
