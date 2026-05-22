@@ -3,7 +3,6 @@ import PRReviewDeskCore
 
 struct MainView: View {
     @ObservedObject var model: AppModel
-    @State private var isSubmitConfirmationPresented = false
 
     var body: some View {
         NavigationSplitView {
@@ -288,8 +287,7 @@ struct MainView: View {
                 } label: {
                     Label("Generate Review", systemImage: "sparkles")
                 }
-                .keyboardShortcut("r", modifiers: [.command])
-                .disabled(model.isWorking || model.selectedPullRequest == nil)
+                .disabled(!model.canGenerateReview)
 
                 if model.canCancelCurrentOperation {
                     Button {
@@ -309,14 +307,14 @@ struct MainView: View {
                 .frame(width: 360)
 
                 Button {
-                    submitReview()
+                    model.requestSubmitReview()
                 } label: {
                     Label("Submit Review (\(model.selectedInlineCommentCount))", systemImage: "paperplane")
                 }
                 .disabled(!model.canSubmitReview)
                 .confirmationDialog(
                     "Submit \(model.selectedEvent.displayName) review?",
-                    isPresented: $isSubmitConfirmationPresented,
+                    isPresented: $model.isSubmitConfirmationPresented,
                     titleVisibility: .visible
                 ) {
                     Button("Submit \(model.selectedEvent.displayName) Review") {
@@ -358,7 +356,7 @@ struct MainView: View {
                 } label: {
                     Label("Regenerate", systemImage: "arrow.triangle.2.circlepath")
                 }
-                .disabled(model.isWorking)
+                .disabled(!model.canGenerateReview)
             }
 
             Button {
@@ -603,13 +601,4 @@ struct MainView: View {
         }
     }
 
-    private func submitReview() {
-        if model.selectedEvent == .comment {
-            Task {
-                await model.submitReview()
-            }
-        } else {
-            isSubmitConfirmationPresented = true
-        }
-    }
 }

@@ -30,6 +30,7 @@ final class AppModel: ObservableObject {
     @Published var recoverableError: RecoverableErrorDetails?
     @Published var tokenValidationStatus = "Not validated."
     @Published var codexCLIStatus = "Not checked."
+    @Published var isSubmitConfirmationPresented = false
 
     private let tokenStore: TokenStore
     private let codexAgent: CodexReviewAgent
@@ -72,8 +73,29 @@ final class AppModel: ObservableObject {
         )
     }
 
+    var commandAvailability: ReviewCommandAvailability {
+        ReviewCommandAvailability(
+            hasToken: hasToken,
+            hasSelectedPullRequest: selectedPullRequest != nil,
+            hasSubmittableDraft: hasSubmittableDraft,
+            isWorking: isWorking
+        )
+    }
+
+    var canRefreshActiveScope: Bool {
+        commandAvailability.canRefreshActiveScope
+    }
+
+    var canGenerateReview: Bool {
+        commandAvailability.canGenerateReview
+    }
+
     var canSubmitReview: Bool {
-        draft != nil && submitSafetyState.canSubmit && !isWorking
+        commandAvailability.canSubmitReview
+    }
+
+    private var hasSubmittableDraft: Bool {
+        draft != nil && submitSafetyState.canSubmit
     }
 
     var submitSafetyMessage: String {
@@ -202,6 +224,22 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func refreshActiveScope() async {
+        guard !isWorking else {
+            return
+        }
+
+        if selectedPullRequest != nil {
+            await refreshCurrentPullRequest()
+        } else if let selectedRepository {
+            await runWorking("Refreshing open pull requests...") {
+                try await loadPullRequests(repository: selectedRepository)
+            }
+        } else {
+            await refreshRepositories()
+        }
+    }
+
     func selectRepository(_ repository: Repository) async {
         selectedRepository = repository
         selectedPullRequest = nil
@@ -253,6 +291,20 @@ final class AppModel: ObservableObject {
         }
         statusMessage = "Cancelling current operation..."
         currentOperationTask?.cancel()
+    }
+
+    func requestSubmitReview() {
+        guard canSubmitReview else {
+            return
+        }
+
+        if selectedEvent == .comment {
+            Task { @MainActor in
+                await submitReview()
+            }
+        } else {
+            isSubmitConfirmationPresented = true
+        }
     }
 
     func generateReview() async {
@@ -327,6 +379,8 @@ final class AppModel: ObservableObject {
             return
         }
 
+        isSubmitConfirmationPresented = false
+
         guard let selectedRepository, let selectedPullRequest, let draft, let githubClient else {
             statusMessage = "Generate a review draft before submitting."
             return
@@ -390,6 +444,31 @@ final class AppModel: ObservableObject {
         }
         pullRequests = try await githubClient.listOpenPullRequests(repository: repository)
         statusMessage = pullRequests.isEmpty ? "No open pull requests." : "Loaded \(pullRequests.count) open pull requests."
+    }
+
+    private func refreshCurrentPullRequest() async {
+        guard let selectedRepository, let selectedPullRequest, let githubClient else {
+            statusMessage = "Select a pull request first."
+            return
+        }
+
+        await runWorking("Refreshing pull request...") {
+            let previousSelectedFilePath = selectedChangedFilePath
+            let currentPullRequest = try await githubClient.pullRequestDetails(
+                repository: selectedRepository,
+                number: selectedPullRequest.number
+            )
+            let currentFiles = try await githubClient.pullRequestFiles(
+                repository: selectedRepository,
+                pullRequest: currentPullRequest
+            )
+
+            self.selectedPullRequest = currentPullRequest
+            changedFiles = currentFiles
+            selectedChangedFilePath = changedFiles.first(where: { $0.path == previousSelectedFilePath })?.path ?? changedFiles.first?.path
+            preflightHeadSha = currentPullRequest.headSha
+            statusMessage = "Refreshed pull request and \(changedFiles.count) changed files. \(reviewCoverageSummary.statusMessage)"
+        }
     }
 
     private func runWorking(_ message: String, isCancellable: Bool = false, operation: () async throws -> Void) async {
