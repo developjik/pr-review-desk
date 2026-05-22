@@ -5,6 +5,10 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("Readiness") {
+                ReadinessChecklistView(model: model)
+            }
+
             Section("GitHub") {
                 HStack {
                     Text("Token")
@@ -74,6 +78,7 @@ struct SettingsView: View {
             Section("Privacy") {
                 Text("When you generate a review, PR metadata and reviewable patch content may be sent to Codex and OpenAI. Omitted files without GitHub patch content are not sent to Codex by this app.")
                     .fixedSize(horizontal: false, vertical: true)
+                Toggle("I acknowledge this disclosure", isOn: $model.isPrivacyDisclosureAcknowledged)
             }
         }
         .formStyle(.grouped)
