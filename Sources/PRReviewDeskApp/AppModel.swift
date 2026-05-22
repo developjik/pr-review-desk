@@ -11,6 +11,7 @@ final class AppModel: ObservableObject {
     @Published var pullRequests: [PullRequest] = []
     @Published var selectedPullRequest: PullRequest?
     @Published var changedFiles: [PullRequestFile] = []
+    @Published var selectedChangedFilePath: String?
     @Published var draft: ReviewDraft?
     @Published var reviewBody = ""
     @Published var selectedEvent: ReviewEvent = .comment
@@ -30,6 +31,19 @@ final class AppModel: ObservableObject {
 
     var reviewCoverageSummary: ReviewCoverageSummary {
         ReviewCoverageSummary(files: changedFiles)
+    }
+
+    var selectedChangedFile: PullRequestFile? {
+        if let selectedChangedFilePath,
+           let file = changedFiles.first(where: { $0.path == selectedChangedFilePath }) {
+            return file
+        }
+
+        return changedFiles.first
+    }
+
+    var reviewedHeadShaForDisplay: String? {
+        reviewedHeadSha
     }
 
     init(
@@ -94,6 +108,7 @@ final class AppModel: ObservableObject {
         selectedRepository = repository
         selectedPullRequest = nil
         changedFiles = []
+        selectedChangedFilePath = nil
         draft = nil
         reviewBody = ""
         reviewedHeadSha = nil
@@ -108,6 +123,7 @@ final class AppModel: ObservableObject {
         draft = nil
         reviewBody = ""
         reviewedHeadSha = nil
+        selectedChangedFilePath = nil
 
         guard let selectedRepository, let githubClient else {
             return
@@ -115,6 +131,7 @@ final class AppModel: ObservableObject {
 
         await runWorking("Loading changed files...") {
             changedFiles = try await githubClient.pullRequestFiles(repository: selectedRepository, pullRequest: pullRequest)
+            selectedChangedFilePath = changedFiles.first?.path
             statusMessage = "Loaded \(changedFiles.count) changed files. \(reviewCoverageSummary.statusMessage)"
         }
     }
@@ -157,7 +174,9 @@ final class AppModel: ObservableObject {
             }
 
             if let githubClient {
+                let previousSelectedFilePath = selectedChangedFilePath
                 changedFiles = try await githubClient.pullRequestFiles(repository: selectedRepository, pullRequest: pullRequestForReview)
+                selectedChangedFilePath = changedFiles.first(where: { $0.path == previousSelectedFilePath })?.path ?? changedFiles.first?.path
             }
             let coverageSummary = reviewCoverageSummary
             let generated = try await codexAgent.generateReview(
