@@ -327,7 +327,9 @@ final class AppModel: ObservableObject {
     }
 
     private func configureGitHubClient(token: String) {
-        githubClient = GitHubClient(token: token)
+        githubClient = GitHubClient(
+            accessTokenProvider: StaticAccessTokenProvider(credential: .personalAccessToken(token))
+        )
     }
 
     private func loadPullRequests(repository: Repository) async throws {

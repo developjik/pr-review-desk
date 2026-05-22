@@ -4,6 +4,7 @@ import PRReviewDeskCore
 enum GitHubClientTests {
     static func run() async throws {
         try await testListRepositoriesSendsBearerTokenAndDecodesResponse()
+        try await testListRepositoriesReadsAuthorizationFromProvider()
         try await testListRepositoriesFollowsNextLinkAndPreservesHeadersAndQuery()
         try await testListOpenPullRequestsFollowsNextLink()
         try await testPullRequestFilesFollowsNextLink()
@@ -34,6 +35,18 @@ enum GitHubClientTests {
         try expectEqual(request.url?.path, "/user/repos")
         try expectEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer secret")
         try expectEqual(request.value(forHTTPHeaderField: "Accept"), "application/vnd.github+json")
+    }
+
+    private static func testListRepositoriesReadsAuthorizationFromProvider() async throws {
+        let transport = FakeGitHubTransport(data: "[]")
+        let provider = RecordingAccessTokenProvider(authorizationHeader: "Bearer provider-token")
+        let client = GitHubClient(accessTokenProvider: provider, transport: transport)
+
+        _ = try await client.listRepositories()
+
+        try expectEqual(provider.authorizationRequestCount, 1)
+        let request = try unwrap(transport.requests.first)
+        try expectEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer provider-token")
     }
 
     private static func testListRepositoriesFollowsNextLinkAndPreservesHeadersAndQuery() async throws {
@@ -296,6 +309,20 @@ private final class FakeGitHubTransport: GitHubTransport, @unchecked Sendable {
             headerFields: nextResponse.headers
         )!
         return (nextResponse.data, response)
+    }
+}
+
+private final class RecordingAccessTokenProvider: AccessTokenProvider, @unchecked Sendable {
+    private let authorizationHeaderValue: String
+    private(set) var authorizationRequestCount = 0
+
+    init(authorizationHeader: String) {
+        authorizationHeaderValue = authorizationHeader
+    }
+
+    func authorizationHeader() throws -> String {
+        authorizationRequestCount += 1
+        return authorizationHeaderValue
     }
 }
 

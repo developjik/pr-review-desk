@@ -38,22 +38,34 @@ public struct URLSessionGitHubTransport: GitHubTransport, Sendable {
 }
 
 public final class GitHubClient: Sendable {
-    private let token: String
+    private let accessTokenProvider: any AccessTokenProvider
     private let transport: GitHubTransport
     private let baseURL: URL
 
-    public init(
+    public convenience init(
         token: String,
         baseURL: URL = URL(string: "https://api.github.com")!,
         transport: GitHubTransport = URLSessionGitHubTransport()
     ) {
-        self.token = token
+        self.init(
+            accessTokenProvider: StaticAccessTokenProvider(credential: .personalAccessToken(token)),
+            baseURL: baseURL,
+            transport: transport
+        )
+    }
+
+    public init(
+        accessTokenProvider: any AccessTokenProvider,
+        baseURL: URL = URL(string: "https://api.github.com")!,
+        transport: GitHubTransport = URLSessionGitHubTransport()
+    ) {
+        self.accessTokenProvider = accessTokenProvider
         self.baseURL = baseURL
         self.transport = transport
     }
 
     public func listRepositories() async throws -> [Repository] {
-        let request = makeRequest(
+        let request = try makeRequest(
             method: "GET",
             path: "/user/repos",
             queryItems: [
@@ -67,7 +79,7 @@ public final class GitHubClient: Sendable {
 
     public func listOpenPullRequests(repository: Repository) async throws -> [PullRequest] {
         let (owner, name) = try repositoryParts(repository)
-        let request = makeRequest(
+        let request = try makeRequest(
             method: "GET",
             path: "/repos/\(owner)/\(name)/pulls",
             queryItems: [
@@ -80,13 +92,13 @@ public final class GitHubClient: Sendable {
 
     public func pullRequestDetails(repository: Repository, number: Int) async throws -> PullRequest {
         let (owner, name) = try repositoryParts(repository)
-        let request = makeRequest(method: "GET", path: "/repos/\(owner)/\(name)/pulls/\(number)")
+        let request = try makeRequest(method: "GET", path: "/repos/\(owner)/\(name)/pulls/\(number)")
         return try await send(request, as: PullRequest.self)
     }
 
     public func pullRequestFiles(repository: Repository, pullRequest: PullRequest) async throws -> [PullRequestFile] {
         let (owner, name) = try repositoryParts(repository)
-        let request = makeRequest(
+        let request = try makeRequest(
             method: "GET",
             path: "/repos/\(owner)/\(name)/pulls/\(pullRequest.number)/files",
             queryItems: [URLQueryItem(name: "per_page", value: "100")]
@@ -111,7 +123,7 @@ public final class GitHubClient: Sendable {
             body: submission.body,
             comments: selectedComments
         )
-        var request = makeRequest(
+        var request = try makeRequest(
             method: "POST",
             path: "/repos/\(owner)/\(name)/pulls/\(pullRequest.number)/reviews"
         )
@@ -135,7 +147,11 @@ public final class GitHubClient: Sendable {
             try validate(response: response, data: data)
             let pageItems = try JSONDecoder().decode(type, from: data)
             items.append(contentsOf: pageItems)
-            nextRequest = nextPageURL(from: response).map { makeRequest(method: "GET", url: $0) }
+            if let nextPageURL = nextPageURL(from: response) {
+                nextRequest = try makeRequest(method: "GET", url: nextPageURL)
+            } else {
+                nextRequest = nil
+            }
         }
 
         return items
@@ -157,7 +173,7 @@ public final class GitHubClient: Sendable {
         method: String,
         path: String,
         queryItems: [URLQueryItem] = []
-    ) -> URLRequest {
+    ) throws -> URLRequest {
         var components = URLComponents()
         components.scheme = baseURL.scheme
         components.host = baseURL.host
@@ -166,19 +182,19 @@ public final class GitHubClient: Sendable {
 
         var request = URLRequest(url: components.url!)
         request.httpMethod = method
-        applyDefaultHeaders(to: &request)
+        try applyDefaultHeaders(to: &request)
         return request
     }
 
-    private func makeRequest(method: String, url: URL) -> URLRequest {
+    private func makeRequest(method: String, url: URL) throws -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
-        applyDefaultHeaders(to: &request)
+        try applyDefaultHeaders(to: &request)
         return request
     }
 
-    private func applyDefaultHeaders(to request: inout URLRequest) {
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    private func applyDefaultHeaders(to request: inout URLRequest) throws {
+        request.setValue(try accessTokenProvider.authorizationHeader(), forHTTPHeaderField: "Authorization")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         request.setValue("PRReviewDesk", forHTTPHeaderField: "User-Agent")
