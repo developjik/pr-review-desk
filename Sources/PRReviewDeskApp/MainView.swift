@@ -108,9 +108,19 @@ struct MainView: View {
 
     private var pullRequestList: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(model.selectedRepository?.fullName ?? "Select a repository")
-                .font(.headline)
-                .lineLimit(1)
+            HStack {
+                Text(model.selectedRepository?.fullName ?? "Select a repository")
+                    .font(.headline)
+                    .lineLimit(1)
+                Spacer()
+                Button {
+                    model.startWatchingSelectedRepository()
+                } label: {
+                    Image(systemName: "eye")
+                }
+                .help("Watch all open pull requests in this repository")
+                .disabled(!model.canWatchSelectedRepository)
+            }
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
@@ -128,8 +138,88 @@ struct MainView: View {
                 }
                 .tag(pullRequest)
             }
+            Divider()
+            backgroundQueuePanel
         }
         .padding()
+    }
+
+    private var backgroundQueuePanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Background Queue")
+                    .font(.headline)
+                Spacer()
+                if model.isBackgroundReviewQueueRunning {
+                    ProgressView()
+                        .controlSize(.small)
+                    Button {
+                        model.cancelBackgroundReviewQueue()
+                    } label: {
+                        Image(systemName: "xmark.circle")
+                    }
+                    .help("Cancel background queue")
+                } else {
+                    Button {
+                        model.startBackgroundReviewQueue()
+                    } label: {
+                        Image(systemName: "play.circle")
+                    }
+                    .help("Run queued draft generation")
+                    .disabled(!model.backgroundReviewQueue.hasQueuedItems)
+                }
+            }
+
+            if model.backgroundReviewQueue.items.isEmpty {
+                Text("No watched pull requests.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 6) {
+                        ForEach(model.backgroundReviewQueue.items) { item in
+                            backgroundQueueRow(item)
+                        }
+                    }
+                }
+                .frame(maxHeight: 220)
+            }
+        }
+    }
+
+    private func backgroundQueueRow(_ item: BackgroundReviewQueueItem) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: backgroundQueueStateIcon(item.state))
+                .foregroundStyle(backgroundQueueStateColor(item.state))
+                .frame(width: 16)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("#\(item.pullRequest.number) \(item.pullRequest.title)")
+                    .font(.caption)
+                    .lineLimit(2)
+                Text("\(item.repository.fullName) - \(item.state.displayName)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                if let message = item.message {
+                    Text(message)
+                        .font(.caption2)
+                        .foregroundStyle(item.state == .failed ? .red : .secondary)
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer()
+
+            Button {
+                model.removeBackgroundQueueItem(id: item.id)
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.plain)
+            .help("Remove from queue")
+            .disabled(item.state == .generating)
+        }
+        .padding(.vertical, 4)
     }
 
     private var reviewPane: some View {
@@ -336,6 +426,13 @@ struct MainView: View {
                     Label("Generate Review", systemImage: "sparkles")
                 }
                 .disabled(!model.canGenerateReview)
+
+                Button {
+                    model.startWatchingSelectedPullRequest()
+                } label: {
+                    Label("Watch PR", systemImage: "eye")
+                }
+                .disabled(!model.canWatchSelectedPullRequest)
 
                 if model.canCancelCurrentOperation {
                     Button {
@@ -746,6 +843,40 @@ struct MainView: View {
             return .orange
         case .high:
             return .red
+        }
+    }
+
+    private func backgroundQueueStateIcon(_ state: BackgroundReviewQueueItemState) -> String {
+        switch state {
+        case .queued:
+            return "clock"
+        case .generating:
+            return "sparkles"
+        case .draftReady:
+            return "doc.text"
+        case .stale:
+            return "exclamationmark.triangle"
+        case .failed:
+            return "xmark.octagon"
+        case .submitted:
+            return "paperplane"
+        }
+    }
+
+    private func backgroundQueueStateColor(_ state: BackgroundReviewQueueItemState) -> Color {
+        switch state {
+        case .queued:
+            return .secondary
+        case .generating:
+            return .accentColor
+        case .draftReady:
+            return .green
+        case .stale:
+            return .orange
+        case .failed:
+            return .red
+        case .submitted:
+            return .blue
         }
     }
 

@@ -17,6 +17,13 @@ struct InlineCommentFocusTarget: Equatable, Sendable {
     let position: Int
 }
 
+private enum PrivateRepositoryConsentContinuation {
+    case generateCurrentReview
+    case enqueueSelectedPullRequest
+    case enqueueSelectedRepository
+    case runBackgroundQueue
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var tokenInput = ""
@@ -50,6 +57,8 @@ final class AppModel: ObservableObject {
     @Published var codexCLIStatus = "Not checked."
     @Published var codexLoginStatus = "Not checked."
     @Published var isSubmitConfirmationPresented = false
+    @Published var backgroundReviewQueue = BackgroundReviewQueue()
+    @Published var isBackgroundReviewQueueRunning = false
     @Published var isPrivacyDisclosureAcknowledged = false {
         didSet {
             userDefaults.set(isPrivacyDisclosureAcknowledged, forKey: Self.privacyDisclosureAcknowledgedKey)
@@ -67,7 +76,9 @@ final class AppModel: ObservableObject {
     private var githubClient: GitHubClient?
     private var reviewedHeadSha: String?
     private var currentOperationTask: Task<Void, Never>?
+    private var backgroundQueueTask: Task<Void, Never>?
     private var privateRepositoryConsentAcknowledgements: Set<String> = []
+    private var pendingPrivateRepositoryConsentContinuation: PrivateRepositoryConsentContinuation?
 
     var selectedInlineCommentCount: Int {
         draft?.inlineComments.filter(\.isSelected).count ?? 0
@@ -131,6 +142,14 @@ final class AppModel: ObservableObject {
 
     var canSubmitReview: Bool {
         commandAvailability.canSubmitReview
+    }
+
+    var canWatchSelectedPullRequest: Bool {
+        hasToken && selectedRepository != nil && selectedPullRequest != nil
+    }
+
+    var canWatchSelectedRepository: Bool {
+        hasToken && selectedRepository != nil && !pullRequests.isEmpty
     }
 
     var readinessChecklist: ReadinessChecklist {
@@ -368,12 +387,45 @@ final class AppModel: ObservableObject {
         }
 
         if let consentRequest = privateRepositoryConsentRequestForSelectedRepository() {
+            pendingPrivateRepositoryConsentContinuation = .generateCurrentReview
             pendingPrivateRepositoryConsent = consentRequest
             statusMessage = "Private repository consent required before generating Codex review."
             return
         }
 
         enqueueGenerateReview()
+    }
+
+    func startWatchingSelectedPullRequest() {
+        guard canWatchSelectedPullRequest else {
+            statusMessage = "Select a pull request to watch."
+            return
+        }
+
+        if let consentRequest = privateRepositoryConsentRequestForSelectedRepository() {
+            pendingPrivateRepositoryConsentContinuation = .enqueueSelectedPullRequest
+            pendingPrivateRepositoryConsent = consentRequest
+            statusMessage = "Private repository consent required before queued Codex review generation."
+            return
+        }
+
+        enqueueSelectedPullRequestForBackgroundReview()
+    }
+
+    func startWatchingSelectedRepository() {
+        guard canWatchSelectedRepository else {
+            statusMessage = "Select a repository with open pull requests to watch."
+            return
+        }
+
+        if let consentRequest = privateRepositoryConsentRequestForSelectedRepository() {
+            pendingPrivateRepositoryConsentContinuation = .enqueueSelectedRepository
+            pendingPrivateRepositoryConsent = consentRequest
+            statusMessage = "Private repository consent required before queued Codex review generation."
+            return
+        }
+
+        enqueueSelectedRepositoryForBackgroundReview()
     }
 
     private func enqueueGenerateReview() {
@@ -389,6 +441,35 @@ final class AppModel: ObservableObject {
         }
         statusMessage = "Cancelling current operation..."
         currentOperationTask?.cancel()
+    }
+
+    func startBackgroundReviewQueue() {
+        guard !isBackgroundReviewQueueRunning else {
+            return
+        }
+
+        guard backgroundReviewQueue.hasQueuedItems else {
+            statusMessage = "No queued background reviews."
+            return
+        }
+
+        backgroundQueueTask = Task { @MainActor [weak self] in
+            await self?.processBackgroundReviewQueue()
+            self?.backgroundQueueTask = nil
+        }
+    }
+
+    func cancelBackgroundReviewQueue() {
+        guard isBackgroundReviewQueueRunning else {
+            return
+        }
+
+        statusMessage = "Cancelling background review queue..."
+        backgroundQueueTask?.cancel()
+    }
+
+    func removeBackgroundQueueItem(id: String) {
+        backgroundReviewQueue.remove(id: id)
     }
 
     func requestSubmitReview() {
@@ -480,6 +561,7 @@ final class AppModel: ObservableObject {
             changedFiles = currentFiles
             selectedChangedFilePath = changedFiles.first(where: { $0.path == previousSelectedFilePath })?.path ?? changedFiles.first?.path
             preflightHeadSha = currentPullRequest.headSha
+            markWatchedDraftStaleIfNeeded(repository: selectedRepository, pullRequest: currentPullRequest)
             statusMessage = "Submit safety refreshed. \(submitSafetyMessage)"
         }
     }
@@ -509,6 +591,10 @@ final class AppModel: ObservableObject {
                 draft: draft,
                 body: reviewBody,
                 event: selectedEvent
+            )
+            backgroundReviewQueue.markSubmitted(
+                repositoryFullName: selectedRepository.fullName,
+                pullRequestNumber: selectedPullRequest.number
             )
             statusMessage = "Submitted \(selectedEvent.displayName) review to GitHub."
         }
@@ -580,15 +666,28 @@ final class AppModel: ObservableObject {
             return
         }
 
+        let continuation = pendingPrivateRepositoryConsentContinuation ?? .generateCurrentReview
         privateRepositoryConsentAcknowledgements.insert(request.repositoryFullName)
         savePrivateRepositoryConsentAcknowledgements()
         pendingPrivateRepositoryConsent = nil
+        pendingPrivateRepositoryConsentContinuation = nil
         statusMessage = "Private repository consent remembered for \(request.repositoryFullName)."
-        enqueueGenerateReview()
+
+        switch continuation {
+        case .generateCurrentReview:
+            enqueueGenerateReview()
+        case .enqueueSelectedPullRequest:
+            enqueueSelectedPullRequestForBackgroundReview()
+        case .enqueueSelectedRepository:
+            enqueueSelectedRepositoryForBackgroundReview()
+        case .runBackgroundQueue:
+            startBackgroundReviewQueue()
+        }
     }
 
     func cancelPrivateRepositoryConsent() {
         pendingPrivateRepositoryConsent = nil
+        pendingPrivateRepositoryConsentContinuation = nil
         statusMessage = "Private repository consent cancelled. Codex review was not generated."
     }
 
@@ -634,6 +733,176 @@ final class AppModel: ObservableObject {
         privateRepositoryConsentAcknowledgementCount = privateRepositoryConsentAcknowledgements.count
     }
 
+    private func enqueueSelectedPullRequestForBackgroundReview() {
+        guard let selectedRepository, let selectedPullRequest else {
+            return
+        }
+
+        backgroundReviewQueue.enqueue(repository: selectedRepository, pullRequest: selectedPullRequest)
+        statusMessage = "Queued #\(selectedPullRequest.number) for draft-only background review."
+        startBackgroundReviewQueue()
+    }
+
+    private func enqueueSelectedRepositoryForBackgroundReview() {
+        guard let selectedRepository else {
+            return
+        }
+
+        guard !pullRequests.isEmpty else {
+            statusMessage = "No open pull requests to watch."
+            return
+        }
+
+        for pullRequest in pullRequests {
+            backgroundReviewQueue.enqueue(repository: selectedRepository, pullRequest: pullRequest)
+        }
+        statusMessage = "Queued \(pullRequests.count) pull requests for draft-only background review."
+        startBackgroundReviewQueue()
+    }
+
+    private func processBackgroundReviewQueue() async {
+        guard let githubClient else {
+            statusMessage = "Add a GitHub token first."
+            return
+        }
+
+        isBackgroundReviewQueueRunning = true
+        defer {
+            isBackgroundReviewQueueRunning = false
+        }
+
+        while let item = backgroundReviewQueue.nextQueuedItem {
+            if Task.isCancelled {
+                statusMessage = "Background review queue cancelled."
+                return
+            }
+
+            if let consentRequest = PrivateRepositoryConsentPolicy.request(
+                for: item.repository,
+                acknowledgedRepositories: privateRepositoryConsentAcknowledgements
+            ) {
+                backgroundReviewQueue.markQueued(id: item.id, message: "Private repository consent required.")
+                pendingPrivateRepositoryConsentContinuation = .runBackgroundQueue
+                pendingPrivateRepositoryConsent = consentRequest
+                statusMessage = "Private repository consent required before queued Codex review generation."
+                return
+            }
+
+            backgroundReviewQueue.markGenerating(id: item.id)
+            statusMessage = "Generating draft-only review for \(item.repository.fullName)#\(item.pullRequest.number)..."
+
+            do {
+                try Task.checkCancellation()
+                let currentPullRequest = try await githubClient.pullRequestDetails(
+                    repository: item.repository,
+                    number: item.pullRequest.number
+                )
+                let files = try await githubClient.pullRequestFiles(
+                    repository: item.repository,
+                    pullRequest: currentPullRequest
+                )
+                let reviewContext = try await githubClient.pullRequestReviewContext(
+                    repository: item.repository,
+                    pullRequest: currentPullRequest
+                )
+                let generated = try await codexAgent.generateReview(
+                    repository: item.repository,
+                    pullRequest: currentPullRequest,
+                    files: files,
+                    context: reviewContext
+                )
+                let body = composeReviewBody(from: generated)
+                let key = ReviewDraftKey(
+                    repositoryFullName: item.repository.fullName,
+                    pullRequestNumber: currentPullRequest.number,
+                    headSha: currentPullRequest.headSha
+                )
+                try reviewDraftStore.saveDraft(StoredReviewDraft(
+                    key: key,
+                    draft: generated,
+                    reviewBody: body,
+                    selectedEvent: .comment,
+                    savedAt: Date()
+                ))
+
+                backgroundReviewQueue.markDraftReady(
+                    id: item.id,
+                    pullRequest: currentPullRequest,
+                    draft: generated,
+                    reviewBody: body,
+                    reviewedHeadSha: currentPullRequest.headSha
+                )
+
+                if isCurrentSelection(repository: item.repository, pullRequest: currentPullRequest) {
+                    applyGeneratedDraftToCurrentSelection(
+                        pullRequest: currentPullRequest,
+                        files: files,
+                        draft: generated,
+                        reviewBody: body
+                    )
+                }
+
+                statusMessage = "Draft ready for \(item.repository.fullName)#\(currentPullRequest.number). Review and submit manually."
+            } catch is CancellationError {
+                backgroundReviewQueue.markQueued(id: item.id, message: "Cancelled before generation finished.")
+                statusMessage = "Background review queue cancelled."
+                return
+            } catch {
+                let details = SensitiveTextRedactor.redact("\(error)")
+                backgroundReviewQueue.markFailed(id: item.id, message: firstLine(details))
+                recoverableError = RecoverableErrorDetails(
+                    operation: "Background review for #\(item.pullRequest.number)",
+                    summary: firstLine(details),
+                    details: details,
+                    recoverySuggestion: recoverySuggestion(for: error)
+                )
+                statusMessage = "Background review failed for #\(item.pullRequest.number)."
+            }
+        }
+
+        statusMessage = "Background review queue finished."
+    }
+
+    private func isCurrentSelection(repository: Repository, pullRequest: PullRequest) -> Bool {
+        selectedRepository?.fullName == repository.fullName
+            && selectedPullRequest?.number == pullRequest.number
+    }
+
+    private func applyGeneratedDraftToCurrentSelection(
+        pullRequest: PullRequest,
+        files: [PullRequestFile],
+        draft: ReviewDraft,
+        reviewBody: String
+    ) {
+        let previousSelectedFilePath = selectedChangedFilePath
+        selectedPullRequest = pullRequest
+        changedFiles = files
+        selectedChangedFilePath = changedFiles.first(where: { $0.path == previousSelectedFilePath })?.path ?? changedFiles.first?.path
+        focusedInlineCommentTarget = nil
+        reviewedHeadSha = pullRequest.headSha
+        preflightHeadSha = pullRequest.headSha
+        selectedEvent = .comment
+        self.draft = draft
+        self.reviewBody = reviewBody
+        persistCurrentDraftIfPossible()
+    }
+
+    private func markWatchedDraftStaleIfNeeded(repository: Repository, pullRequest: PullRequest) {
+        let id = BackgroundReviewQueueItem.id(
+            repositoryFullName: repository.fullName,
+            pullRequestNumber: pullRequest.number
+        )
+        guard let item = backgroundReviewQueue.items.first(where: { $0.id == id }),
+              item.state == .draftReady,
+              let reviewedHeadSha = item.reviewedHeadSha,
+              reviewedHeadSha != pullRequest.headSha
+        else {
+            return
+        }
+
+        backgroundReviewQueue.markStale(id: id, currentHeadSha: pullRequest.headSha)
+    }
+
     private var currentDraftKey: ReviewDraftKey? {
         guard let selectedRepository, let selectedPullRequest, let reviewedHeadSha else {
             return nil
@@ -666,6 +935,7 @@ final class AppModel: ObservableObject {
         } else {
             statusMessage = "Restored stale review draft from \(storedDraft.key.headSha.prefix(8)); regenerate before submitting."
         }
+        markWatchedDraftStaleIfNeeded(repository: repository, pullRequest: pullRequest)
     }
 
     private func persistCurrentDraftIfPossible() {
@@ -782,6 +1052,7 @@ final class AppModel: ObservableObject {
             changedFiles = currentFiles
             selectedChangedFilePath = changedFiles.first(where: { $0.path == previousSelectedFilePath })?.path ?? changedFiles.first?.path
             preflightHeadSha = currentPullRequest.headSha
+            markWatchedDraftStaleIfNeeded(repository: selectedRepository, pullRequest: currentPullRequest)
             statusMessage = "Refreshed pull request and \(changedFiles.count) changed files. \(reviewCoverageSummary.statusMessage)"
         }
     }
