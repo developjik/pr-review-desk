@@ -27,6 +27,17 @@ public enum GitHubCredentialKind: String, Codable, Equatable, Hashable, Sendable
     case oauthUserToken
     case githubAppInstallationToken
 
+    public var displayName: String {
+        switch self {
+        case .personalAccessToken:
+            return "Personal access token"
+        case .oauthUserToken:
+            return "GitHub OAuth user token"
+        case .githubAppInstallationToken:
+            return "GitHub App installation token"
+        }
+    }
+
     public init(credential: GitHubCredential) {
         switch credential {
         case .personalAccessToken:

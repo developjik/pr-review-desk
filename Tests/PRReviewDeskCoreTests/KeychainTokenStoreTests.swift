@@ -9,6 +9,9 @@ enum KeychainTokenStoreTests {
         try testCredentialStoreAccessTokenProviderReadsCurrentCredential()
         try testVersionedCredentialStoreMigratesRawPersonalAccessToken()
         try testVersionedCredentialStoreRoundTripsEnvelopeMetadata()
+        try testCredentialKindDisplayNamesDoNotExposeTokenValues()
+        try testVersionedCredentialStoreReplacesOAuthCredentialWithPersonalAccessToken()
+        try testVersionedCredentialStoreDeletesOAuthCredentialEnvelope()
         try testKeychainStoreCanBeConstructedWithoutTouchingSecrets()
     }
 
@@ -95,6 +98,48 @@ enum KeychainTokenStoreTests {
         try expectEqual(record.tokenType, "Bearer")
         try expectEqual(record.expiresAt, expiration)
         try expectTrue(record.updatedAt >= record.createdAt)
+    }
+
+    private static func testCredentialKindDisplayNamesDoNotExposeTokenValues() throws {
+        try expectEqual(GitHubCredentialKind.personalAccessToken.displayName, "Personal access token")
+        try expectEqual(GitHubCredentialKind.oauthUserToken.displayName, "GitHub OAuth user token")
+        try expectEqual(GitHubCredentialKind.githubAppInstallationToken.displayName, "GitHub App installation token")
+    }
+
+    private static func testVersionedCredentialStoreReplacesOAuthCredentialWithPersonalAccessToken() throws {
+        let tokenStore = InMemoryTokenStore()
+        let store = VersionedCredentialStore(tokenStore: tokenStore)
+
+        try store.saveCredential(
+            .oauthUserToken("oauth-token"),
+            metadata: GitHubCredentialMetadata(
+                login: "developjik",
+                scopes: ["repo"],
+                tokenType: "bearer"
+            )
+        )
+        try store.saveCredential(.personalAccessToken("pat-token"))
+
+        let record = try unwrap(try store.loadStoredCredential())
+        try expectEqual(record.credential, .personalAccessToken("pat-token"))
+        try expectEqual(record.kind.displayName, "Personal access token")
+        try expectEqual(record.login, nil)
+        try expectEqual(record.scopes, [])
+        try expectEqual(record.tokenType, "Bearer")
+    }
+
+    private static func testVersionedCredentialStoreDeletesOAuthCredentialEnvelope() throws {
+        let tokenStore = InMemoryTokenStore()
+        let store = VersionedCredentialStore(tokenStore: tokenStore)
+
+        try store.saveCredential(
+            .oauthUserToken("oauth-token"),
+            metadata: GitHubCredentialMetadata(scopes: ["repo"])
+        )
+        try store.deleteCredential()
+
+        try expectEqual(try store.loadStoredCredential(), nil)
+        try expectEqual(try store.loadCredential(), nil)
     }
 
     private static func testKeychainStoreCanBeConstructedWithoutTouchingSecrets() throws {

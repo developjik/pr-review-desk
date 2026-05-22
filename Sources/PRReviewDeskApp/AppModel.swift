@@ -32,6 +32,7 @@ final class AppModel: ObservableObject {
     @Published var oauthAuthorization: OAuthDeviceAuthorization?
     @Published var isOAuthSignInPending = false
     @Published var grantedGitHubScopes: [String] = []
+    @Published var credentialKindDescription = "None"
     @Published var hasToken = false
     @Published var repositories: [Repository] = []
     @Published var selectedRepository: Repository?
@@ -228,12 +229,13 @@ final class AppModel: ObservableObject {
             guard let credential = try credentialStore.loadCredential(), !credential.accessToken.isEmpty else {
                 hasToken = false
                 grantedGitHubScopes = []
+                credentialKindDescription = "None"
                 tokenValidationStatus = "No token saved."
                 return
             }
             configureGitHubClient()
             tokenInput = ""
-            grantedGitHubScopes = loadStoredGitHubScopes()
+            applyStoredCredentialMetadata(fallbackCredential: credential)
             hasToken = true
             statusMessage = "GitHub token loaded from Keychain."
         } catch {
@@ -253,6 +255,7 @@ final class AppModel: ObservableObject {
             configureGitHubClient()
             tokenInput = ""
             grantedGitHubScopes = []
+            credentialKindDescription = GitHubCredentialKind.personalAccessToken.displayName
             tokenValidationStatus = "Not validated."
             hasToken = true
             statusMessage = "GitHub token saved."
@@ -275,6 +278,7 @@ final class AppModel: ObservableObject {
             draft = nil
             reviewBody = ""
             grantedGitHubScopes = []
+            credentialKindDescription = "None"
             tokenValidationStatus = "No token saved."
             statusMessage = "GitHub token deleted."
         } catch {
@@ -327,16 +331,18 @@ final class AppModel: ObservableObject {
         await runWorking("Validating GitHub token...") {
             let validation = try await githubClient.validateToken()
             grantedGitHubScopes = validation.scopes
-            if let credential = try credentialStore.loadCredential(),
-               let credentialMetadataStore {
-                try credentialMetadataStore.saveCredential(
-                    credential,
-                    metadata: GitHubCredentialMetadata(
-                        login: validation.login,
-                        scopes: validation.scopes,
-                        tokenType: "Bearer"
+            if let credential = try credentialStore.loadCredential() {
+                credentialKindDescription = GitHubCredentialKind(credential: credential).displayName
+                if let credentialMetadataStore {
+                    try credentialMetadataStore.saveCredential(
+                        credential,
+                        metadata: GitHubCredentialMetadata(
+                            login: validation.login,
+                            scopes: validation.scopes,
+                            tokenType: "Bearer"
+                        )
                     )
-                )
+                }
             }
 
             let scopes = scopeSummary(validation.scopes)
@@ -849,12 +855,15 @@ final class AppModel: ObservableObject {
         scopes.isEmpty ? "no scopes reported" : scopes.joined(separator: ", ")
     }
 
-    private func loadStoredGitHubScopes() -> [String] {
+    private func applyStoredCredentialMetadata(fallbackCredential: GitHubCredential) {
         guard let storedCredential = try? storedCredentialLoader?.loadStoredCredential() else {
-            return []
+            grantedGitHubScopes = []
+            credentialKindDescription = GitHubCredentialKind(credential: fallbackCredential).displayName
+            return
         }
 
-        return storedCredential.scopes
+        grantedGitHubScopes = storedCredential.scopes
+        credentialKindDescription = storedCredential.kind.displayName
     }
 
     private func configureGitHubClient() {
@@ -891,6 +900,7 @@ final class AppModel: ObservableObject {
                 configureGitHubClient()
                 tokenInput = ""
                 grantedGitHubScopes = token.scopes
+                credentialKindDescription = GitHubCredentialKind.oauthUserToken.displayName
                 tokenValidationStatus = "OAuth token saved. Validate to confirm login. Scopes: \(scopeSummary(token.scopes))."
                 hasToken = true
                 oauthStatus = "Authorized with GitHub."

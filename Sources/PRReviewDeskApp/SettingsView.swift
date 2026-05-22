@@ -18,6 +18,14 @@ struct SettingsView: View {
                 }
 
                 HStack {
+                    Text("Credential type")
+                    Spacer()
+                    Text(model.credentialKindDescription)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
+                HStack {
                     Text("Granted scopes")
                     Spacer()
                     Text(model.grantedGitHubScopes.isEmpty ? "Unknown" : model.grantedGitHubScopes.joined(separator: ", "))
@@ -35,7 +43,7 @@ struct SettingsView: View {
                             await model.saveTokenAndRefresh()
                         }
                     } label: {
-                        Label("Save or Replace", systemImage: "key")
+                        Label("Save or Replace with PAT", systemImage: "key")
                     }
                     .disabled(model.isWorking)
 
@@ -49,7 +57,7 @@ struct SettingsView: View {
                     Button(role: .destructive) {
                         model.deleteStoredToken()
                     } label: {
-                        Label("Delete", systemImage: "trash")
+                        Label("Delete Local Credential", systemImage: "trash")
                     }
                     .disabled(model.isWorking || !model.hasToken)
                 }
@@ -63,7 +71,10 @@ struct SettingsView: View {
                     Button {
                         model.startOAuthDeviceSignIn()
                     } label: {
-                        Label("Sign in with GitHub", systemImage: "person.crop.circle.badge.checkmark")
+                        Label(
+                            model.hasToken ? "Replace with GitHub OAuth" : "Sign in with GitHub",
+                            systemImage: "person.crop.circle.badge.checkmark"
+                        )
                     }
                     .disabled(model.isOAuthSignInPending || model.oauthClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
@@ -97,6 +108,17 @@ struct SettingsView: View {
                 }
 
                 Text(model.oauthStatus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack {
+                    Text("Revoke OAuth access")
+                    Spacer()
+                    Link("Manage on GitHub", destination: URL(string: "https://github.com/settings/applications")!)
+                }
+
+                Text("OAuth authorization must be revoked on GitHub. Deleting here only removes the local credential.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
