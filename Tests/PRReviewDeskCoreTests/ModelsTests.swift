@@ -8,6 +8,7 @@ enum ModelsTests {
         try testPullRequestFileReviewabilityClassifiesPatchCoverage()
         try testReviewCoverageSummaryCountsOmittedFiles()
         try testReviewCoverageSummaryBlocksWhenNothingIsReviewable()
+        try testSensitiveTextRedactorRemovesAuthorizationAndTokenLikeValues()
         try testReviewDraftRoundTripsThroughJSON()
         testReviewEventUsesGitHubValues()
     }
@@ -134,6 +135,22 @@ enum ModelsTests {
         try expectEqual(summary.reviewableFileCount, 0)
         try expectEqual(summary.omittedFileCount, 1)
         try expectEqual(summary.generationBlockReason, "No changed files have reviewable patches for Codex.")
+    }
+
+    private static func testSensitiveTextRedactorRemovesAuthorizationAndTokenLikeValues() throws {
+        let input = """
+        Authorization: Bearer ghp_abcdefghijklmnopqrstuvwxyz0123456789
+        token=github_pat_11ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789
+        safe text remains
+        """
+
+        let redacted = SensitiveTextRedactor.redact(input)
+
+        try expectTrue(!redacted.contains("ghp_abcdefghijklmnopqrstuvwxyz0123456789"))
+        try expectTrue(!redacted.contains("github_pat_11ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"))
+        try expectTrue(redacted.contains("Authorization: [REDACTED]"))
+        try expectTrue(redacted.contains("[REDACTED_TOKEN]"))
+        try expectTrue(redacted.contains("safe text remains"))
     }
 
     private static func testReviewDraftRoundTripsThroughJSON() throws {

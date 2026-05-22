@@ -14,7 +14,12 @@ struct MainView: View {
             reviewPane
         }
         .safeAreaInset(edge: .bottom) {
-            statusBar
+            VStack(spacing: 0) {
+                if let recoverableError = model.recoverableError {
+                    recoverableErrorPanel(recoverableError)
+                }
+                statusBar
+            }
         }
     }
 
@@ -501,6 +506,45 @@ struct MainView: View {
         .padding(.horizontal)
         .padding(.vertical, 6)
         .background(.bar)
+    }
+
+    private func recoverableErrorPanel(_ error: RecoverableErrorDetails) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label(error.operation, systemImage: "exclamationmark.triangle")
+                    .font(.headline)
+                    .foregroundStyle(.orange)
+                Spacer()
+                Button {
+                    model.dismissRecoverableError()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.plain)
+                .help("Dismiss error")
+            }
+
+            Text(error.summary)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+
+            Text(error.details)
+                .font(.caption)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(error.recoverySuggestion)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(.orange.opacity(0.35))
+                .frame(height: 1)
+        }
     }
 
     private var repositorySelection: Binding<Repository?> {

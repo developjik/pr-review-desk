@@ -233,6 +233,46 @@ public struct ReviewCoverageSummary: Equatable, Sendable {
     }
 }
 
+public enum SensitiveTextRedactor {
+    public static func redact(_ text: String) -> String {
+        var redacted = replaceMatches(
+            in: text,
+            pattern: #"(?i)Authorization\s*:\s*(Bearer|Token|Basic)\s+[A-Za-z0-9._\-+/=]+"#,
+            replacement: "Authorization: [REDACTED]"
+        )
+
+        let tokenPatterns = [
+            #"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}\b"#,
+            #"\bgithub_pat_[A-Za-z0-9_]{20,}\b"#,
+            #"\bsk-proj-[A-Za-z0-9_\-]{20,}\b"#,
+            #"\bsk-[A-Za-z0-9_\-]{20,}\b"#
+        ]
+
+        for pattern in tokenPatterns {
+            redacted = replaceMatches(
+                in: redacted,
+                pattern: pattern,
+                replacement: "[REDACTED_TOKEN]"
+            )
+        }
+
+        return redacted
+    }
+
+    private static func replaceMatches(in text: String, pattern: String, replacement: String) -> String {
+        guard let expression = try? NSRegularExpression(pattern: pattern) else {
+            return text
+        }
+
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return expression.stringByReplacingMatches(
+            in: text,
+            range: range,
+            withTemplate: replacement
+        )
+    }
+}
+
 public enum ReviewEvent: String, Codable, CaseIterable, Equatable, Hashable, Identifiable, Sendable {
     case comment = "COMMENT"
     case approve = "APPROVE"

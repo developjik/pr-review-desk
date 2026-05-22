@@ -2,6 +2,14 @@ import Foundation
 import SwiftUI
 import PRReviewDeskCore
 
+struct RecoverableErrorDetails: Identifiable, Equatable {
+    let id = UUID()
+    let operation: String
+    let summary: String
+    let details: String
+    let recoverySuggestion: String
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var tokenInput = ""
@@ -19,6 +27,7 @@ final class AppModel: ObservableObject {
     @Published var isWorking = false
     @Published var canCancelCurrentOperation = false
     @Published var preflightHeadSha: String?
+    @Published var recoverableError: RecoverableErrorDetails?
 
     private let tokenStore: TokenStore
     private let codexAgent: CodexReviewAgent
@@ -313,6 +322,10 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func dismissRecoverableError() {
+        recoverableError = nil
+    }
+
     private func configureGitHubClient(token: String) {
         githubClient = GitHubClient(token: token)
     }
@@ -340,7 +353,14 @@ final class AppModel: ObservableObject {
         } catch is CancellationError {
             statusMessage = "Operation cancelled."
         } catch {
-            statusMessage = "\(error)"
+            let details = SensitiveTextRedactor.redact("\(error)")
+            statusMessage = "Failed: \(shortOperationName(message))"
+            recoverableError = RecoverableErrorDetails(
+                operation: shortOperationName(message),
+                summary: firstLine(details),
+                details: details,
+                recoverySuggestion: recoverySuggestion(for: error)
+            )
         }
     }
 
@@ -356,5 +376,32 @@ final class AppModel: ObservableObject {
         Risks:
         \(risks)
         """
+    }
+
+    private func shortOperationName(_ message: String) -> String {
+        message.replacingOccurrences(of: "...", with: "")
+    }
+
+    private func firstLine(_ text: String) -> String {
+        text.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init) ?? text
+    }
+
+    private func recoverySuggestion(for error: Error) -> String {
+        switch error {
+        case CodexReviewError.cancelled:
+            return "Start generation again when ready."
+        case CodexReviewError.missingExecutable:
+            return "Install or expose the Codex CLI on PATH, then retry generation."
+        case CodexReviewError.timedOut:
+            return "Reduce the PR size or retry generation."
+        case ReviewSubmissionValidationError.staleHead:
+            return "Refresh safety or regenerate the draft before submitting."
+        case ReviewSubmissionValidationError.invalidInlineComments:
+            return "Deselect invalid comments, refresh safety, or regenerate the draft."
+        case GitHubError.requestFailed:
+            return "Check GitHub access, token scopes, and the repository state, then retry."
+        default:
+            return "Check the details, adjust the input if needed, then retry."
+        }
     }
 }
