@@ -117,7 +117,7 @@ final class AppModel: ObservableObject {
     }
 
     init(
-        credentialStore: CredentialStore = PersonalAccessTokenCredentialStore.keychainDefault(),
+        credentialStore: CredentialStore = VersionedCredentialStore.keychainDefault(),
         codexAgent: CodexReviewAgent = CodexReviewAgent()
     ) {
         self.credentialStore = credentialStore
