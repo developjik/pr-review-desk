@@ -8,6 +8,7 @@ enum GitHubClientTests {
         try await testListRepositoriesFollowsNextLinkAndPreservesHeadersAndQuery()
         try await testListOpenPullRequestsFollowsNextLink()
         try await testPullRequestFilesFollowsNextLink()
+        try await testValidateTokenReturnsLoginAndScopes()
         try await testSubmitReviewEncodesEventBodyAndInlineComments()
     }
 
@@ -209,6 +210,25 @@ enum GitHubClientTests {
         try expectEqual(secondRequest.url?.path, "/repos/developjik/desk/pulls/12/files")
         try expectEqual(try queryValue("per_page", in: secondRequest), "100")
         try expectEqual(try queryValue("page", in: secondRequest), "2")
+    }
+
+    private static func testValidateTokenReturnsLoginAndScopes() async throws {
+        let transport = FakeGitHubTransport(
+            responses: [
+                FakeGitHubResponse(
+                    data: #"{"login":"developjik"}"#,
+                    headers: ["X-OAuth-Scopes": "repo, read:org"]
+                )
+            ]
+        )
+        let client = GitHubClient(token: "secret", transport: transport)
+
+        let validation = try await client.validateToken()
+
+        try expectEqual(validation.login, "developjik")
+        try expectEqual(validation.scopes, ["repo", "read:org"])
+        let request = try unwrap(transport.requests.first)
+        try expectEqual(request.url?.path, "/user")
     }
 
     private static func testSubmitReviewEncodesEventBodyAndInlineComments() async throws {

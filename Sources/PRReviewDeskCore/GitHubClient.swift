@@ -37,6 +37,16 @@ public struct URLSessionGitHubTransport: GitHubTransport, Sendable {
     }
 }
 
+public struct GitHubTokenValidation: Equatable, Hashable, Sendable {
+    public let login: String
+    public let scopes: [String]
+
+    public init(login: String, scopes: [String]) {
+        self.login = login
+        self.scopes = scopes
+    }
+}
+
 public final class GitHubClient: Sendable {
     private let accessTokenProvider: any AccessTokenProvider
     private let transport: GitHubTransport
@@ -104,6 +114,18 @@ public final class GitHubClient: Sendable {
             queryItems: [URLQueryItem(name: "per_page", value: "100")]
         )
         return try await sendPaginated(request, as: [PullRequestFile].self)
+    }
+
+    public func validateToken() async throws -> GitHubTokenValidation {
+        let request = try makeRequest(method: "GET", path: "/user")
+        let (data, response) = try await transport.data(for: request)
+        try validate(response: response, data: data)
+        let user = try JSONDecoder().decode(GitHubAuthenticatedUser.self, from: data)
+        let scopes = (response.value(forHTTPHeaderField: "X-OAuth-Scopes") ?? "")
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return GitHubTokenValidation(login: user.login, scopes: scopes)
     }
 
     public func submitReview(
@@ -277,6 +299,10 @@ private struct ReviewPayload: Encodable {
         case body
         case comments
     }
+}
+
+private struct GitHubAuthenticatedUser: Decodable {
+    let login: String
 }
 
 private struct ReviewCommentPayload: Encodable {
