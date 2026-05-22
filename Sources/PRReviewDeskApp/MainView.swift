@@ -140,14 +140,21 @@ struct MainView: View {
     private var reviewControls: some View {
         HStack(spacing: 10) {
             Button {
-                Task {
-                    await model.generateReview()
-                }
+                model.startGenerateReview()
             } label: {
                 Label("Generate Review", systemImage: "sparkles")
             }
             .keyboardShortcut("r", modifiers: [.command])
             .disabled(model.isWorking || model.selectedPullRequest == nil)
+
+            if model.canCancelCurrentOperation {
+                Button {
+                    model.cancelCurrentOperation()
+                } label: {
+                    Label("Cancel", systemImage: "xmark.circle")
+                }
+                .keyboardShortcut(".", modifiers: [.command])
+            }
 
             Picker("Review event", selection: $model.selectedEvent) {
                 ForEach(ReviewEvent.allCases) { event in

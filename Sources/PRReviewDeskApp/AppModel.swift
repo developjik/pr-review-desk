@@ -16,11 +16,13 @@ final class AppModel: ObservableObject {
     @Published var selectedEvent: ReviewEvent = .comment
     @Published var statusMessage = "Enter a GitHub token or load one from Keychain."
     @Published var isWorking = false
+    @Published var canCancelCurrentOperation = false
 
     private let tokenStore: TokenStore
     private let codexAgent: CodexReviewAgent
     private var githubClient: GitHubClient?
     private var reviewedHeadSha: String?
+    private var currentOperationTask: Task<Void, Never>?
 
     var selectedInlineCommentCount: Int {
         draft?.inlineComments.filter(\.isSelected).count ?? 0
@@ -113,13 +115,32 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func startGenerateReview() {
+        guard !isWorking else {
+            return
+        }
+
+        currentOperationTask = Task { @MainActor [weak self] in
+            await self?.generateReview()
+            self?.currentOperationTask = nil
+        }
+    }
+
+    func cancelCurrentOperation() {
+        guard canCancelCurrentOperation else {
+            return
+        }
+        statusMessage = "Cancelling current operation..."
+        currentOperationTask?.cancel()
+    }
+
     func generateReview() async {
         guard let selectedRepository, let selectedPullRequest else {
             statusMessage = "Select a pull request first."
             return
         }
 
-        await runWorking("Generating Codex review draft...") {
+        await runWorking("Generating Codex review draft...", isCancellable: true) {
             let pullRequestForReview: PullRequest
             if let githubClient {
                 pullRequestForReview = try await githubClient.pullRequestDetails(
@@ -201,15 +222,20 @@ final class AppModel: ObservableObject {
         statusMessage = pullRequests.isEmpty ? "No open pull requests." : "Loaded \(pullRequests.count) open pull requests."
     }
 
-    private func runWorking(_ message: String, operation: () async throws -> Void) async {
+    private func runWorking(_ message: String, isCancellable: Bool = false, operation: () async throws -> Void) async {
         isWorking = true
+        canCancelCurrentOperation = isCancellable
         statusMessage = message
         defer {
             isWorking = false
+            canCancelCurrentOperation = false
         }
 
         do {
+            try Task.checkCancellation()
             try await operation()
+        } catch is CancellationError {
+            statusMessage = "Operation cancelled."
         } catch {
             statusMessage = "\(error)"
         }
