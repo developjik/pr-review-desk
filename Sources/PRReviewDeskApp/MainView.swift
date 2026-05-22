@@ -247,7 +247,7 @@ struct MainView: View {
                     Text("Inline Comments")
                         .font(.headline)
                     ForEach(comments) { comment in
-                        inlineCommentRow(comment)
+                        inlineCommentRow(comment, isInvalid: model.isInlineCommentInvalid(comment))
                     }
                 }
             }
@@ -276,52 +276,101 @@ struct MainView: View {
     }
 
     private var reviewControls: some View {
-        HStack(spacing: 10) {
-            Button {
-                model.startGenerateReview()
-            } label: {
-                Label("Generate Review", systemImage: "sparkles")
-            }
-            .keyboardShortcut("r", modifiers: [.command])
-            .disabled(model.isWorking || model.selectedPullRequest == nil)
-
-            if model.canCancelCurrentOperation {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
                 Button {
-                    model.cancelCurrentOperation()
+                    model.startGenerateReview()
                 } label: {
-                    Label("Cancel", systemImage: "xmark.circle")
+                    Label("Generate Review", systemImage: "sparkles")
                 }
-                .keyboardShortcut(".", modifiers: [.command])
-            }
+                .keyboardShortcut("r", modifiers: [.command])
+                .disabled(model.isWorking || model.selectedPullRequest == nil)
 
-            Picker("Review event", selection: $model.selectedEvent) {
-                ForEach(ReviewEvent.allCases) { event in
-                    Text(event.displayName).tag(event)
+                if model.canCancelCurrentOperation {
+                    Button {
+                        model.cancelCurrentOperation()
+                    } label: {
+                        Label("Cancel", systemImage: "xmark.circle")
+                    }
+                    .keyboardShortcut(".", modifiers: [.command])
                 }
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 360)
 
-            Button {
-                submitReview()
-            } label: {
-                Label("Submit Review (\(model.selectedInlineCommentCount))", systemImage: "paperplane")
-            }
-            .disabled(model.isWorking || model.draft == nil)
-            .confirmationDialog(
-                "Submit \(model.selectedEvent.displayName) review?",
-                isPresented: $isSubmitConfirmationPresented,
-                titleVisibility: .visible
-            ) {
-                Button("Submit \(model.selectedEvent.displayName) Review") {
-                    Task {
-                        await model.submitReview()
+                Picker("Review event", selection: $model.selectedEvent) {
+                    ForEach(ReviewEvent.allCases) { event in
+                        Text(event.displayName).tag(event)
                     }
                 }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This will post a \(model.selectedEvent.displayName) review with \(model.selectedInlineCommentCount) selected inline comments to GitHub.")
+                .pickerStyle(.segmented)
+                .frame(width: 360)
+
+                Button {
+                    submitReview()
+                } label: {
+                    Label("Submit Review (\(model.selectedInlineCommentCount))", systemImage: "paperplane")
+                }
+                .disabled(!model.canSubmitReview)
+                .confirmationDialog(
+                    "Submit \(model.selectedEvent.displayName) review?",
+                    isPresented: $isSubmitConfirmationPresented,
+                    titleVisibility: .visible
+                ) {
+                    Button("Submit \(model.selectedEvent.displayName) Review") {
+                        Task {
+                            await model.submitReview()
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This will post a \(model.selectedEvent.displayName) review with \(model.selectedInlineCommentCount) selected inline comments to GitHub.")
+                }
             }
+
+            if model.draft != nil {
+                submitSafetyPanel
+            }
+        }
+    }
+
+    private var submitSafetyPanel: some View {
+        let state = model.submitSafetyState
+
+        return HStack(spacing: 14) {
+            Label(model.submitSafetyMessage, systemImage: state.canSubmit ? "checkmark.shield" : "exclamationmark.triangle")
+                .foregroundStyle(state.canSubmit ? .green : .orange)
+
+            Text("Event \(model.selectedEvent.displayName)")
+            Text("Selected \(state.selectedInlineCommentCount)")
+            Text("Invalid \(state.invalidSelectedInlineComments.count)")
+                .foregroundStyle(state.invalidSelectedInlineComments.isEmpty ? Color.secondary : Color.red)
+            Text("Reviewed \(shortSha(state.reviewedHeadSha))")
+            Text("Current \(shortSha(state.currentHeadSha))")
+
+            Spacer()
+
+            if state.isStale {
+                Button {
+                    model.startGenerateReview()
+                } label: {
+                    Label("Regenerate", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .disabled(model.isWorking)
+            }
+
+            Button {
+                Task {
+                    await model.refreshSubmitSafety()
+                }
+            } label: {
+                Label("Refresh Safety", systemImage: "shield.lefthalf.filled")
+            }
+            .disabled(model.isWorking)
+        }
+        .font(.caption)
+        .padding(8)
+        .background(.background)
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(state.canSubmit ? .green.opacity(0.35) : .orange.opacity(0.45))
         }
     }
 
@@ -348,7 +397,7 @@ struct MainView: View {
                                     .font(.subheadline)
                                     .fontWeight(.semibold)
                                 ForEach(group.comments) { comment in
-                                    inlineCommentRow(comment)
+                                    inlineCommentRow(comment, isInvalid: model.isInlineCommentInvalid(comment))
                                 }
                             }
                         }
@@ -395,7 +444,7 @@ struct MainView: View {
             .sorted { $0.path < $1.path }
     }
 
-    private func inlineCommentRow(_ comment: InlineCommentDraft) -> some View {
+    private func inlineCommentRow(_ comment: InlineCommentDraft, isInvalid: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Toggle(isOn: Binding(
                 get: { comment.isSelected },
@@ -410,6 +459,11 @@ struct MainView: View {
                         .foregroundStyle(severityColor(comment.severity))
                 }
             }
+            if isInvalid {
+                Text("Invalid selected target. Refresh safety or regenerate before submitting.")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
             TextEditor(text: Binding(
                 get: { comment.body },
                 set: { model.setInlineCommentBody(id: comment.id, body: $0) }
@@ -423,8 +477,13 @@ struct MainView: View {
         .padding(10)
         .background(.background)
         .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(.quaternary)
+            if isInvalid {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(.red.opacity(0.7))
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(.quaternary)
+            }
         }
     }
 
@@ -479,6 +538,14 @@ struct MainView: View {
                 model.selectedChangedFilePath = path
             }
         )
+    }
+
+    private func shortSha(_ sha: String?) -> String {
+        guard let sha else {
+            return "-"
+        }
+
+        return String(sha.prefix(8))
     }
 
     private func severityColor(_ severity: CommentSeverity) -> Color {
