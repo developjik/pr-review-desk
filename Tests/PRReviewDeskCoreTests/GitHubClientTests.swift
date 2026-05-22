@@ -6,9 +6,11 @@ enum GitHubClientTests {
         try await testListRepositoriesSendsBearerTokenAndDecodesResponse()
         try await testListRepositoriesReadsAuthorizationFromProvider()
         try await testListRepositoriesFollowsNextLinkAndPreservesHeadersAndQuery()
+        try await testListRepositoriesRetriesTransientServerFailure()
         try await testListOpenPullRequestsFollowsNextLink()
         try await testPullRequestFilesFollowsNextLink()
         try await testValidateTokenReturnsLoginAndScopes()
+        try await testSubmitReviewDoesNotRetryTransientServerFailure()
         try await testSubmitReviewEncodesEventBodyAndInlineComments()
     }
 
@@ -97,6 +99,19 @@ enum GitHubClientTests {
         try expectEqual(try queryValue("sort", in: secondRequest), "updated")
         try expectEqual(try queryValue("per_page", in: secondRequest), "100")
         try expectEqual(try queryValue("page", in: secondRequest), "2")
+    }
+
+    private static func testListRepositoriesRetriesTransientServerFailure() async throws {
+        let transport = FakeGitHubTransport(responses: [
+            FakeGitHubResponse(data: #"{"message":"try later"}"#, statusCode: 503, headers: ["Retry-After": "0"]),
+            FakeGitHubResponse(data: "[]")
+        ])
+        let client = GitHubClient(token: "secret", transport: transport)
+
+        let repositories = try await client.listRepositories()
+
+        try expectEqual(repositories, [])
+        try expectEqual(transport.requests.count, 2)
     }
 
     private static func testListOpenPullRequestsFollowsNextLink() async throws {
@@ -229,6 +244,39 @@ enum GitHubClientTests {
         try expectEqual(validation.scopes, ["repo", "read:org"])
         let request = try unwrap(transport.requests.first)
         try expectEqual(request.url?.path, "/user")
+    }
+
+    private static func testSubmitReviewDoesNotRetryTransientServerFailure() async throws {
+        let transport = FakeGitHubTransport(responses: [
+            FakeGitHubResponse(data: #"{"message":"try later"}"#, statusCode: 503, headers: ["Retry-After": "0"]),
+            FakeGitHubResponse(data: #"{"id":99}"#)
+        ])
+        let client = GitHubClient(token: "secret", transport: transport)
+        let repository = Repository(
+            id: 1,
+            owner: "developjik",
+            name: "desk",
+            fullName: "developjik/desk",
+            isPrivate: false
+        )
+        let pullRequest = PullRequest(
+            id: 7,
+            number: 12,
+            title: "Add workflow",
+            htmlURL: URL(string: "https://github.com/developjik/desk/pull/12")!,
+            author: "contributor",
+            headSha: "abc123"
+        )
+        let submission = ReviewSubmission(event: .comment, body: "Body", commitID: "abc123", comments: [])
+
+        do {
+            try await client.submitReview(repository: repository, pullRequest: pullRequest, submission: submission)
+            throw TestFailure(message: "expected submit review to fail without retry")
+        } catch let error as GitHubError {
+            try expectEqual(error, .requestFailed(statusCode: 503, message: #"{"message":"try later"}"#))
+        }
+
+        try expectEqual(transport.requests.count, 1)
     }
 
     private static func testSubmitReviewEncodesEventBodyAndInlineComments() async throws {
