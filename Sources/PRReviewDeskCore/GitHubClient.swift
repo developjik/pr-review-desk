@@ -51,6 +51,7 @@ public final class GitHubClient: Sendable {
     private let accessTokenProvider: any AccessTokenProvider
     private let transport: GitHubTransport
     private let baseURL: URL
+    private let maxReadAttempts = 3
 
     public convenience init(
         token: String,
@@ -118,7 +119,7 @@ public final class GitHubClient: Sendable {
 
     public func validateToken() async throws -> GitHubTokenValidation {
         let request = try makeRequest(method: "GET", path: "/user")
-        let (data, response) = try await transport.data(for: request)
+        let (data, response) = try await dataForRead(request)
         try validate(response: response, data: data)
         let user = try JSONDecoder().decode(GitHubAuthenticatedUser.self, from: data)
         let scopes = (response.value(forHTTPHeaderField: "X-OAuth-Scopes") ?? "")
@@ -155,7 +156,7 @@ public final class GitHubClient: Sendable {
     }
 
     private func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
-        let (data, response) = try await transport.data(for: request)
+        let (data, response) = try await dataForRead(request)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(type, from: data)
     }
@@ -165,7 +166,7 @@ public final class GitHubClient: Sendable {
         var items: [T] = []
 
         while let currentRequest = nextRequest {
-            let (data, response) = try await transport.data(for: currentRequest)
+            let (data, response) = try await dataForRead(currentRequest)
             try validate(response: response, data: data)
             let pageItems = try JSONDecoder().decode(type, from: data)
             items.append(contentsOf: pageItems)
@@ -182,6 +183,42 @@ public final class GitHubClient: Sendable {
     private func sendWithoutDecoding(_ request: URLRequest) async throws {
         let (data, response) = try await transport.data(for: request)
         try validate(response: response, data: data)
+    }
+
+    private func dataForRead(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        var attempt = 1
+
+        while true {
+            do {
+                let result = try await transport.data(for: request)
+                if shouldRetryRead(response: result.1), attempt < maxReadAttempts {
+                    attempt += 1
+                    try await sleepBeforeRetry(response: result.1)
+                    continue
+                }
+                return result
+            } catch {
+                guard attempt < maxReadAttempts else {
+                    throw error
+                }
+                attempt += 1
+            }
+        }
+    }
+
+    private func shouldRetryRead(response: HTTPURLResponse) -> Bool {
+        response.statusCode == 429 || (500..<600).contains(response.statusCode)
+    }
+
+    private func sleepBeforeRetry(response: HTTPURLResponse) async throws {
+        guard let retryAfter = response.value(forHTTPHeaderField: "Retry-After"),
+              let seconds = TimeInterval(retryAfter),
+              seconds > 0
+        else {
+            return
+        }
+
+        try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
     }
 
     private func validate(response: HTTPURLResponse, data: Data) throws {
