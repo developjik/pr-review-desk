@@ -257,7 +257,10 @@ public final class CodexReviewAgent: @unchecked Sendable {
         files: [PullRequestFile]
     ) throws -> String {
         let annotatedDiffs = try files.compactMap { file -> AnnotatedDiff? in
-            guard let patch = file.patch, !patch.isEmpty else {
+            guard file.reviewability == .includedPatch,
+                  let patch = file.patch,
+                  !patch.isEmpty
+            else {
                 return nil
             }
             return try DiffPositionMapper.annotate(path: file.path, patch: patch)

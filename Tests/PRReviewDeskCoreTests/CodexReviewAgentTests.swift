@@ -8,6 +8,7 @@ enum CodexReviewAgentTests {
         try await testGenerateReviewMapsMissingCodexExecutable()
         try await testGenerateReviewMapsCommandTimeout()
         try await testGenerateReviewMapsCommandCancellation()
+        try testMakePromptOmitsFilesWithoutReviewablePatches()
         try testReviewDraftDecodesCodexOutputWithoutLocalFields()
         try await testProcessCommandRunnerReturnsWhenChildKeepsStdoutOpen()
         try await testProcessCommandRunnerCleansTemporaryDirectoryAfterFailedCommand()
@@ -124,6 +125,24 @@ enum CodexReviewAgentTests {
         } catch let error as CodexReviewError {
             try expectEqual(error, .cancelled)
         }
+    }
+
+    private static func testMakePromptOmitsFilesWithoutReviewablePatches() throws {
+        let agent = CodexReviewAgent(commandRunner: FakeCommandRunner(outputJSON: minimalReviewJSON))
+        let files = reviewableFiles + [
+            PullRequestFile(
+                path: "Assets/logo.png",
+                status: "modified",
+                additions: 12,
+                deletions: 0,
+                patch: nil
+            )
+        ]
+
+        let prompt = try agent.makePrompt(repository: repository, pullRequest: pullRequest, files: files)
+
+        try expectTrue(prompt.contains("Sources/App.swift"))
+        try expectTrue(!prompt.contains("Assets/logo.png"))
     }
 
     private static func testReviewDraftDecodesCodexOutputWithoutLocalFields() throws {

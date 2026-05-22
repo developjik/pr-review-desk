@@ -109,6 +109,9 @@ struct MainView: View {
             if let pullRequest = model.selectedPullRequest {
                 pullRequestHeader(pullRequest)
                 Divider()
+                if !model.changedFiles.isEmpty {
+                    reviewCoverageBanner(model.reviewCoverageSummary)
+                }
                 reviewControls
                 draftEditor
             } else {
@@ -120,6 +123,35 @@ struct MainView: View {
             }
         }
         .padding()
+    }
+
+    private func reviewCoverageBanner(_ summary: ReviewCoverageSummary) -> some View {
+        let hasOmittedFiles = summary.omittedFileCount > 0
+
+        return VStack(alignment: .leading, spacing: 6) {
+            Label(
+                hasOmittedFiles ? "Partial Codex coverage" : "Full Codex coverage",
+                systemImage: hasOmittedFiles ? "exclamationmark.triangle" : "checkmark.circle"
+            )
+            .font(.headline)
+            .foregroundStyle(hasOmittedFiles ? .orange : .green)
+
+            Text("\(summary.reviewableFileCount) of \(summary.totalFileCount) changed files have reviewable patches.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if hasOmittedFiles {
+                Text("\(summary.omittedFileCount) files, +\(summary.omittedAdditions) -\(summary.omittedDeletions), will not be sent to Codex.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(10)
+        .background(.background)
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(hasOmittedFiles ? .orange.opacity(0.45) : .green.opacity(0.35))
+        }
     }
 
     private func pullRequestHeader(_ pullRequest: PullRequest) -> some View {
