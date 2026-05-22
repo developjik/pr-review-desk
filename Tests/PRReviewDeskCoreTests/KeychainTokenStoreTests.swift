@@ -6,6 +6,7 @@ enum KeychainTokenStoreTests {
         try testMemoryTokenStoreSavesLoadsAndDeletesToken()
         try testPersonalAccessTokenCredentialStoreWrapsExistingTokenStore()
         try testStaticAccessTokenProviderBuildsBearerAuthorization()
+        try testCredentialStoreAccessTokenProviderReadsCurrentCredential()
         try testKeychainStoreCanBeConstructedWithoutTouchingSecrets()
     }
 
@@ -36,6 +37,18 @@ enum KeychainTokenStoreTests {
         let provider = StaticAccessTokenProvider(credential: .personalAccessToken("test-token"))
 
         try expectEqual(try provider.authorizationHeader(), "Bearer test-token")
+    }
+
+    private static func testCredentialStoreAccessTokenProviderReadsCurrentCredential() throws {
+        let tokenStore = InMemoryTokenStore(token: "first-token")
+        let credentialStore = PersonalAccessTokenCredentialStore(tokenStore: tokenStore)
+        let provider = CredentialStoreAccessTokenProvider(credentialStore: credentialStore)
+
+        try expectEqual(try provider.authorizationHeader(), "Bearer first-token")
+
+        try credentialStore.saveCredential(.personalAccessToken("second-token"))
+
+        try expectEqual(try provider.authorizationHeader(), "Bearer second-token")
     }
 
     private static func testKeychainStoreCanBeConstructedWithoutTouchingSecrets() throws {

@@ -46,6 +46,10 @@ public struct PersonalAccessTokenCredentialStore: CredentialStore, Sendable {
         self.tokenStore = tokenStore
     }
 
+    public static func keychainDefault() -> PersonalAccessTokenCredentialStore {
+        PersonalAccessTokenCredentialStore(tokenStore: KeychainTokenStore())
+    }
+
     public func loadCredential() throws -> GitHubCredential? {
         guard let token = try tokenStore.loadToken() else {
             return nil
