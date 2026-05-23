@@ -12,6 +12,7 @@
 "No token loaded" = "불러온 토큰 없음";
 "Select a repository" = "저장소 선택";
 "Watch all open pull requests in this repository" = "이 저장소의 열린 pull request 모두 감시";
+"Watch all" = "모두 감시";
 "Search pull requests" = "Pull request 검색";
 "Background Queue" = "백그라운드 대기열";
 "Cancel background queue" = "백그라운드 대기열 취소";
@@ -20,6 +21,8 @@
 "Remove from queue" = "대기열에서 제거";
 "No Pull Request Selected" = "선택된 Pull Request 없음";
 "Choose a repository and open pull request." = "저장소와 열린 pull request를 선택하세요.";
+"Awaiting selection" = "선택 대기 중";
+"Draft and submit controls appear here after you choose a pull request." = "Pull request를 선택하면 초안과 제출 컨트롤이 여기에 표시됩니다.";
 "Partial Codex coverage" = "부분 Codex 검토 범위";
 "Full Codex coverage" = "전체 Codex 검토 범위";
 "%d of %d changed files have reviewable patches." = "변경 파일 %2$d개 중 %1$d개에 검토 가능한 패치가 있습니다.";
@@ -35,6 +38,7 @@
 "Regenerate AI Review Draft" = "AI 리뷰 초안 다시 생성";
 "Watch PR" = "PR 감시";
 "Cancel" = "취소";
+"Cancel Review Generation" = "리뷰 생성 취소";
 "Review event" = "리뷰 이벤트";
 "Comment" = "코멘트";
 "Approve" = "승인";
@@ -85,8 +89,13 @@
 "Credential type" = "자격 증명 유형";
 "Granted scopes" = "허용된 범위";
 "Unknown" = "알 수 없음";
+"Granted scope %@" = "허용된 범위 %@";
 "Personal access token" = "개인 액세스 토큰";
+"Personal access token entry is hidden until you choose to add or replace it." = "추가하거나 교체하기 전까지 개인 액세스 토큰 입력란은 숨겨집니다.";
+"Replace personal access token" = "개인 액세스 토큰 교체";
+"Enter personal access token" = "개인 액세스 토큰 입력";
 "Save or Replace with PAT" = "PAT 저장 또는 교체";
+"Cancel PAT entry" = "PAT 입력 취소";
 "Delete Local Credential" = "로컬 자격 증명 삭제";
 "OAuth App client ID" = "OAuth 앱 클라이언트 ID";
 "Replace with GitHub OAuth" = "GitHub OAuth로 교체";
@@ -123,6 +132,7 @@
 "Idle" = "대기 중";
 "No repositories loaded." = "불러온 저장소가 없습니다.";
 "%d queued items" = "대기열 항목 %d개";
+"%d pull request" = "Pull request %d개";
 "%d pull requests" = "Pull request %d개";
 "Draft Ready" = "초안 준비됨";
 "Stale" = "오래됨";
@@ -241,6 +251,7 @@
 "Invalid inline targets: %@" = "유효하지 않은 인라인 대상: %@";
 "Search \"%@\" - %d visible" = "\"%@\" 검색 - %d개 표시";
 "Clear search" = "검색 지우기";
+"No open pull requests in this repository." = "이 저장소에 열린 pull request가 없습니다.";
 "Search \"%@\" is hiding pull requests in this repository. Clear search to show saved drafts and open PRs again." = "\"%@\" 검색어가 이 저장소의 pull request를 숨기고 있습니다. 저장된 초안과 열린 PR을 다시 보려면 검색을 지우세요.";
 "Search \"%@\" is hiding pull requests in the current scope. Clear search to show saved drafts and open PRs again." = "\"%@\" 검색어가 현재 범위의 pull request를 숨기고 있습니다. 저장된 초안과 열린 PR을 다시 보려면 검색을 지우세요.";
 "Safety has not been refreshed yet." = "아직 안전 상태를 새로 고치지 않았습니다.";

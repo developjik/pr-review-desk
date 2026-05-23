@@ -296,12 +296,16 @@ enum UISmokeRenderRunner {
                 onDeferredSubmit: {}
             )
         )
+        let settingsLoadedTokenControls = renderedAccessibilityControls(
+            for: SettingsView(model: settingsLoadedTokenModel())
+        )
 
         return [
             accessibilityLine(surface: "first-run-setup.no-token", controls: firstRunNoTokenControls),
             accessibilityLine(surface: "first-run-setup.loaded-token", controls: firstRunLoadedTokenControls),
             accessibilityLine(surface: "submit-preview", controls: submitPreviewControls),
-            accessibilityLine(surface: "command-panel", controls: commandPanelControls)
+            accessibilityLine(surface: "command-panel", controls: commandPanelControls),
+            accessibilityLine(surface: "settings.loaded-token", controls: settingsLoadedTokenControls)
         ].joined(separator: "\n")
     }
 
@@ -450,6 +454,18 @@ enum UISmokeRenderRunner {
         model.hasToken = true
         model.credentialKindDescription = GitHubCredentialKind.personalAccessToken.displayName
         model.tokenValidationStatus = "GitHub credential is loaded. Validate scopes before generating reviews."
+        return model
+    }
+
+    private static func settingsLoadedTokenModel() -> AppModel {
+        let model = firstRunLoadedTokenModel()
+        model.grantedGitHubScopes = [
+            "repo",
+            "read:org",
+            "workflow",
+            "pull_requests:write"
+        ]
+        model.isPrivacyDisclosureAcknowledged = true
         return model
     }
 

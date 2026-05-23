@@ -59,6 +59,7 @@ required=(
   "accessibility=first-run-setup.loaded-token:rendered-controls=first-run.codex.check,first-run.github.reload,first-run.github.validate,first-run.privacy.acknowledge"
   "accessibility=submit-preview:rendered-controls=submit-preview.refresh-safety[enabled],submit-preview.regenerate[enabled],submit-preview.submit[disabled]"
   "accessibility=command-panel:rendered-controls=command-panel.action.select-section-stale[selected],command-panel.search"
+  "accessibility=settings.loaded-token:rendered-controls=settings.github.delete,settings.github.load,settings.github.show-pat-entry[replace],settings.github.validate"
 )
 
 for needle in "${required[@]}"; do

@@ -12,6 +12,7 @@
 "No token loaded" = "No token loaded";
 "Select a repository" = "Select a repository";
 "Watch all open pull requests in this repository" = "Watch all open pull requests in this repository";
+"Watch all" = "Watch all";
 "Search pull requests" = "Search pull requests";
 "Background Queue" = "Background Queue";
 "Cancel background queue" = "Cancel background queue";
@@ -20,6 +21,8 @@
 "Remove from queue" = "Remove from queue";
 "No Pull Request Selected" = "No Pull Request Selected";
 "Choose a repository and open pull request." = "Choose a repository and open pull request.";
+"Awaiting selection" = "Awaiting selection";
+"Draft and submit controls appear here after you choose a pull request." = "Draft and submit controls appear here after you choose a pull request.";
 "Partial Codex coverage" = "Partial Codex coverage";
 "Full Codex coverage" = "Full Codex coverage";
 "%d of %d changed files have reviewable patches." = "%d of %d changed files have reviewable patches.";
@@ -35,6 +38,7 @@
 "Regenerate AI Review Draft" = "Regenerate AI Review Draft";
 "Watch PR" = "Watch PR";
 "Cancel" = "Cancel";
+"Cancel Review Generation" = "Cancel Review Generation";
 "Review event" = "Review event";
 "Comment" = "Comment";
 "Approve" = "Approve";
@@ -85,8 +89,13 @@
 "Credential type" = "Credential type";
 "Granted scopes" = "Granted scopes";
 "Unknown" = "Unknown";
+"Granted scope %@" = "Granted scope %@";
 "Personal access token" = "Personal access token";
+"Personal access token entry is hidden until you choose to add or replace it." = "Personal access token entry is hidden until you choose to add or replace it.";
+"Replace personal access token" = "Replace personal access token";
+"Enter personal access token" = "Enter personal access token";
 "Save or Replace with PAT" = "Save or Replace with PAT";
+"Cancel PAT entry" = "Cancel PAT entry";
 "Delete Local Credential" = "Delete Local Credential";
 "OAuth App client ID" = "OAuth App client ID";
 "Replace with GitHub OAuth" = "Replace with GitHub OAuth";
@@ -123,6 +132,7 @@
 "Idle" = "Idle";
 "No repositories loaded." = "No repositories loaded.";
 "%d queued items" = "%d queued items";
+"%d pull request" = "%d pull request";
 "%d pull requests" = "%d pull requests";
 "Draft Ready" = "Draft Ready";
 "Stale" = "Stale";
@@ -241,6 +251,7 @@
 "Invalid inline targets: %@" = "Invalid inline targets: %@";
 "Search \"%@\" - %d visible" = "Search \"%@\" - %d visible";
 "Clear search" = "Clear search";
+"No open pull requests in this repository." = "No open pull requests in this repository.";
 "Search \"%@\" is hiding pull requests in this repository. Clear search to show saved drafts and open PRs again." = "Search \"%@\" is hiding pull requests in this repository. Clear search to show saved drafts and open PRs again.";
 "Search \"%@\" is hiding pull requests in the current scope. Clear search to show saved drafts and open PRs again." = "Search \"%@\" is hiding pull requests in the current scope. Clear search to show saved drafts and open PRs again.";
 "Safety has not been refreshed yet." = "Safety has not been refreshed yet.";

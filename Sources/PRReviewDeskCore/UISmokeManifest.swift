@@ -26,7 +26,10 @@ public struct UISmokeManifest: Equatable, Hashable, Sendable {
             "Search repositories",
             "No matching repositories",
             "Clear search",
+            "No open pull requests in this repository.",
+            "Watch all",
             "Review Inspector",
+            "Awaiting selection",
             "Review Body",
             "Inline Comments",
             "Submit Review Preview",
@@ -35,7 +38,10 @@ public struct UISmokeManifest: Equatable, Hashable, Sendable {
             "Regenerate",
             "Last checked at %@ UTC.",
             "Search actions",
-            "Readiness"
+            "Readiness",
+            "Replace personal access token",
+            "Enter personal access token",
+            "Cancel Review Generation"
         ]
     )
 

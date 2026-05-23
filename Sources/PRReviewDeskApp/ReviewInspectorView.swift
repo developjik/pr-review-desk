@@ -12,11 +12,16 @@ struct ReviewInspectorView: View {
                     .font(.headline)
 
                 if model.selectedPullRequest == nil {
-                    ContentUnavailableView(
-                        AppL10n.string("No Pull Request Selected"),
-                        systemImage: "sidebar.trailing",
-                        description: Text(AppL10n.string("Select a pull request to edit drafts and submit reviews."))
-                    )
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(AppL10n.string("Awaiting selection"), systemImage: "sidebar.trailing")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+
+                        Text(AppL10n.string("Draft and submit controls appear here after you choose a pull request."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 } else {
                     ReviewEventSection(model: model)
 
