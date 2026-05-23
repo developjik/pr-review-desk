@@ -35,9 +35,14 @@ enum PrivateRepositoryConsentTests {
             PrivateRepositoryConsentPolicy.request(for: repository, acknowledgedRepositories: [])
         )
         try expectEqual(request.repositoryFullName, "developjik/private-desk")
-        try expectTrue(request.outboundDataDescriptions.contains("PR metadata"))
-        try expectTrue(request.outboundDataDescriptions.contains("Reviewable patch content"))
-        try expectTrue(request.outboundDataDescriptions.contains("PR body, existing comments, and check status summaries"))
+        try expectTrue(request.outboundDataDescriptions.contains("Pull request title, description, and author"))
+        try expectTrue(request.outboundDataDescriptions.contains("Reviewable code changes"))
+        try expectTrue(request.outboundDataDescriptions.contains("Existing comments and check summaries"))
+        try expectTrue(request.outboundDataDescriptions.allSatisfy {
+            !$0.localizedCaseInsensitiveContains("metadata")
+                && !$0.localizedCaseInsensitiveContains("patch")
+                && !$0.localizedCaseInsensitiveContains("context")
+        })
 
         try expectEqual(
             PrivateRepositoryConsentPolicy.request(

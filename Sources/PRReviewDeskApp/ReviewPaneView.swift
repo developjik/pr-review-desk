@@ -3,6 +3,7 @@ import PRReviewDeskCore
 
 struct ReviewPaneView: View {
     @ObservedObject var model: AppModel
+    var onFocusInlineComment: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -19,11 +20,29 @@ struct ReviewPaneView: View {
                     ReadinessChecklistView(model: model, mode: .compact)
                         .frame(maxWidth: 520, alignment: .leading)
 
-                    ContentUnavailableView(
-                        AppL10n.string("No Pull Request Selected"),
-                        systemImage: "text.badge.plus",
-                        description: Text(AppL10n.string("Choose a repository and open pull request."))
-                    )
+                    ContentUnavailableView {
+                        Label(AppL10n.string("No Pull Request Selected"), systemImage: "text.badge.plus")
+                    } description: {
+                        Text(AppL10n.string("Choose a repository and open pull request."))
+                    } actions: {
+                        if model.hasToken {
+                            Button {
+                                Task {
+                                    await model.refreshActiveScope()
+                                }
+                            } label: {
+                                Label(AppL10n.string("Load repositories"), systemImage: "arrow.clockwise")
+                            }
+                            .accessibilityHint(AppL10n.string("Loads repositories and open PRs from GitHub."))
+                        } else {
+                            Button {
+                                model.startOAuthDeviceSignIn()
+                            } label: {
+                                Label(AppL10n.string("Sign in with GitHub"), systemImage: "person.crop.circle.badge.checkmark")
+                            }
+                            .accessibilityHint(AppL10n.string("Opens GitHub sign-in and then checks repository access."))
+                        }
+                    }
                 }
             }
         }
@@ -35,15 +54,33 @@ struct ReviewPaneView: View {
     @ViewBuilder
     private var reviewWorkspace: some View {
         if model.changedFiles.isEmpty {
-            ContentUnavailableView(
-                AppL10n.string("No Changed Files Loaded"),
-                systemImage: "doc.text.magnifyingglass",
-                description: Text(AppL10n.string("Refresh the pull request or generate a review to load changed files."))
-            )
+            ContentUnavailableView {
+                Label(AppL10n.string("No Changed Files Loaded"), systemImage: "doc.text.magnifyingglass")
+            } description: {
+                Text(AppL10n.string("Refresh the pull request or generate a review to load changed files."))
+            } actions: {
+                Button {
+                    Task {
+                        await model.refreshActiveScope()
+                    }
+                } label: {
+                    Label(AppL10n.string("Refresh pull request"), systemImage: "arrow.clockwise")
+                }
+                .accessibilityHint(AppL10n.string("Loads the latest changed files for this PR."))
+                .disabled(!model.canRefreshActiveScope)
+
+                Button {
+                    model.startGenerateReview()
+                } label: {
+                    Label(AppL10n.string(model.aiReviewDraftActionPresentation.title), systemImage: "sparkles")
+                }
+                .accessibilityHint(AppL10n.string("Creates an editable AI review draft. Nothing is posted to GitHub."))
+                .disabled(!model.canGenerateReview)
+            }
         } else {
             switch ReviewWorkspaceLayoutPolicy.fileNavigationStyle(fileCount: model.changedFiles.count) {
             case .inline:
-                SelectedFileDetailView(model: model)
+                SelectedFileDetailView(model: model, onFocusInlineComment: onFocusInlineComment)
             case .sidebar:
                 HSplitView {
                     ChangedFilesPane(model: model)
@@ -51,7 +88,7 @@ struct ReviewPaneView: View {
                             minWidth: CGFloat(ReviewWorkspaceLayoutPolicy.changedFilesMinimumPaneWidth),
                             idealWidth: CGFloat(ReviewWorkspaceLayoutPolicy.changedFilesIdealPaneWidth)
                         )
-                    SelectedFileDetailView(model: model)
+                    SelectedFileDetailView(model: model, onFocusInlineComment: onFocusInlineComment)
                         .frame(
                             minWidth: CGFloat(ReviewWorkspaceLayoutPolicy.selectedFileMinimumPaneWidth),
                             idealWidth: CGFloat(ReviewWorkspaceLayoutPolicy.selectedFileIdealPaneWidth)
@@ -96,7 +133,7 @@ private struct ReviewCoverageBanner: View {
             .foregroundStyle(hasOmittedFiles ? AppTheme.foreground(.warning) : AppTheme.foreground(.success))
 
             Text(AppL10n.string(
-                "%d of %d changed files have reviewable patches.",
+                "%d of %d changed files have reviewable changes.",
                 summary.reviewableFileCount,
                 summary.totalFileCount
             ))

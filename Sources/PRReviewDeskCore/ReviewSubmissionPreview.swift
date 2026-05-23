@@ -30,19 +30,19 @@ public struct ReviewSubmissionPreview: Equatable, Hashable, Sendable {
 
     public var safetyMessage: String {
         if safetyState.isStale {
-            return "Draft is stale. Regenerate before submitting."
+            return "PR changed after this draft. Regenerate before posting."
         }
 
         if !safetyState.invalidSelectedInlineComments.isEmpty {
-            return "\(safetyState.invalidSelectedInlineComments.count) selected inline comments target invalid diff positions."
+            return "\(safetyState.invalidSelectedInlineComments.count) selected comments no longer match this PR."
         }
 
         if !safetyState.couldValidateDiffPositions {
-            return "Refresh safety before submitting."
+            return "Check the PR again before posting."
         }
 
         if !safetyState.canSubmit {
-            return "Refresh safety before submitting."
+            return "Check the PR again before posting."
         }
 
         return "Ready to submit."

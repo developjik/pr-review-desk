@@ -121,7 +121,7 @@ enum ReviewSubmissionPreviewTests {
         )
 
         try expectEqual(preview.canSubmit, false)
-        try expectEqual(preview.safetyMessage, "Draft is stale. Regenerate before submitting.")
+        try expectEqual(preview.safetyMessage, "PR changed after this draft. Regenerate before posting.")
         try expectEqual(preview.safetyState.invalidSelectedInlineComments, [
             InvalidInlineComment(path: "Sources/App.swift", position: 99)
         ])
@@ -145,7 +145,7 @@ enum ReviewSubmissionPreviewTests {
         )
 
         try expectEqual(preview.canSubmit, false)
-        try expectEqual(preview.safetyMessage, "Refresh safety before submitting.")
+        try expectEqual(preview.safetyMessage, "Check the PR again before posting.")
     }
 
     private static func testPreviewReportsWhenSafetyWasLastChecked() throws {

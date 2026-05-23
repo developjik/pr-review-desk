@@ -133,7 +133,7 @@ enum ModelsTests {
         try expectEqual(summary.omittedFileCount, 2)
         try expectEqual(summary.omittedAdditions, 10)
         try expectEqual(summary.omittedDeletions, 2)
-        try expectEqual(summary.warningMessage, "2 of 3 changed files do not have reviewable patches and will not be sent to Codex.")
+        try expectEqual(summary.warningMessage, "2 of 3 changed files do not have reviewable changes and will not be sent to Codex.")
         try expectEqual(summary.generationBlockReason, nil)
     }
 
@@ -153,7 +153,7 @@ enum ModelsTests {
         try expectEqual(summary.totalFileCount, 1)
         try expectEqual(summary.reviewableFileCount, 0)
         try expectEqual(summary.omittedFileCount, 1)
-        try expectEqual(summary.generationBlockReason, "No changed files have reviewable patches for Codex.")
+        try expectEqual(summary.generationBlockReason, "No changed files have reviewable changes for Codex.")
     }
 
     private static func testSensitiveTextRedactorRemovesAuthorizationAndTokenLikeValues() throws {

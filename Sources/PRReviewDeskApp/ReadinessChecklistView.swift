@@ -67,6 +67,7 @@ struct ReadinessChecklistView: View {
                         Label(AppL10n.string(item.actionTitle), systemImage: actionIcon(for: item.action))
                     }
                     .controlSize(.small)
+                    .accessibilityHint(actionHint(for: item.action))
                     .disabled(isActionDisabled(item.action))
                 }
             }
@@ -157,6 +158,21 @@ struct ReadinessChecklistView: View {
             return "doc.on.doc"
         case .acknowledgePrivacyDisclosure:
             return "checkmark.shield"
+        }
+    }
+
+    private func actionHint(for action: ReadinessChecklistAction) -> String {
+        switch action {
+        case .loadGitHubCredential:
+            return AppL10n.string("Opens GitHub sign-in and then checks repository access.")
+        case .validateGitHubToken:
+            return AppL10n.string("Checks that GitHub can read repositories and reviews for this account.")
+        case .checkCodexReadiness:
+            return AppL10n.string("Checks whether AI review setup is ready on this Mac.")
+        case .copyCodexLoginCommand:
+            return AppL10n.string("Copies the ChatGPT sign-in step.")
+        case .acknowledgePrivacyDisclosure:
+            return AppL10n.string("Marks the privacy disclosure as read so setup can continue.")
         }
     }
 }

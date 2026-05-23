@@ -31,18 +31,18 @@ public enum ReviewInboxFilterPresentation {
 
         switch section {
         case .draftReady:
-            return "No generated drafts are waiting for review."
+            return "No generated drafts are waiting for review. Add drafts for this repository or generate a draft from an open PR."
         case .stale:
-            return "No stale or failed drafts need attention."
+            return "No drafts need attention. Refresh GitHub to check for updated PRs."
         case .running:
-            return "No queued reviews are running."
+            return "No drafts are being created. Add drafts for a repository to fill this list."
         case .needsSetup:
-            return "The app is ready."
+            return "Setup is complete. Load repositories to start a review."
         case .submitted:
-            return "No reviews have been submitted from this queue."
+            return "No reviews have been submitted from saved drafts. Load repositories to continue reviewing."
         case .recents:
             return hasSelectedRepository
-                ? "No open pull requests in this repository."
+                ? "No open pull requests in this repository. Refresh or choose another repository."
                 : "Select a repository to load open pull requests."
         }
     }

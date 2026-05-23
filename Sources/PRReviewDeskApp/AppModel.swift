@@ -87,6 +87,7 @@ final class AppModel: ObservableObject {
     @Published private var codexLoginReadinessStatus: ProbeReadinessStatus = .unknown
     @Published var isSubmitConfirmationPresented = false
     @Published var backgroundReviewQueue = BackgroundReviewQueue()
+    @Published private(set) var storedReviewDrafts: [StoredReviewDraft] = []
     @Published var isBackgroundReviewQueueRunning = false
     @Published var isPrivacyDisclosureAcknowledged = false {
         didSet {
@@ -190,9 +191,11 @@ final class AppModel: ObservableObject {
             hasSubmittableDraft: hasSubmittableDraft,
             hasDraft: draft != nil,
             isWorking: isWorking,
+            hasCancelableOperation: canCancelCurrentOperation,
             hasSelectedFile: selectedChangedFile != nil,
             hasFocusedInlineComment: focusedInlineCommentTarget != nil,
-            supportsSelectedFileRegeneration: false
+            supportsSelectedFileRegeneration: false,
+            canCopyCodexLoginCommand: codexCLIReadinessStatus == .ready
         )
     }
 
@@ -220,6 +223,7 @@ final class AppModel: ObservableObject {
                 )
             })
         }
+        rows.append(contentsOf: storedReviewDraftRows())
 
         var seenIDs = Set<String>()
         return rows.filter { row in
@@ -261,11 +265,11 @@ final class AppModel: ObservableObject {
         commandAvailability.canPreviewReviewSubmission
     }
 
-    var canWatchSelectedPullRequest: Bool {
+    var canAddDraftForSelectedPullRequest: Bool {
         hasToken && selectedRepository != nil && selectedPullRequest != nil && selectedRepositoryAccessDecision.isAllowed
     }
 
-    var canWatchSelectedRepository: Bool {
+    var canAddDraftsForSelectedRepository: Bool {
         hasToken && selectedRepository != nil && !pullRequests.isEmpty && selectedRepositoryAccessDecision.isAllowed
     }
 
@@ -323,12 +327,12 @@ final class AppModel: ObservableObject {
         }
 
         if state.isStale {
-            return AppL10n.string("Draft is stale. Regenerate before submitting.")
+            return AppL10n.string("PR changed after this draft. Regenerate before posting.")
         }
 
         if !state.invalidSelectedInlineComments.isEmpty {
             return AppL10n.string(
-                "%d selected inline comments target invalid diff positions.",
+                "%d selected comments no longer match this PR.",
                 state.invalidSelectedInlineComments.count
             )
         }
@@ -343,6 +347,7 @@ final class AppModel: ObservableObject {
         gitHubOAuthClientID: String = AppModel.defaultGitHubOAuthClientID,
         codexAgent: CodexReviewAgent = CodexReviewAgent(),
         codexAuthenticationChecker: any CodexAuthenticationChecking = CodexCLIAuthenticationChecker(),
+        initialCodexAuthenticationState: CodexAuthenticationState? = nil,
         reviewDraftStore: any ReviewDraftStore = FileReviewDraftStore.appDefault(),
         userDefaults: UserDefaults = .standard
     ) {
@@ -367,13 +372,17 @@ final class AppModel: ObservableObject {
             userDefaults.stringArray(forKey: Self.privateRepositoryConsentAcknowledgementsKey) ?? []
         )
         self.privateRepositoryConsentAcknowledgementCount = privateRepositoryConsentAcknowledgements.count
+        reloadStoredReviewDrafts()
+        if let initialCodexAuthenticationState {
+            applyCodexAuthenticationState(initialCodexAuthenticationState, announceStatus: false)
+        }
     }
 
     func loadStoredToken() {
         do {
             guard let credential = try credentialStore.loadCredential(), !credential.accessToken.isEmpty else {
                 clearGitHubCredentialState(
-                    tokenValidationStatus: AppL10n.string("No OAuth credential saved.")
+                    tokenValidationStatus: AppL10n.string("No GitHub sign-in saved.")
                 )
                 return
             }
@@ -381,7 +390,7 @@ final class AppModel: ObservableObject {
             guard case .oauthUserToken = credential else {
                 try credentialStore.deleteCredential()
                 clearGitHubCredentialState(
-                    tokenValidationStatus: AppL10n.string("No OAuth credential saved."),
+                    tokenValidationStatus: AppL10n.string("No GitHub sign-in saved."),
                     statusMessage: AppL10n.string("Unsupported saved GitHub credential removed. Sign in with GitHub.")
                 )
                 return
@@ -413,15 +422,18 @@ final class AppModel: ObservableObject {
             return
         }
 
+        await restoreGitHubSession()
+    }
+
+    func retryGitHubSessionRestore() async {
+        await restoreGitHubSession()
+    }
+
+    private func restoreGitHubSession() async {
         loadStoredToken()
         if hasToken {
             await refreshRepositories()
         }
-    }
-
-    func retryGitHubSessionRestore() async {
-        launchSessionRestoreGate.reset()
-        await restoreGitHubSessionOnLaunchIfNeeded()
     }
 
     func refreshLocalizedDefaults() {
@@ -449,8 +461,8 @@ final class AppModel: ObservableObject {
         do {
             try credentialStore.deleteCredential()
             clearGitHubCredentialState(
-                tokenValidationStatus: AppL10n.string("No OAuth credential saved."),
-                statusMessage: AppL10n.string("GitHub OAuth credential deleted.")
+                tokenValidationStatus: AppL10n.string("No GitHub sign-in saved."),
+                statusMessage: AppL10n.string("GitHub sign-in deleted.")
             )
         } catch {
             statusMessage = AppL10n.string("Could not delete token: %@", String(describing: error))
@@ -500,7 +512,7 @@ final class AppModel: ObservableObject {
             return
         }
 
-        await runWorking(AppL10n.string("Validating GitHub OAuth credential...")) {
+        await runWorking(AppL10n.string("Checking GitHub sign-in...")) {
             let validation = try await githubClient.validateToken()
             grantedGitHubScopes = validation.scopes
             validatedGitHubLogin = validation.login
@@ -660,42 +672,42 @@ final class AppModel: ObservableObject {
         enqueueGenerateReview()
     }
 
-    func startWatchingSelectedPullRequest() {
+    func addSelectedPullRequestDraft() {
         guard hasToken && selectedRepository != nil && selectedPullRequest != nil else {
-            statusMessage = AppL10n.string("Select a pull request to watch.")
+            statusMessage = AppL10n.string("Select a pull request before adding a draft.")
             return
         }
 
         if let selectedRepository,
-           denyIfRepositoryAccessInsufficient(for: selectedRepository, operation: AppL10n.string("Watch pull request")) {
+           denyIfRepositoryAccessInsufficient(for: selectedRepository, operation: AppL10n.string("Add pull request draft")) {
             return
         }
 
         if let consentRequest = privateRepositoryConsentRequestForSelectedRepository() {
             pendingPrivateRepositoryConsentContinuation = .enqueueSelectedPullRequest
             pendingPrivateRepositoryConsent = consentRequest
-            statusMessage = AppL10n.string("Private repository consent required before queued Codex review generation.")
+            statusMessage = AppL10n.string("Private repository consent required before creating saved drafts.")
             return
         }
 
         enqueueSelectedPullRequestForBackgroundReview()
     }
 
-    func startWatchingSelectedRepository() {
+    func addSelectedRepositoryDrafts() {
         guard hasToken && selectedRepository != nil && !pullRequests.isEmpty else {
-            statusMessage = AppL10n.string("Select a repository with open pull requests to watch.")
+            statusMessage = AppL10n.string("Select a repository with open pull requests before adding drafts.")
             return
         }
 
         if let selectedRepository,
-           denyIfRepositoryAccessInsufficient(for: selectedRepository, operation: AppL10n.string("Watch repository")) {
+           denyIfRepositoryAccessInsufficient(for: selectedRepository, operation: AppL10n.string("Add repository drafts")) {
             return
         }
 
         if let consentRequest = privateRepositoryConsentRequestForSelectedRepository() {
             pendingPrivateRepositoryConsentContinuation = .enqueueSelectedRepository
             pendingPrivateRepositoryConsent = consentRequest
-            statusMessage = AppL10n.string("Private repository consent required before queued Codex review generation.")
+            statusMessage = AppL10n.string("Private repository consent required before creating saved drafts.")
             return
         }
 
@@ -723,7 +735,7 @@ final class AppModel: ObservableObject {
         }
 
         guard backgroundReviewQueue.hasQueuedItems else {
-            statusMessage = AppL10n.string("No queued background reviews.")
+            statusMessage = AppL10n.string("No drafts are waiting to be created.")
             return
         }
 
@@ -738,12 +750,27 @@ final class AppModel: ObservableObject {
             return
         }
 
-        statusMessage = AppL10n.string("Cancelling background review queue...")
+        statusMessage = AppL10n.string("Stopping draft creation...")
         backgroundQueueTask?.cancel()
     }
 
     func removeBackgroundQueueItem(id: String) {
+        guard let item = backgroundReviewQueue.items.first(where: { $0.id == id }) else {
+            return
+        }
+
         backgroundReviewQueue.remove(id: id)
+        deleteStoredDraftsIfNeeded(for: item)
+        statusMessage = AppL10n.string(
+            "Removed draft list item for %@#%d.",
+            item.repository.fullName,
+            item.pullRequest.number
+        )
+    }
+
+    func retryBackgroundQueueItem(id: String) {
+        backgroundReviewQueue.markQueued(id: id)
+        startBackgroundReviewQueue()
     }
 
     func requestSubmitReview() {
@@ -772,7 +799,7 @@ final class AppModel: ObservableObject {
             return
         }
 
-        let didRefresh = await runWorking(AppL10n.string("Refreshing submit safety...")) {
+        let didRefresh = await runWorking(AppL10n.string("Checking PR before posting...")) {
             let previousSelectedFilePath = selectedChangedFilePath
             let currentPullRequest = try await githubClient.pullRequestDetails(
                 repository: selectedRepository,
@@ -788,7 +815,7 @@ final class AppModel: ObservableObject {
             selectedChangedFilePath = changedFiles.first(where: { $0.path == previousSelectedFilePath })?.path ?? changedFiles.first?.path
             preflightHeadSha = currentPullRequest.headSha
             submitSafetyLastCheckedAt = Date()
-            markWatchedDraftStaleIfNeeded(repository: selectedRepository, pullRequest: currentPullRequest)
+            markSavedDraftStaleIfNeeded(repository: selectedRepository, pullRequest: currentPullRequest)
         }
         guard didRefresh else {
             return
@@ -797,7 +824,7 @@ final class AppModel: ObservableObject {
         if ReviewSubmissionConfirmationPolicy.requiresConfirmation(for: selectedEvent) {
             isSubmitConfirmationPresented = true
             statusMessage = canSubmitReview
-                ? AppL10n.string("Submit safety refreshed. Review the preview before posting.")
+                ? AppL10n.string("Pre-submit check complete. Review the preview before posting.")
                 : submitSafetyMessage
         }
     }
@@ -892,7 +919,7 @@ final class AppModel: ObservableObject {
             return
         }
 
-        await runWorking(AppL10n.string("Refreshing submit safety...")) {
+        await runWorking(AppL10n.string("Checking PR before posting...")) {
             let previousSelectedFilePath = selectedChangedFilePath
             let currentPullRequest = try await githubClient.pullRequestDetails(
                 repository: selectedRepository,
@@ -908,8 +935,8 @@ final class AppModel: ObservableObject {
             selectedChangedFilePath = changedFiles.first(where: { $0.path == previousSelectedFilePath })?.path ?? changedFiles.first?.path
             preflightHeadSha = currentPullRequest.headSha
             submitSafetyLastCheckedAt = Date()
-            markWatchedDraftStaleIfNeeded(repository: selectedRepository, pullRequest: currentPullRequest)
-            statusMessage = AppL10n.string("Submit safety refreshed. %@", submitSafetyMessage)
+            markSavedDraftStaleIfNeeded(repository: selectedRepository, pullRequest: currentPullRequest)
+            statusMessage = AppL10n.string("Pre-submit check complete. %@", submitSafetyMessage)
         }
     }
 
@@ -963,6 +990,35 @@ final class AppModel: ObservableObject {
         persistCurrentDraftIfPossible()
     }
 
+    func deselectInlineComment(path: String, position: Int) {
+        guard let index = draft?.inlineComments.firstIndex(where: {
+            $0.path == path && $0.position == position
+        }) else {
+            return
+        }
+
+        draft?.inlineComments[index].isSelected = false
+        persistCurrentDraftIfPossible()
+        statusMessage = AppL10n.string("Deselected %@ comment spot %d.", path, position)
+    }
+
+    func revealInlineComment(path: String, position: Int) {
+        guard let comment = draft?.inlineComments.first(where: {
+            $0.path == path && $0.position == position
+        }) else {
+            selectedChangedFilePath = path
+            statusMessage = AppL10n.string("Selected %@.", path)
+            return
+        }
+
+        focusInlineComment(comment)
+        if submitSafetyState.invalidSelectedInlineComments.contains(where: {
+            $0.path == path && $0.position == position
+        }) {
+            statusMessage = AppL10n.string("Opened this comment in the inspector. Its original diff spot may no longer exist.")
+        }
+    }
+
     func focusInlineComment(_ comment: InlineCommentDraft) {
         selectedChangedFilePath = comment.path
         focusedInlineCommentTarget = InlineCommentFocusTarget(
@@ -971,7 +1027,7 @@ final class AppModel: ObservableObject {
             position: comment.position
         )
         focusedDiffLineIndex = nil
-        statusMessage = AppL10n.string("Focused %@ at diff position %d.", comment.path, comment.position)
+        statusMessage = AppL10n.string("Focused %@ comment in the diff and inspector.", comment.path)
     }
 
     func revealFocusedInlineComment() {
@@ -981,7 +1037,7 @@ final class AppModel: ObservableObject {
         }
 
         selectedChangedFilePath = target.path
-        statusMessage = AppL10n.string("Revealed %@ at diff position %d.", target.path, target.position)
+        statusMessage = AppL10n.string("Revealed %@ comment in the diff.", target.path)
     }
 
     func focusNextInlineComment() {
@@ -1056,6 +1112,7 @@ final class AppModel: ObservableObject {
     func discardCurrentDraft() {
         if let key = currentDraftKey {
             try? reviewDraftStore.deleteDraft(key: key)
+            storedReviewDrafts.removeAll { $0.key == key }
         }
 
         draft = nil
@@ -1112,7 +1169,31 @@ final class AppModel: ObservableObject {
     func copyCodexLoginCommand() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString("codex login", forType: .string)
-        statusMessage = AppL10n.string("Copied codex login. Run it in Terminal, sign in with ChatGPT, then check Codex readiness.")
+        statusMessage = AppL10n.string("Copied the Codex sign-in step. Paste it in Terminal, sign in with ChatGPT, then return and check again.")
+    }
+
+    func copyHomebrewCodexInstallCommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("brew install codex", forType: .string)
+        statusMessage = AppL10n.string("Copied Codex Homebrew install command. Paste it in Terminal, wait for install to finish, then check Codex again.")
+    }
+
+    func copyNPMCodexInstallCommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("npm install -g @openai/codex", forType: .string)
+        statusMessage = AppL10n.string("Copied Codex npm install command. Paste it in Terminal, wait for install to finish, then check Codex again.")
+    }
+
+    func openTerminalForCodexLogin() {
+        copyCodexLoginCommand()
+
+        guard let terminalURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else {
+            statusMessage = AppL10n.string("Copied the Codex sign-in step, but Terminal could not be opened.")
+            return
+        }
+
+        NSWorkspace.shared.open(terminalURL)
+        statusMessage = AppL10n.string("Opened Terminal and copied the Codex sign-in step. Paste it, sign in with ChatGPT, then return and check again.")
     }
 
     func openSelectedPullRequestInBrowser() {
@@ -1185,19 +1266,19 @@ final class AppModel: ObservableObject {
 
     private func localizedCoverageStatus(_ summary: ReviewCoverageSummary) -> String {
         if summary.reviewableFileCount == 0 {
-            return AppL10n.string("No changed files have reviewable patches for Codex.")
+            return AppL10n.string("No changed files have reviewable changes for Codex.")
         }
 
         if summary.omittedFileCount > 0 {
             return AppL10n.string(
-                "%d of %d changed files do not have reviewable patches and will not be sent to Codex.",
+                "%d of %d changed files do not have reviewable changes and will not be sent to Codex.",
                 summary.omittedFileCount,
                 summary.totalFileCount
             )
         }
 
         return AppL10n.string(
-            "All %d changed files have reviewable patches for Codex.",
+            "All %d changed files have reviewable changes for Codex.",
             summary.totalFileCount
         )
     }
@@ -1283,14 +1364,12 @@ final class AppModel: ObservableObject {
                 grantedGitHubScopes = token.scopes
                 validatedGitHubLogin = nil
                 credentialKindDescription = AppL10n.string(GitHubCredentialKind.oauthUserToken.displayName)
-                tokenValidationStatus = AppL10n.string(
-                    "OAuth token saved. Validate to confirm login. Scopes: %@.",
-                    scopeSummary(token.scopes)
-                )
+                tokenValidationStatus = AppL10n.string("GitHub signed in. Checking access...")
                 tokenValidationReadinessStatus = .unknown
                 hasToken = true
                 oauthStatus = AppL10n.string("Authorized with GitHub.")
-                statusMessage = AppL10n.string("GitHub OAuth token saved.")
+                statusMessage = AppL10n.string("GitHub signed in. Checking repository access...")
+                await validateCurrentToken()
                 await refreshRepositories()
             case .expiredToken:
                 oauthStatus = AppL10n.string("GitHub sign-in code expired. Start again.")
@@ -1336,7 +1415,7 @@ final class AppModel: ObservableObject {
         }
 
         backgroundReviewQueue.enqueue(repository: selectedRepository, pullRequest: selectedPullRequest)
-        statusMessage = AppL10n.string("Queued #%d for draft-only background review.", selectedPullRequest.number)
+        statusMessage = AppL10n.string("Added #%d to draft creation.", selectedPullRequest.number)
         startBackgroundReviewQueue()
     }
 
@@ -1346,14 +1425,14 @@ final class AppModel: ObservableObject {
         }
 
         guard !pullRequests.isEmpty else {
-            statusMessage = AppL10n.string("No open pull requests to watch.")
+            statusMessage = AppL10n.string("No open pull requests to add.")
             return
         }
 
         for pullRequest in pullRequests {
             backgroundReviewQueue.enqueue(repository: selectedRepository, pullRequest: pullRequest)
         }
-        statusMessage = AppL10n.string("Queued %d pull requests for draft-only background review.", pullRequests.count)
+        statusMessage = AppL10n.string("Added %d pull requests to draft creation.", pullRequests.count)
         startBackgroundReviewQueue()
     }
 
@@ -1370,7 +1449,7 @@ final class AppModel: ObservableObject {
 
         while let item = backgroundReviewQueue.nextQueuedItem {
             if Task.isCancelled {
-                statusMessage = AppL10n.string("Background review queue cancelled.")
+                statusMessage = AppL10n.string("Draft creation stopped.")
                 return
             }
 
@@ -1380,12 +1459,12 @@ final class AppModel: ObservableObject {
                 let recoverySuggestion = AppL10n.string(accessDecision.recoverySuggestion)
                 backgroundReviewQueue.markFailed(id: item.id, message: summary)
                 recoverableError = RecoverableErrorDetails(
-                    operation: AppL10n.string("Background review for #%d", item.pullRequest.number),
+                    operation: AppL10n.string("Create draft for #%d", item.pullRequest.number),
                     summary: summary,
                     details: "\(summary)\n\(recoverySuggestion)",
                     recoverySuggestion: recoverySuggestion
                 )
-                statusMessage = AppL10n.string("Background review blocked for #%d.", item.pullRequest.number)
+                statusMessage = AppL10n.string("Draft creation blocked for #%d.", item.pullRequest.number)
                 continue
             }
 
@@ -1396,7 +1475,7 @@ final class AppModel: ObservableObject {
                 backgroundReviewQueue.markQueued(id: item.id, message: AppL10n.string("Private repository consent required."))
                 pendingPrivateRepositoryConsentContinuation = .runBackgroundQueue
                 pendingPrivateRepositoryConsent = consentRequest
-                statusMessage = AppL10n.string("Private repository consent required before queued Codex review generation.")
+                statusMessage = AppL10n.string("Private repository consent required before creating saved drafts.")
                 return
             }
 
@@ -1409,18 +1488,18 @@ final class AppModel: ObservableObject {
                     let recoverySuggestion = codexAuthenticationRecoverySuggestion(for: codexAuthState)
                     backgroundReviewQueue.markFailed(id: item.id, message: summary)
                     recoverableError = RecoverableErrorDetails(
-                        operation: AppL10n.string("Background review for #%d", item.pullRequest.number),
+                        operation: AppL10n.string("Create draft for #%d", item.pullRequest.number),
                         summary: summary,
                         details: "\(summary)\n\(recoverySuggestion)",
                         recoverySuggestion: recoverySuggestion
                     )
-                    statusMessage = AppL10n.string("Background review blocked for #%d.", item.pullRequest.number)
+                    statusMessage = AppL10n.string("Draft creation blocked for #%d.", item.pullRequest.number)
                     continue
                 }
 
                 backgroundReviewQueue.markGenerating(id: item.id)
                 statusMessage = AppL10n.string(
-                    "Generating draft-only review for %@#%d...",
+                    "Creating draft for %@#%d...",
                     item.repository.fullName,
                     item.pullRequest.number
                 )
@@ -1453,7 +1532,8 @@ final class AppModel: ObservableObject {
                     draft: generated,
                     reviewBody: body,
                     selectedEvent: .comment,
-                    savedAt: Date()
+                    savedAt: Date(),
+                    repositoryIsPrivate: item.repository.isPrivate
                 ))
 
                 backgroundReviewQueue.markDraftReady(
@@ -1480,22 +1560,22 @@ final class AppModel: ObservableObject {
                 )
             } catch is CancellationError {
                 backgroundReviewQueue.markQueued(id: item.id, message: AppL10n.string("Cancelled before generation finished."))
-                statusMessage = AppL10n.string("Background review queue cancelled.")
+                statusMessage = AppL10n.string("Draft creation stopped.")
                 return
             } catch {
                 let details = SensitiveTextRedactor.redact("\(error)")
                 backgroundReviewQueue.markFailed(id: item.id, message: firstLine(details))
                 recoverableError = RecoverableErrorDetails(
-                    operation: AppL10n.string("Background review for #%d", item.pullRequest.number),
+                    operation: AppL10n.string("Create draft for #%d", item.pullRequest.number),
                     summary: firstLine(details),
                     details: details,
                     recoverySuggestion: recoverySuggestion(for: error)
                 )
-                statusMessage = AppL10n.string("Background review failed for #%d.", item.pullRequest.number)
+                statusMessage = AppL10n.string("Draft creation failed for #%d.", item.pullRequest.number)
             }
         }
 
-        statusMessage = AppL10n.string("Background review queue finished.")
+        statusMessage = AppL10n.string("Draft creation finished.")
     }
 
     private func isCurrentSelection(repository: Repository, pullRequest: PullRequest) -> Bool {
@@ -1534,9 +1614,13 @@ final class AppModel: ObservableObject {
 
     private func draftForTriageRow(repository: Repository, pullRequest: PullRequest) -> ReviewDraft? {
         guard isCurrentSelection(repository: repository, pullRequest: pullRequest) else {
-            return backgroundReviewQueue.items.first {
+            if let queuedDraft = backgroundReviewQueue.items.first(where: {
                 $0.repository.fullName == repository.fullName && $0.pullRequest.number == pullRequest.number
-            }?.draft
+            })?.draft {
+                return queuedDraft
+            }
+
+            return storedDraftForTriageRow(repository: repository, pullRequest: pullRequest)?.draft
         }
 
         return draft
@@ -1556,12 +1640,86 @@ final class AppModel: ObservableObject {
             return reviewedHeadSha
         }
 
-        return backgroundReviewQueue.items.first {
+        if let queuedHeadSha = backgroundReviewQueue.items.first(where: {
             $0.repository.fullName == repository.fullName && $0.pullRequest.number == pullRequest.number
-        }?.reviewedHeadSha
+        })?.reviewedHeadSha {
+            return queuedHeadSha
+        }
+
+        return storedDraftForTriageRow(repository: repository, pullRequest: pullRequest)?.key.headSha
     }
 
-    private func markWatchedDraftStaleIfNeeded(repository: Repository, pullRequest: PullRequest) {
+    private func storedDraftForTriageRow(repository: Repository, pullRequest: PullRequest) -> StoredReviewDraft? {
+        storedReviewDrafts.first {
+            $0.key.repositoryFullName == repository.fullName
+                && $0.key.pullRequestNumber == pullRequest.number
+        }
+    }
+
+    private func storedReviewDraftRows() -> [PullRequestTriageRow] {
+        storedReviewDrafts.compactMap { storedDraft in
+            guard let repository = repository(for: storedDraft) else {
+                return nil
+            }
+            let pullRequest = pullRequest(for: storedDraft)
+
+            return PullRequestTriageRow(
+                repository: repository,
+                pullRequest: pullRequest,
+                draft: storedDraft.draft,
+                reviewedHeadSha: storedDraft.key.headSha
+            )
+        }
+    }
+
+    private func repository(for storedDraft: StoredReviewDraft) -> Repository? {
+        let repositoryFullName = storedDraft.key.repositoryFullName
+        if let repository = repositories.first(where: { $0.fullName == repositoryFullName }) {
+            return repository
+        }
+
+        let parts = repositoryFullName.split(separator: "/", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else {
+            return nil
+        }
+
+        return Repository(
+            id: stableRepositoryID(for: repositoryFullName),
+            owner: parts[0],
+            name: parts[1],
+            fullName: repositoryFullName,
+            isPrivate: storedDraft.repositoryIsPrivate ?? true
+        )
+    }
+
+    private func pullRequest(for storedDraft: StoredReviewDraft) -> PullRequest {
+        if storedDraft.key.repositoryFullName == selectedRepository?.fullName,
+           let pullRequest = pullRequests.first(where: { $0.number == storedDraft.key.pullRequestNumber }) {
+            return pullRequest
+        }
+
+        return PullRequest(
+            id: stablePullRequestID(for: storedDraft.key),
+            number: storedDraft.key.pullRequestNumber,
+            title: AppL10n.string("Saved review draft for #%d", storedDraft.key.pullRequestNumber),
+            htmlURL: URL(string: "https://github.com/\(storedDraft.key.repositoryFullName)/pull/\(storedDraft.key.pullRequestNumber)")!,
+            author: AppL10n.string("Saved draft"),
+            headSha: "unverified-\(storedDraft.key.headSha)",
+            updatedAt: nil
+        )
+    }
+
+    private func stableRepositoryID(for fullName: String) -> Int {
+        abs(fullName.unicodeScalars.reduce(17) { partial, scalar in
+            partial &* 31 &+ Int(scalar.value)
+        })
+    }
+
+    private func stablePullRequestID(for key: ReviewDraftKey) -> Int {
+        stableRepositoryID(for: "\(key.repositoryFullName)#\(key.pullRequestNumber)#\(key.headSha)")
+    }
+
+    private func markSavedDraftStaleIfNeeded(repository: Repository, pullRequest: PullRequest) {
         let id = BackgroundReviewQueueItem.id(
             repositoryFullName: repository.fullName,
             pullRequestNumber: pullRequest.number
@@ -1575,6 +1733,39 @@ final class AppModel: ObservableObject {
         }
 
         backgroundReviewQueue.markStale(id: id, currentHeadSha: pullRequest.headSha)
+    }
+
+    private func deleteStoredDraftsIfNeeded(for item: BackgroundReviewQueueItem) {
+        let matchingKeys = Set(
+            ((try? reviewDraftStore.loadAllDrafts()) ?? storedReviewDrafts)
+                .map(\.key)
+                .filter {
+                    $0.repositoryFullName == item.repository.fullName
+                        && $0.pullRequestNumber == item.pullRequest.number
+                }
+        )
+
+        for key in matchingKeys {
+            try? reviewDraftStore.deleteDraft(key: key)
+        }
+
+        storedReviewDrafts.removeAll {
+            $0.key.repositoryFullName == item.repository.fullName
+                && $0.key.pullRequestNumber == item.pullRequest.number
+        }
+
+        if currentDraftKey.map({
+            $0.repositoryFullName == item.repository.fullName
+                && $0.pullRequestNumber == item.pullRequest.number
+        }) == true {
+            draft = nil
+            reviewBody = ""
+            self.reviewedHeadSha = nil
+            submitSafetyLastCheckedAt = nil
+            focusedInlineCommentTarget = nil
+            focusedDiffLineIndex = nil
+            selectedEvent = .comment
+        }
     }
 
     private var currentDraftKey: ReviewDraftKey? {
@@ -1614,7 +1805,7 @@ final class AppModel: ObservableObject {
                 String(storedDraft.key.headSha.prefix(8))
             )
         }
-        markWatchedDraftStaleIfNeeded(repository: repository, pullRequest: pullRequest)
+        markSavedDraftStaleIfNeeded(repository: repository, pullRequest: pullRequest)
     }
 
     private func persistCurrentDraftIfPossible() {
@@ -1627,9 +1818,23 @@ final class AppModel: ObservableObject {
             draft: draft,
             reviewBody: reviewBody,
             selectedEvent: selectedEvent,
-            savedAt: Date()
+            savedAt: Date(),
+            repositoryIsPrivate: selectedRepository?.isPrivate
         )
-        try? reviewDraftStore.saveDraft(storedDraft)
+        guard (try? reviewDraftStore.saveDraft(storedDraft)) != nil else {
+            return
+        }
+        replaceStoredReviewDraft(storedDraft)
+    }
+
+    private func reloadStoredReviewDrafts() {
+        storedReviewDrafts = (try? reviewDraftStore.loadAllDrafts()) ?? []
+    }
+
+    private func replaceStoredReviewDraft(_ storedDraft: StoredReviewDraft) {
+        storedReviewDrafts.removeAll { $0.key == storedDraft.key }
+        storedReviewDrafts.append(storedDraft)
+        storedReviewDrafts.sort { $0.savedAt > $1.savedAt }
     }
 
     private var tokenValidationReadiness: ReadinessProbeState {
@@ -1658,7 +1863,7 @@ final class AppModel: ObservableObject {
         case .needsAction:
             return .needsAction(codexCLIStatus)
         case .unknown:
-            return .unknown(AppL10n.string("Check whether the Codex CLI is available on PATH."))
+            return .unknown(AppL10n.string("Check whether Codex is installed and ready for this app."))
         }
     }
 
@@ -1669,7 +1874,7 @@ final class AppModel: ObservableObject {
         case .needsAction:
             return .needsAction(codexLoginStatus)
         case .unknown:
-            return .unknown(AppL10n.string("Check ChatGPT Codex login status. If needed, run `codex login` in Terminal."))
+            return .unknown(AppL10n.string("Check ChatGPT sign-in status. If needed, finish the Codex sign-in step."))
         }
     }
 
@@ -1677,7 +1882,7 @@ final class AppModel: ObservableObject {
         switch state {
         case let .unknown(message):
             codexCLIStatus = AppL10n.string(message)
-            codexLoginStatus = AppL10n.string("Check ChatGPT Codex login status. If needed, run `codex login` in Terminal.")
+            codexLoginStatus = AppL10n.string("Check ChatGPT sign-in status. If needed, finish the Codex sign-in step.")
             codexCLIReadinessStatus = .unknown
             codexLoginReadinessStatus = .unknown
             if announceStatus {
@@ -1685,11 +1890,11 @@ final class AppModel: ObservableObject {
             }
         case let .missingCLI(message):
             codexCLIStatus = AppL10n.string(message)
-            codexLoginStatus = AppL10n.string("Install or expose Codex CLI before checking ChatGPT login.")
+            codexLoginStatus = AppL10n.string("Install Codex before checking ChatGPT login.")
             codexCLIReadinessStatus = .needsAction
             codexLoginReadinessStatus = .needsAction
             if announceStatus {
-                statusMessage = AppL10n.string("Codex CLI not found on PATH.")
+                statusMessage = AppL10n.string("Codex is not installed or this app cannot find it.")
             }
         case let .notLoggedIn(executablePath, message):
             codexCLIStatus = AppL10n.string("Found at %@.", executablePath)
@@ -1697,7 +1902,7 @@ final class AppModel: ObservableObject {
             codexCLIReadinessStatus = .ready
             codexLoginReadinessStatus = .needsAction
             if announceStatus {
-                statusMessage = AppL10n.string("Codex CLI found. ChatGPT Codex login needs action.")
+                statusMessage = AppL10n.string("Codex is available. ChatGPT sign-in needs action.")
             }
         case let .unsupportedLogin(executablePath, _, message):
             codexCLIStatus = AppL10n.string("Found at %@.", executablePath)
@@ -1741,7 +1946,7 @@ final class AppModel: ObservableObject {
     private func codexAuthenticationBlockedSummary(for state: CodexAuthenticationState) -> String {
         switch state {
         case .missingCLI:
-            return AppL10n.string("Codex CLI not found on PATH.")
+            return AppL10n.string("Codex is not installed or this app cannot find it.")
         case .notLoggedIn:
             return AppL10n.string("Sign in to Codex with ChatGPT before generating an AI review draft.")
         case .unsupportedLogin:
@@ -1756,7 +1961,7 @@ final class AppModel: ObservableObject {
     private func codexAuthenticationRecoverySuggestion(for state: CodexAuthenticationState) -> String {
         switch state {
         case .missingCLI:
-            return AppL10n.string("Install or expose the Codex CLI on PATH, then retry generation.")
+            return AppL10n.string("Install Codex, then retry generation.")
         case .notLoggedIn,
              .unsupportedLogin,
              .unknown,
@@ -1847,12 +2052,12 @@ final class AppModel: ObservableObject {
             guard let patch = selectedChangedFile.patch,
                   let diff = try? DiffPositionMapper.annotate(path: selectedChangedFile.path, patch: patch)
             else {
-                statusMessage = AppL10n.string("No hunk anchors are available for this file.")
+                statusMessage = AppL10n.string("No change blocks are available for this file.")
                 return
             }
             annotatedDiff = diff
         case .omitted:
-            statusMessage = AppL10n.string("No hunk anchors are available for omitted files.")
+            statusMessage = AppL10n.string("No change blocks are available for omitted files.")
             return
         }
 
@@ -1860,7 +2065,7 @@ final class AppModel: ObservableObject {
             .filter { $0.kind == .hunk }
             .map(\.index)
         guard !hunkLineIndexes.isEmpty else {
-            statusMessage = AppL10n.string("No hunk anchors are available for this file.")
+            statusMessage = AppL10n.string("No change blocks are available for this file.")
             return
         }
 
@@ -1871,7 +2076,7 @@ final class AppModel: ObservableObject {
         focusedInlineCommentTarget = nil
         focusedDiffLineIndex = hunkLineIndexes[nextIndex]
         statusMessage = AppL10n.string(
-            "Focused hunk %d of %d.",
+            "Focused change block %d of %d.",
             nextIndex + 1,
             hunkLineIndexes.count
         )
@@ -1899,7 +2104,7 @@ final class AppModel: ObservableObject {
             selectedChangedFilePath = changedFiles.first(where: { $0.path == previousSelectedFilePath })?.path ?? changedFiles.first?.path
             preflightHeadSha = currentPullRequest.headSha
             submitSafetyLastCheckedAt = Date()
-            markWatchedDraftStaleIfNeeded(repository: selectedRepository, pullRequest: currentPullRequest)
+            markSavedDraftStaleIfNeeded(repository: selectedRepository, pullRequest: currentPullRequest)
             statusMessage = AppL10n.string(
                 "Refreshed pull request and %d changed files. %@",
                 changedFiles.count,
@@ -1965,13 +2170,13 @@ final class AppModel: ObservableObject {
         case CodexReviewError.cancelled:
             return AppL10n.string("Start generation again when ready.")
         case CodexReviewError.missingExecutable:
-            return AppL10n.string("Install or expose the Codex CLI on PATH, then retry generation.")
+            return AppL10n.string("Install Codex, then retry generation.")
         case CodexReviewError.timedOut:
             return AppL10n.string("Reduce the PR size or retry generation.")
         case ReviewSubmissionValidationError.staleHead:
-            return AppL10n.string("Refresh safety or regenerate the draft before submitting.")
+            return AppL10n.string("Check the PR again or regenerate the draft before posting.")
         case ReviewSubmissionValidationError.invalidInlineComments:
-            return AppL10n.string("Deselect invalid comments, refresh safety, or regenerate the draft.")
+            return AppL10n.string("Deselect comments that no longer match, check again, or regenerate the draft.")
         case GitHubError.requestFailed:
             if !selectedRepositoryAccessDecision.isAllowed {
                 return AppL10n.string(selectedRepositoryAccessDecision.recoverySuggestion)

@@ -2,6 +2,27 @@
 
 PR Review Desk is a personal macOS app for generating an editable AI review draft for a GitHub pull request, checking the draft locally, and submitting the approved review back to GitHub.
 
+## Using The App
+
+PR Review Desk is designed so a non-developer can review pull requests without touching the project source code.
+
+You need:
+
+- A GitHub account with access to the repositories you want to review.
+- Codex installed on this Mac. If the app cannot find Codex, open the [Codex CLI help](https://developers.openai.com/codex/cli), install Codex, then return to PR Review Desk and choose Check Codex.
+- A ChatGPT sign-in for Codex. PR Review Desk uses that local sign-in for review generation.
+
+First run:
+
+1. Open PR Review Desk.
+2. Sign in with GitHub when the setup screen asks for repository access.
+3. Check Codex. If Codex is installed but not signed in, copy `codex login`, open Terminal, paste the command, and sign in with ChatGPT.
+4. Confirm the privacy disclosure. Pull request details and reviewable changes may be sent to Codex and OpenAI when generating a draft.
+5. Select a repository and an open pull request.
+6. Generate an AI review draft, edit the review body and selected inline comments, then use the submit preview to confirm exactly what will be posted to GitHub.
+
+Nothing is posted to GitHub until you confirm the submit preview. For private repositories, PR Review Desk asks for repository-specific consent before sending private repository context to Codex and OpenAI.
+
 ## Verification
 
 Use the shared verification gate before opening or merging a PR:
@@ -34,11 +55,11 @@ The packaged app must include the SwiftPM resource bundle in `Contents/Resources
 
 ## Review Workflow UI
 
-The main window opens around a review inbox, not a repository-first control panel. Inbox sections group work into Draft Ready, Stale, Running, Needs Setup, Submitted, and Recents/Favorites. Repositories remain in the sidebar as scope filters and queue sources.
+The main window opens around a review inbox, not a repository-first control panel. Inbox sections group work into Draft Ready, Stale, Running, Needs Setup, Submitted, and Recents/Favorites. Repositories remain in the sidebar as scope filters and draft creation sources.
 
-The detail area uses a focused diff workspace. Changed files stay next to the diff, while review body editing, inline comment selection, submit safety, event selection, and AI trust details live in the trailing inspector. The toolbar and Review menu expose refresh, generation, submission, GitHub opening, file/hunk/comment navigation, and Codex login actions; `Command-K` opens the contextual action panel.
+The detail area uses a focused diff workspace. Changed files stay next to the diff, while review body editing, inline comment selection, pre-submit checks, event selection, and AI trust details live in the trailing inspector. The toolbar and Review menu expose refresh, generation, submission, GitHub opening, file/change-block/comment navigation, draft creation actions, and Codex login actions; `Command-K` opens the contextual action panel.
 
-Diff review supports old/new line gutters, GitHub diff positions, inline comment anchors, viewed/unviewed state, file collapse/expand, unified/split display, whitespace markers, and keyboard navigation for files, hunks, and inline comments.
+Diff review supports old/new line gutters, GitHub diff positions, inline comment anchors, viewed/unviewed state, file collapse/expand, unified/split display, whitespace markers, and keyboard navigation for files, change blocks, and inline comments.
 
 The executable `PRReviewDeskCoreTests` target is the current test harness. It does not require live GitHub credentials or Codex credentials. `scripts/probe-swift-testing.sh` reports whether the selected developer directory can import `XCTest` or `Testing`; it is informational unless run with `--require`.
 

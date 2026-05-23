@@ -5,7 +5,7 @@
     <key>changed.files.reviewable</key>
     <dict>
         <key>NSStringLocalizedFormatKey</key>
-        <string>변경 파일 %#@total@개 중 %#@reviewable@개에 검토 가능한 패치가 있습니다.</string>
+        <string>변경 파일 %#@total@개 중 %#@reviewable@개를 검토할 수 있습니다.</string>
         <key>reviewable</key>
         <dict>
             <key>NSStringFormatSpecTypeKey</key>

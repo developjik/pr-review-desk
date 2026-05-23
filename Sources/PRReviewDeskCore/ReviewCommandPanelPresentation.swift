@@ -1,29 +1,74 @@
 import Foundation
 
 public enum ReviewCommandPanelActionKind: Equatable, Hashable, Sendable {
+    case refreshActiveScope
     case openPullRequest
     case generateReview
+    case cancelReviewGeneration
+    case queueSelectedPullRequest
+    case queueSelectedRepository
     case regenerateSelectedFile
     case submitReview
+    case nextInlineComment
+    case previousInlineComment
+    case nextFile
+    case previousFile
+    case nextHunk
+    case previousHunk
     case revealInlineComment
+    case startGitHubSignIn
+    case validateGitHubAccess
+    case checkCodexReadiness
     case copyCodexLoginCommand
+    case openCodexLoginTerminal
+    case acknowledgePrivacyDisclosure
     case toggleInspector
     case selectSection(ReviewInboxSection)
 
     public var stableID: String {
         switch self {
+        case .refreshActiveScope:
+            return "refresh-active-scope"
         case .openPullRequest:
             return "open-pull-request"
         case .generateReview:
             return "generate-review"
+        case .cancelReviewGeneration:
+            return "cancel-review-generation"
+        case .queueSelectedPullRequest:
+            return "queue-selected-pull-request"
+        case .queueSelectedRepository:
+            return "queue-selected-repository"
         case .regenerateSelectedFile:
             return "regenerate-selected-file"
         case .submitReview:
             return "submit-review"
+        case .nextInlineComment:
+            return "next-inline-comment"
+        case .previousInlineComment:
+            return "previous-inline-comment"
+        case .nextFile:
+            return "next-file"
+        case .previousFile:
+            return "previous-file"
+        case .nextHunk:
+            return "next-hunk"
+        case .previousHunk:
+            return "previous-hunk"
         case .revealInlineComment:
             return "reveal-inline-comment"
+        case .startGitHubSignIn:
+            return "start-github-sign-in"
+        case .validateGitHubAccess:
+            return "validate-github-access"
+        case .checkCodexReadiness:
+            return "check-codex-readiness"
         case .copyCodexLoginCommand:
             return "copy-codex-login-command"
+        case .openCodexLoginTerminal:
+            return "open-codex-login-terminal"
+        case .acknowledgePrivacyDisclosure:
+            return "acknowledge-privacy-disclosure"
         case .toggleInspector:
             return "toggle-inspector"
         case let .selectSection(section):
@@ -73,6 +118,19 @@ public enum ReviewCommandPanelPresentation {
             $0.title.lowercased().contains(normalizedQuery)
                 || $0.subtitle.lowercased().contains(normalizedQuery)
         }
+    }
+
+    public static func visibleActions(
+        _ actions: [ReviewCommandPanelAction],
+        query: String
+    ) -> [ReviewCommandPanelAction] {
+        let matchingActions = filteredActions(actions, query: query)
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalizedQuery.isEmpty else {
+            return matchingActions
+        }
+
+        return matchingActions
     }
 
     public static func selectedActionID(

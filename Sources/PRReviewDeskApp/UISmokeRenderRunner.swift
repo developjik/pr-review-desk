@@ -59,10 +59,11 @@ enum UISmokeRenderRunner {
             )
         }
 
-        return [
+        let lines = [
             "render=\(surface.rawValue):\(size.name):\(bitmap.pixelsWide)x\(bitmap.pixelsHigh):bytes=\(data.count):checksum=\(checksum)",
             "semantic=\(surface.rawValue):\(size.name):ocr=\(recognizedText.count):matched=\(semanticExpectations.count)"
-        ].joined(separator: "\n")
+        ]
+        return lines.joined(separator: "\n")
     }
 
     private static func renderedBitmap<Content: View>(
@@ -122,7 +123,7 @@ enum UISmokeRenderRunner {
             return [
                 AppL10n.string("Guided setup path"),
                 AppL10n.string("Sign in with GitHub"),
-                AppL10n.string("Technical readiness details")
+                AppL10n.string("Setup details")
             ]
         case .repositorySidebar:
             return []
@@ -142,7 +143,7 @@ enum UISmokeRenderRunner {
             ]
         case .submitPreview:
             var expectations = [
-                AppL10n.string("Refresh Safety"),
+                AppL10n.string("Check Again"),
                 AppL10n.string("Regenerate")
             ]
             if size.name == "desktop" {
@@ -258,6 +259,13 @@ enum UISmokeRenderRunner {
             let bitmap = try renderedBitmap(for: view(for: .commandPanel), size: size)
             let metrics = selectedRowFocusMetrics(in: bitmap)
             guard metrics.focusPixels >= 600, metrics.maxRowPixels >= 180 else {
+                let controls = renderedAccessibilityControls(for: view(for: .commandPanel), size: size)
+                if controls.contains(where: {
+                    $0.identifier == "command-panel.action.select-section-stale" && $0.state == "selected"
+                }) {
+                    return "visual=command-panel:selected-row=select-section-stale:focus-pixels=\(metrics.focusPixels):max-row=\(metrics.maxRowPixels):accessibility-selected=true"
+                }
+
                 return [
                     "visual_failed=command-panel:selected-row=select-section-stale",
                     "visual_failed=command-panel:focus-pixels=\(metrics.focusPixels):max-row=\(metrics.maxRowPixels)"
@@ -316,6 +324,8 @@ enum UISmokeRenderRunner {
                 onCancel: {},
                 onRefreshSafety: {},
                 onRegenerate: {},
+                onRevealInvalidComment: { _ in },
+                onDeselectInvalidComment: { _ in },
                 onSubmit: {}
             )
         )
@@ -330,21 +340,189 @@ enum UISmokeRenderRunner {
                 onDeferredSubmit: {}
             )
         )
+        let fullCommandPanelControls = renderedAccessibilityControls(
+            for: ReviewCommandPanelView(
+                model: populatedModel(),
+                selectedSection: .constant(.recents),
+                isInspectorPresented: .constant(true),
+                isPresented: .constant(true),
+                onDeferredSubmit: {}
+            )
+        )
+        let richCommandPanelControls = renderedAccessibilityControls(
+            for: ReviewCommandPanelView(
+                model: commandPanelCompleteModel(),
+                selectedSection: .constant(.recents),
+                isInspectorPresented: .constant(true),
+                isPresented: .constant(true),
+                onDeferredSubmit: {}
+            )
+        )
+        let copyCommandPanelControls = renderedAccessibilityControls(
+            for: ReviewCommandPanelView(
+                model: populatedModel(),
+                selectedSection: .constant(.recents),
+                isInspectorPresented: .constant(true),
+                isPresented: .constant(true),
+                initialQuery: AppL10n.string("Copy Codex Sign-In Step"),
+                onDeferredSubmit: {}
+            )
+        )
+        let generateCommandPanelControls = renderedAccessibilityControls(
+            for: ReviewCommandPanelView(
+                model: populatedModel(),
+                selectedSection: .constant(.recents),
+                isInspectorPresented: .constant(true),
+                isPresented: .constant(true),
+                initialQuery: AppL10n.string("Generate AI Review Draft"),
+                onDeferredSubmit: {}
+            )
+        )
+        let validateCommandPanelControls = renderedAccessibilityControls(
+            for: ReviewCommandPanelView(
+                model: firstRunLoadedTokenModel(),
+                selectedSection: .constant(.needsSetup),
+                isInspectorPresented: .constant(false),
+                isPresented: .constant(true),
+                initialQuery: AppL10n.string("Check GitHub Access"),
+                onDeferredSubmit: {}
+            )
+        )
+        let openSignInCommandPanelControls = renderedAccessibilityControls(
+            for: ReviewCommandPanelView(
+                model: firstRunLoadedTokenModel(),
+                selectedSection: .constant(.needsSetup),
+                isInspectorPresented: .constant(false),
+                isPresented: .constant(true),
+                initialQuery: AppL10n.string("Open Terminal Sign-In Step"),
+                onDeferredSubmit: {}
+            )
+        )
+        let acknowledgeCommandPanelControls = renderedAccessibilityControls(
+            for: ReviewCommandPanelView(
+                model: firstRunModel(),
+                selectedSection: .constant(.needsSetup),
+                isInspectorPresented: .constant(false),
+                isPresented: .constant(true),
+                initialQuery: AppL10n.string("Acknowledge privacy"),
+                onDeferredSubmit: {}
+            )
+        )
+        let toggleCommandPanelControls = renderedAccessibilityControls(
+            for: ReviewCommandPanelView(
+                model: populatedModel(),
+                selectedSection: .constant(.recents),
+                isInspectorPresented: .constant(true),
+                isPresented: .constant(true),
+                initialQuery: AppL10n.string("Toggle Inspector"),
+                onDeferredSubmit: {}
+            )
+        )
+        let setupCommandPanelControls = renderedAccessibilityControls(
+            for: ReviewCommandPanelView(
+                model: firstRunModel(),
+                selectedSection: .constant(.needsSetup),
+                isInspectorPresented: .constant(false),
+                isPresented: .constant(true),
+                onDeferredSubmit: {}
+            )
+        )
         let settingsLoadedTokenControls = renderedAccessibilityControls(
             for: SettingsView(model: settingsLoadedTokenModel())
         )
         let reviewInboxControls = renderedAccessibilityControls(
             for: ReviewInboxView(model: selectedRecentsModel(), selectedSection: .recents)
         )
+        let staleDraftInboxControls = renderedAccessibilityControls(
+            for: ReviewInboxView(model: savedDraftInboxModel(), selectedSection: .stale)
+        )
+        let emptyDraftReadyControls = renderedAccessibilityControls(
+            for: ReviewInboxView(model: emptyDraftReadyModel(), selectedSection: .draftReady)
+        )
+        let queueRecoveryControls = renderedAccessibilityControls(
+            for: queueRecoveryRows()
+        )
 
         return [
+            firstRunPrivacyDisclosureLine(size: .desktop),
+            firstRunPrivacyDisclosureLine(size: .compact),
+            commandPanelCompletenessLine(
+                controls: fullCommandPanelControls
+                    + richCommandPanelControls
+                    + copyCommandPanelControls
+                    + generateCommandPanelControls
+                    + validateCommandPanelControls
+                    + openSignInCommandPanelControls
+                    + acknowledgeCommandPanelControls
+                    + toggleCommandPanelControls
+                    + setupCommandPanelControls
+            ),
+            commandPanelAccessibilityHintsLine(controls: fullCommandPanelControls),
             accessibilityLine(surface: "first-run-setup.no-token", controls: firstRunNoTokenControls),
             accessibilityLine(surface: "first-run-setup.loaded-token", controls: firstRunLoadedTokenControls),
             accessibilityLine(surface: "submit-preview", controls: submitPreviewControls),
             accessibilityLine(surface: "command-panel", controls: commandPanelControls),
             accessibilityLine(surface: "settings.loaded-token", controls: settingsLoadedTokenControls),
-            accessibilityLine(surface: "review-inbox", controls: reviewInboxControls)
+            accessibilityLine(surface: "review-inbox", controls: reviewInboxControls),
+            accessibilityLine(surface: "review-inbox.stale-saved-draft", controls: staleDraftInboxControls),
+            accessibilityLine(surface: "review-inbox.empty-draft-ready", controls: emptyDraftReadyControls),
+            accessibilityLine(surface: "review-inbox.queue-recovery", controls: queueRecoveryControls)
         ].joined(separator: "\n")
+    }
+
+    private static func firstRunPrivacyDisclosureLine(size: UISmokeRenderSize) -> String {
+        let controls = renderedAccessibilityControls(for: ReviewInboxView(model: firstRunModel(), selectedSection: .needsSetup), size: size)
+        let hasDisclosure = controls.contains { $0.identifier == "first-run.privacy.disclosure" }
+        return hasDisclosure
+            ? "semantic=first-run-setup:\(size.name):privacy-disclosure"
+            : "semantic_failed=first-run-setup:\(size.name):privacy-disclosure"
+    }
+
+    private static func commandPanelCompletenessLine(controls: [UISmokeAccessibilityControl]) -> String {
+        let identifiers = Set(controls.map(\.identifier))
+        let requiredActionIDs = [
+            "refresh-active-scope",
+            "open-pull-request",
+            "generate-review",
+            "submit-review",
+            "cancel-review-generation",
+            "queue-selected-pull-request",
+            "queue-selected-repository",
+            "next-inline-comment",
+            "previous-inline-comment",
+            "next-file",
+            "previous-file",
+            "next-hunk",
+            "previous-hunk",
+            "reveal-inline-comment",
+            "start-github-sign-in",
+            "validate-github-access",
+            "check-codex-readiness",
+            "acknowledge-privacy-disclosure",
+            "copy-codex-login-command",
+            "open-codex-login-terminal",
+            "toggle-inspector"
+        ]
+        let missing = requiredActionIDs.filter { !identifiers.contains("command-panel.action.\($0)") }
+        guard missing.isEmpty else {
+            return "semantic_failed=command-panel:missing-actions=\(missing.joined(separator: ","))"
+        }
+
+        return "semantic=command-panel:complete-actions=\(requiredActionIDs.joined(separator: ","))"
+    }
+
+    private static func commandPanelAccessibilityHintsLine(controls: [UISmokeAccessibilityControl]) -> String {
+        let missingHintIDs = controls
+            .filter { $0.identifier.hasPrefix("command-panel.action.") }
+            .filter { ($0.details ?? "").isEmpty }
+            .map(\.identifier)
+            .sorted()
+
+        guard missingHintIDs.isEmpty else {
+            return "semantic_failed=command-panel:accessibility-hints=\(missingHintIDs.joined(separator: ","))"
+        }
+
+        return "semantic=command-panel:accessibility-hints"
     }
 
     private static func sendKey(to window: NSWindow, keyCode: UInt16, characters: String) {
@@ -491,6 +669,8 @@ enum UISmokeRenderRunner {
                 onCancel: {},
                 onRefreshSafety: {},
                 onRegenerate: {},
+                onRevealInvalidComment: { _ in },
+                onDeselectInvalidComment: { _ in },
                 onSubmit: {}
             )
         case .commandPanel:
@@ -517,7 +697,15 @@ enum UISmokeRenderRunner {
     }
 
     private static func firstRunLoadedTokenModel() -> AppModel {
-        let model = firstRunModel()
+        let model = AppModel(
+            credentialStore: VersionedCredentialStore(tokenStore: InMemoryTokenStore()),
+            initialCodexAuthenticationState: .notLoggedIn(
+                executablePath: "/opt/homebrew/bin/codex",
+                message: "Not logged in. Run `codex login` and sign in with ChatGPT."
+            ),
+            reviewDraftStore: InMemoryReviewDraftStore(),
+            userDefaults: UserDefaults(suiteName: "PRReviewDesk.UISmoke.\(UUID().uuidString)") ?? .standard
+        )
         model.hasToken = true
         model.credentialKindDescription = AppL10n.string(GitHubCredentialKind.oauthUserToken.displayName)
         model.tokenValidationStatus = AppL10n.string("GitHub credential is loaded. Validate scopes before generating reviews.")
@@ -556,6 +744,19 @@ enum UISmokeRenderRunner {
         return model
     }
 
+    private static func commandPanelCompleteModel() -> AppModel {
+        let model = populatedModel()
+        if let comment = model.draft?.inlineComments.first {
+            model.focusedInlineCommentTarget = InlineCommentFocusTarget(
+                commentID: comment.id,
+                path: comment.path,
+                position: comment.position
+            )
+        }
+        model.canCancelCurrentOperation = true
+        return model
+    }
+
     private static func selectedRecentsModel() -> AppModel {
         let model = firstRunModel()
         let repository = sampleRepository()
@@ -571,6 +772,87 @@ enum UISmokeRenderRunner {
         return model
     }
 
+    private static func savedDraftInboxModel() -> AppModel {
+        let store = InMemoryReviewDraftStore()
+        try? store.saveDraft(StoredReviewDraft(
+            key: ReviewDraftKey(
+                repositoryFullName: sampleRepository().fullName,
+                pullRequestNumber: samplePullRequest().number,
+                headSha: samplePullRequest().headSha
+            ),
+            draft: sampleDraft(),
+            reviewBody: "Saved body",
+            selectedEvent: .comment,
+            savedAt: Date(timeIntervalSince1970: 1_800_000_000)
+        ))
+        let model = AppModel(
+            credentialStore: VersionedCredentialStore(tokenStore: InMemoryTokenStore()),
+            reviewDraftStore: store,
+            userDefaults: UserDefaults(suiteName: "PRReviewDesk.UISmoke.\(UUID().uuidString)") ?? .standard
+        )
+
+        model.hasToken = true
+        model.credentialKindDescription = AppL10n.string(GitHubCredentialKind.oauthUserToken.displayName)
+        model.isPrivacyDisclosureAcknowledged = true
+        return model
+    }
+
+    private static func emptyDraftReadyModel() -> AppModel {
+        let model = firstRunModel()
+        let repository = sampleRepository()
+        let pullRequest = samplePullRequest()
+
+        model.hasToken = true
+        model.credentialKindDescription = AppL10n.string(GitHubCredentialKind.oauthUserToken.displayName)
+        model.repositories = [repository]
+        model.selectedRepository = repository
+        model.pullRequests = [pullRequest]
+        model.isPrivacyDisclosureAcknowledged = true
+        return model
+    }
+
+    private static func queueRecoveryModel() -> AppModel {
+        let model = emptyDraftReadyModel()
+        let repository = sampleRepository()
+        let failedPullRequest = samplePullRequest()
+        let readyPullRequest = PullRequest(
+            id: 11,
+            number: 75,
+            title: "Fix review recovery",
+            htmlURL: URL(string: "https://github.com/developjik/pr-review-desk/pull/75")!,
+            author: "developjik",
+            headSha: "def456abc123",
+            updatedAt: "2026-05-23"
+        )
+        model.backgroundReviewQueue = BackgroundReviewQueue(items: [
+            BackgroundReviewQueueItem(
+                repository: repository,
+                pullRequest: failedPullRequest,
+                state: .failed,
+                message: "Codex timed out."
+            ),
+            BackgroundReviewQueueItem(
+                repository: repository,
+                pullRequest: readyPullRequest,
+                state: .draftReady,
+                draft: sampleDraft(),
+                reviewBody: "Saved body",
+                reviewedHeadSha: readyPullRequest.headSha
+            )
+        ])
+        return model
+    }
+
+    private static func queueRecoveryRows() -> some View {
+        let model = queueRecoveryModel()
+        return VStack(alignment: .leading, spacing: 10) {
+            ForEach(model.backgroundReviewQueue.items) { item in
+                QueueItemRow(model: model, item: item)
+            }
+        }
+        .padding()
+    }
+
     private static func stalePreview() -> ReviewSubmissionPreview {
         ReviewSubmissionPreview.make(
             event: .comment,
@@ -580,7 +862,9 @@ enum UISmokeRenderRunner {
                 reviewedHeadSha: "abc123def456",
                 currentHeadSha: "fed654cba321",
                 selectedInlineCommentCount: 1,
-                invalidSelectedInlineComments: []
+                invalidSelectedInlineComments: [
+                    InvalidInlineComment(path: "Sources/App.swift", position: 2)
+                ]
             ),
             safetyCheckedAt: Date(timeIntervalSince1970: 1_777_777_777)
         )

@@ -52,27 +52,29 @@ public protocol CodexAuthenticationChecking: Sendable {
 
 public struct CodexCLIAuthenticationChecker: CodexAuthenticationChecking, Sendable {
     private let commandRunner: any CommandRunning
+    private let fallbackExecutablePaths: [String]
+    private let isExecutableFile: @Sendable (String) -> Bool
 
-    public init(commandRunner: any CommandRunning = ProcessCommandRunner()) {
+    public init(
+        commandRunner: any CommandRunning = ProcessCommandRunner(),
+        fallbackExecutablePaths: [String] = [
+            "/opt/homebrew/bin/codex",
+            "/usr/local/bin/codex"
+        ],
+        isExecutableFile: @escaping @Sendable (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+    ) {
         self.commandRunner = commandRunner
+        self.fallbackExecutablePaths = fallbackExecutablePaths
+        self.isExecutableFile = isExecutableFile
     }
 
     public func status() async throws -> CodexAuthenticationState {
-        let whichResult = try await commandRunner.run(
-            executable: "which",
-            arguments: ["codex"],
-            standardInput: "",
-            workingDirectory: nil,
-            timeout: 2
-        )
-
-        guard whichResult.exitCode == 0 else {
-            return .missingCLI(message: "Codex CLI not found on PATH.")
+        guard let executablePath = try await codexExecutablePath() else {
+            return .missingCLI(message: "Codex is not installed or this app cannot find it. Install the Codex command-line helper with Homebrew or npm, then check again.")
         }
 
-        let executablePath = sanitizedOneLine(whichResult.standardOutput)
         let loginResult = try await commandRunner.run(
-            executable: "codex",
+            executable: executablePath,
             arguments: ["login", "status"],
             standardInput: "",
             workingDirectory: nil,
@@ -90,6 +92,26 @@ public struct CodexCLIAuthenticationChecker: CodexAuthenticationChecking, Sendab
             executablePath: executablePath,
             output: loginResult.standardOutput
         )
+    }
+
+    private func codexExecutablePath() async throws -> String? {
+        let whichResult = try await commandRunner.run(
+            executable: "which",
+            arguments: ["codex"],
+            standardInput: "",
+            workingDirectory: nil,
+            timeout: 2
+        )
+
+        if whichResult.exitCode == 0 {
+            return sanitizedOneLine(whichResult.standardOutput)
+        }
+
+        for path in fallbackExecutablePaths where isExecutableFile(path) {
+            return path
+        }
+
+        return nil
     }
 
     private func readyOrUnsupportedState(executablePath: String, output: String) -> CodexAuthenticationState {

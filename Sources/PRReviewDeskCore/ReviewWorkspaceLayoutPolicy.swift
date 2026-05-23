@@ -34,6 +34,21 @@ public enum ReviewWorkspaceLayoutPolicy {
         fileCount <= 1 ? .inline : .sidebar
     }
 
+    public static func effectiveInboxSection(
+        storedSection: ReviewInboxSection,
+        isReady: Bool
+    ) -> ReviewInboxSection {
+        if !isReady {
+            return .needsSetup
+        }
+
+        if storedSection == .needsSetup {
+            return .recents
+        }
+
+        return storedSection
+    }
+
     public static func shouldOpenInspectorAfterDraftGeneration(previousRevision: Int, currentRevision: Int) -> Bool {
         currentRevision > previousRevision
     }

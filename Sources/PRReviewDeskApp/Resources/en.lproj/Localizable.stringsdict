@@ -5,7 +5,7 @@
     <key>changed.files.reviewable</key>
     <dict>
         <key>NSStringLocalizedFormatKey</key>
-        <string>%#@reviewable@ of %#@total@ changed files have reviewable patches.</string>
+        <string>%#@reviewable@ of %#@total@ changed files have reviewable changes.</string>
         <key>reviewable</key>
         <dict>
             <key>NSStringFormatSpecTypeKey</key>

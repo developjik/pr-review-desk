@@ -135,9 +135,6 @@ struct PRReviewDeskApp: App {
                 .frame(minWidth: 1180, minHeight: 720)
                 .preferredColorScheme(appearance.colorScheme)
                 .environment(\.locale, locale)
-                .task {
-                    await model.restoreGitHubSessionOnLaunchIfNeeded()
-                }
                 .onChange(of: languageRawValue) { _, _ in
                     model.refreshLocalizedDefaults()
                 }
@@ -147,6 +144,13 @@ struct PRReviewDeskApp: App {
             CommandGroup(replacing: .newItem) {}
 
             CommandMenu(AppL10n.string("Review")) {
+                Button(AppL10n.string("Actions")) {
+                    NotificationCenter.default.post(name: .openReviewCommandPanel, object: nil)
+                }
+                .keyboardShortcut("k", modifiers: [.command])
+
+                Divider()
+
                 Button(AppL10n.string("Refresh")) {
                     Task {
                         await model.refreshActiveScope()
@@ -207,13 +211,13 @@ struct PRReviewDeskApp: App {
                 .keyboardShortcut("[", modifiers: [.command, .shift])
                 .disabled(model.changedFiles.isEmpty)
 
-                Button(AppL10n.string("Next Hunk")) {
+                Button(AppL10n.string("Next Change Block")) {
                     model.focusNextHunk()
                 }
                 .keyboardShortcut("]", modifiers: [.command, .option])
                 .disabled(model.selectedChangedFile == nil)
 
-                Button(AppL10n.string("Previous Hunk")) {
+                Button(AppL10n.string("Previous Change Block")) {
                     model.focusPreviousHunk()
                 }
                 .keyboardShortcut("[", modifiers: [.command, .option])
@@ -226,7 +230,7 @@ struct PRReviewDeskApp: App {
 
                 Divider()
 
-                Button(AppL10n.string("Copy Codex Login Command")) {
+                Button(AppL10n.string("Copy Codex Sign-In Step")) {
                     model.copyCodexLoginCommand()
                 }
             }

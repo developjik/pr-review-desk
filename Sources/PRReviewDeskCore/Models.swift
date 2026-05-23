@@ -370,7 +370,7 @@ public struct ReviewCoverageSummary: Equatable, Sendable {
             return nil
         }
 
-        return "\(omittedFileCount) of \(totalFileCount) changed files do not have reviewable patches and will not be sent to Codex."
+        return "\(omittedFileCount) of \(totalFileCount) changed files do not have reviewable changes and will not be sent to Codex."
     }
 
     public var generationBlockReason: String? {
@@ -378,7 +378,7 @@ public struct ReviewCoverageSummary: Equatable, Sendable {
             return nil
         }
 
-        return "No changed files have reviewable patches for Codex."
+        return "No changed files have reviewable changes for Codex."
     }
 
     public var statusMessage: String {
@@ -390,7 +390,7 @@ public struct ReviewCoverageSummary: Equatable, Sendable {
             return warningMessage
         }
 
-        return "All \(totalFileCount) changed files have reviewable patches for Codex."
+        return "All \(totalFileCount) changed files have reviewable changes for Codex."
     }
 }
 
