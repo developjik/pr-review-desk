@@ -3,6 +3,7 @@ import PRReviewDeskCore
 
 struct ReviewInspectorView: View {
     @ObservedObject var model: AppModel
+    @State private var isDiscardConfirmationPresented = false
 
     var body: some View {
         ScrollView {
@@ -22,22 +23,67 @@ struct ReviewInspectorView: View {
                     if model.draft != nil {
                         SubmitSafetyView(model: model)
                         TrustSummaryView(model: model)
+                        DraftEditorView(model: model)
+                    } else {
+                        EmptyDraftInspectorView(model: model)
                     }
-
-                    DraftEditorView(model: model)
 
                     if model.draft != nil {
                         Button(role: .destructive) {
-                            model.discardCurrentDraft()
+                            isDiscardConfirmationPresented = true
                         } label: {
                             Label(AppL10n.string("Discard Draft"), systemImage: "trash")
+                        }
+                        .confirmationDialog(
+                            AppL10n.string("Discard this draft?"),
+                            isPresented: $isDiscardConfirmationPresented,
+                            titleVisibility: .visible
+                        ) {
+                            Button(AppL10n.string("Discard Draft"), role: .destructive) {
+                                model.discardCurrentDraft()
+                            }
+                            Button(AppL10n.string("Cancel"), role: .cancel) {}
+                        } message: {
+                            Text(AppL10n.string("This removes the local editable draft. Nothing is posted to GitHub."))
                         }
                     }
                 }
             }
             .padding()
+            .padding(.top, CGFloat(ReviewWorkspaceLayoutPolicy.inspectorTopContentInset))
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(.bar)
+    }
+}
+
+private struct EmptyDraftInspectorView: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(AppL10n.string("No Draft Yet"), systemImage: "doc.text.magnifyingglass")
+                .font(.headline)
+
+            Text(AppL10n.string("Generate an AI review draft before editing or submitting a review."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                model.startGenerateReview()
+            } label: {
+                Label(AppL10n.string(model.aiReviewDraftActionPresentation.title), systemImage: "sparkles")
+            }
+            .disabled(!model.canGenerateReview)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.panelBackground)
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(AppTheme.border(.neutral))
+        }
     }
 }
 
@@ -46,12 +92,28 @@ private struct ReviewEventSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Picker(AppL10n.string("Review event"), selection: $model.selectedEvent) {
-                ForEach(ReviewEvent.allCases) { event in
-                    Text(event.localizedDisplayName).tag(event)
+            ViewThatFits(in: .horizontal) {
+                Picker(AppL10n.string("Review event"), selection: $model.selectedEvent) {
+                    ForEach(ReviewEvent.allCases) { event in
+                        Text(event.localizedDisplayName).tag(event)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .fixedSize(horizontal: true, vertical: false)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(AppL10n.string("Review event"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Picker(AppL10n.string("Review event"), selection: $model.selectedEvent) {
+                        ForEach(ReviewEvent.allCases) { event in
+                            Text(event.localizedDisplayName).tag(event)
+                        }
+                    }
+                    .pickerStyle(.radioGroup)
+                    .labelsHidden()
                 }
             }
-            .pickerStyle(.segmented)
 
             Button {
                 model.requestSubmitReview()
@@ -59,24 +121,6 @@ private struct ReviewEventSection: View {
                 Label("\(AppL10n.string("Submit Review")) (\(model.selectedInlineCommentCount))", systemImage: "paperplane")
             }
             .disabled(!model.canSubmitReview)
-            .confirmationDialog(
-                AppL10n.string("Submit %@ review?", model.selectedEvent.localizedDisplayName),
-                isPresented: $model.isSubmitConfirmationPresented,
-                titleVisibility: .visible
-            ) {
-                Button(AppL10n.string("Submit %@ Review", model.selectedEvent.localizedDisplayName)) {
-                    Task {
-                        await model.submitReview()
-                    }
-                }
-                Button(AppL10n.string("Cancel"), role: .cancel) {}
-            } message: {
-                Text(AppL10n.string(
-                    "This will post a %@ review with %d selected inline comments to GitHub.",
-                    model.selectedEvent.localizedDisplayName,
-                    model.selectedInlineCommentCount
-                ))
-            }
         }
     }
 }
@@ -91,10 +135,20 @@ private struct TrustSummaryView: View {
             Label(AppL10n.string("AI Trust"), systemImage: "checkmark.shield")
                 .font(.headline)
 
-            HStack(spacing: 8) {
-                StatusBadge(title: AppL10n.string("Generated %@", ReviewViewSupport.shortSha(model.reviewedHeadShaForDisplay)), systemImage: "number", tone: .neutral)
-                StatusBadge(title: AppL10n.string("%d omitted", summary.omittedFileCount), systemImage: "eye.slash", tone: summary.omittedFileCount > 0 ? .warning : .success)
-            }
+            InspectorMetricGroup(metrics: [
+                InspectorMetric(
+                    id: "generated",
+                    title: AppL10n.string("Generated %@", ReviewViewSupport.shortSha(model.reviewedHeadShaForDisplay)),
+                    systemImage: "number",
+                    tone: .neutral
+                ),
+                InspectorMetric(
+                    id: "omitted",
+                    title: AppL10n.string("%d omitted", summary.omittedFileCount),
+                    systemImage: "eye.slash",
+                    tone: summary.omittedFileCount > 0 ? .warning : .success
+                )
+            ])
 
             if summary.omittedFileCount > 0 {
                 DisclosureGroup(AppL10n.string("Omitted files")) {
@@ -110,6 +164,7 @@ private struct TrustSummaryView: View {
             }
         }
         .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppTheme.panelBackground)
         .overlay {
             RoundedRectangle(cornerRadius: 8)

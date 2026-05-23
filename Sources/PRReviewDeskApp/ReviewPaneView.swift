@@ -47,9 +47,15 @@ struct ReviewPaneView: View {
             case .sidebar:
                 HSplitView {
                     ChangedFilesPane(model: model)
-                        .frame(minWidth: 220, idealWidth: 250)
+                        .frame(
+                            minWidth: CGFloat(ReviewWorkspaceLayoutPolicy.changedFilesMinimumPaneWidth),
+                            idealWidth: CGFloat(ReviewWorkspaceLayoutPolicy.changedFilesIdealPaneWidth)
+                        )
                     SelectedFileDetailView(model: model)
-                        .frame(minWidth: 520, idealWidth: 760)
+                        .frame(
+                            minWidth: CGFloat(ReviewWorkspaceLayoutPolicy.selectedFileMinimumPaneWidth),
+                            idealWidth: CGFloat(ReviewWorkspaceLayoutPolicy.selectedFileIdealPaneWidth)
+                        )
                 }
             }
         }

@@ -7,6 +7,8 @@ enum SearchAndSelectionTests {
         try testPullRequestSearchMatchesNumberTitleAndAuthor()
         try testRepositorySelectionPreservesRefreshedInstanceByID()
         try testPullRequestSelectionPreservesRefreshedInstanceByID()
+        try testFilteredPullRequestSelectionKeepsVisibleSelection()
+        try testFilteredPullRequestSelectionClearsWhenSelectionIsHidden()
     }
 
     private static func testRepositorySearchMatchesOwnerNameAndFullName() throws {
@@ -83,6 +85,36 @@ enum SearchAndSelectionTests {
                 afterRefresh: refreshed,
                 previousSelection: pullRequest(id: 99, number: 99, title: "Missing", author: "nobody")
             ),
+            nil
+        )
+    }
+
+    private static func testFilteredPullRequestSelectionKeepsVisibleSelection() throws {
+        let selected = pullRequest(id: 2, number: 8, title: "Cache fix", author: "bob")
+        let visible = [
+            pullRequest(id: 1, number: 7, title: "Other PR", author: "alice"),
+            selected
+        ]
+
+        try expectEqual(
+            StableSelection.visiblePullRequest(in: visible, previousSelection: selected)?.id,
+            selected.id
+        )
+    }
+
+    private static func testFilteredPullRequestSelectionClearsWhenSelectionIsHidden() throws {
+        let selected = pullRequest(id: 99, number: 99, title: "Hidden PR", author: "nobody")
+        let visible = [
+            pullRequest(id: 1, number: 7, title: "Visible PR", author: "alice"),
+            pullRequest(id: 2, number: 8, title: "Cache fix", author: "bob")
+        ]
+
+        try expectEqual(
+            StableSelection.visiblePullRequest(in: visible, previousSelection: selected),
+            nil
+        )
+        try expectEqual(
+            StableSelection.visiblePullRequest(in: [], previousSelection: selected),
             nil
         )
     }

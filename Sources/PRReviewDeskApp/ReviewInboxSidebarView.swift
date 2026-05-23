@@ -7,18 +7,14 @@ struct ReviewInboxSidebarView: View {
     @SceneStorage("sidebar.repositoriesExpanded.v4") private var isRepositoriesExpanded = ReviewWorkspaceLayoutPolicy.defaultRepositoriesExpanded
 
     var body: some View {
-        List {
+        List(selection: selectedSectionListBinding) {
             Section(AppL10n.string("Review Inbox")) {
                 ForEach(ReviewInboxSection.allCases) { section in
                     InboxSectionRow(
                         section: section,
-                        count: model.reviewInboxCount(for: section),
-                        isSelected: selectedSection == section
+                        count: model.reviewInboxCount(for: section)
                     )
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        selectedSection = section
-                    }
+                    .tag(section)
                 }
             }
 
@@ -41,6 +37,9 @@ struct ReviewInboxSidebarView: View {
                     }
 
                     if isRepositoriesExpanded {
+                        TextField(AppL10n.string("Search repositories"), text: $model.repositorySearchText)
+                            .textFieldStyle(.roundedBorder)
+
                         ForEach(model.filteredRepositories) { repository in
                             Button {
                                 Task {
@@ -77,12 +76,22 @@ struct ReviewInboxSidebarView: View {
             }
         }
     }
+
+    private var selectedSectionListBinding: Binding<ReviewInboxSection?> {
+        Binding(
+            get: { selectedSection },
+            set: { newValue in
+                if let newValue {
+                    selectedSection = newValue
+                }
+            }
+        )
+    }
 }
 
 private struct InboxSectionRow: View {
     let section: ReviewInboxSection
     let count: Int
-    let isSelected: Bool
 
     var body: some View {
         HStack(spacing: 8) {
@@ -98,7 +107,6 @@ private struct InboxSectionRow: View {
         }
         .padding(.vertical, 3)
         .padding(.horizontal, 6)
-        .background(isSelected ? AppTheme.background(.focus) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
         .accessibilityLabel("\(section.displayName), \(count)")
     }
 }

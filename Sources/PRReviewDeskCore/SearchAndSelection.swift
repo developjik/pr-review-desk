@@ -56,4 +56,16 @@ public enum StableSelection {
 
         return pullRequests.first { $0.id == previousSelection.id }
     }
+
+    public static func visiblePullRequest(
+        in pullRequests: [PullRequest],
+        previousSelection: PullRequest?
+    ) -> PullRequest? {
+        if let previousSelection,
+           let visibleSelection = pullRequests.first(where: { $0.id == previousSelection.id }) {
+            return visibleSelection
+        }
+
+        return nil
+    }
 }

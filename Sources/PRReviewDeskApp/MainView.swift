@@ -3,7 +3,7 @@ import PRReviewDeskCore
 
 struct MainView: View {
     @ObservedObject var model: AppModel
-    @SceneStorage("main.selectedInboxSection") private var selectedInboxSectionRaw = ReviewInboxSection.draftReady.rawValue
+    @SceneStorage("main.selectedInboxSection.v4") private var selectedInboxSectionRaw = ReviewWorkspaceLayoutPolicy.defaultInboxSection.rawValue
     @SceneStorage("main.inspectorPresented.v3") private var isInspectorPresented = ReviewWorkspaceLayoutPolicy.defaultInspectorVisibility
     @State private var isCommandPanelPresented = false
 
@@ -13,18 +13,31 @@ struct MainView: View {
                 model: model,
                 selectedSection: selectedInboxSectionBinding
             )
-            .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 340)
+            .navigationSplitViewColumnWidth(
+                min: CGFloat(ReviewWorkspaceLayoutPolicy.inboxSidebarMinimumColumnWidth),
+                ideal: CGFloat(ReviewWorkspaceLayoutPolicy.inboxSidebarIdealColumnWidth),
+                max: 340
+            )
         } content: {
             ReviewInboxView(
                 model: model,
                 selectedSection: selectedInboxSection
             )
-            .navigationSplitViewColumnWidth(min: 320, ideal: 390, max: 520)
+            .navigationSplitViewColumnWidth(
+                min: CGFloat(ReviewWorkspaceLayoutPolicy.pullRequestListMinimumColumnWidth),
+                ideal: CGFloat(ReviewWorkspaceLayoutPolicy.pullRequestListIdealColumnWidth),
+                max: CGFloat(ReviewWorkspaceLayoutPolicy.pullRequestListMaximumColumnWidth)
+            )
         } detail: {
             ReviewPaneView(model: model)
                 .inspector(isPresented: $isInspectorPresented) {
                     ReviewInspectorView(model: model)
-                        .frame(minWidth: 320, idealWidth: 380, maxWidth: 460)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .inspectorColumnWidth(
+                            min: CGFloat(ReviewWorkspaceLayoutPolicy.inspectorMinimumColumnWidth),
+                            ideal: CGFloat(ReviewWorkspaceLayoutPolicy.inspectorIdealColumnWidth),
+                            max: CGFloat(ReviewWorkspaceLayoutPolicy.inspectorMaximumColumnWidth)
+                        )
                 }
         }
         .navigationSplitViewStyle(.balanced)
@@ -115,6 +128,24 @@ struct MainView: View {
                     model.confirmPrivateRepositoryConsentAndGenerate()
                 }
             )
+        }
+        .confirmationDialog(
+            AppL10n.string("Submit %@ review?", model.selectedEvent.localizedDisplayName),
+            isPresented: $model.isSubmitConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            Button(AppL10n.string("Submit %@ Review", model.selectedEvent.localizedDisplayName)) {
+                Task {
+                    await model.submitReview()
+                }
+            }
+            Button(AppL10n.string("Cancel"), role: .cancel) {}
+        } message: {
+            Text(AppL10n.string(
+                "This will post a %@ review with %d selected inline comments to GitHub.",
+                model.selectedEvent.localizedDisplayName,
+                model.selectedInlineCommentCount
+            ))
         }
         .onChange(of: model.generatedDraftPresentationRevision) { previousRevision, currentRevision in
             if ReviewWorkspaceLayoutPolicy.shouldOpenInspectorAfterDraftGeneration(

@@ -8,7 +8,6 @@ public struct ReviewCommandAvailability: Equatable, Hashable, Sendable {
     public let canRegenerateSelectedFile: Bool
     public let canRevealInlineComment: Bool
     public let canToggleInspector: Bool
-    public let canFocusSearch: Bool
     public let canCopyCodexLoginCommand: Bool
 
     public init(
@@ -30,7 +29,6 @@ public struct ReviewCommandAvailability: Equatable, Hashable, Sendable {
             && !isWorking
         canRevealInlineComment = hasFocusedInlineComment
         canToggleInspector = true
-        canFocusSearch = true
         canCopyCodexLoginCommand = true
     }
 }

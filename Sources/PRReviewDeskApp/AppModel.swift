@@ -494,18 +494,21 @@ final class AppModel: ObservableObject {
                 if loginResult.exitCode == 0 {
                     codexLoginStatus = loginResult.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
                     codexLoginReadinessStatus = .ready
+                    statusMessage = "Codex CLI ready."
                 } else {
                     let details = SensitiveTextRedactor.redact(loginResult.standardError)
                     codexLoginStatus = details.isEmpty
                         ? "Not logged in. Run `codex login` in Terminal."
                         : "Not logged in. \(details)"
                     codexLoginReadinessStatus = .needsAction
+                    statusMessage = "Codex CLI found. Codex login needs action."
                 }
             } else {
                 codexCLIStatus = "Not found on PATH."
                 codexLoginStatus = "Install or expose Codex CLI before checking login."
                 codexCLIReadinessStatus = .needsAction
                 codexLoginReadinessStatus = .needsAction
+                statusMessage = "Codex CLI not found on PATH."
             }
         }
     }
@@ -588,6 +591,17 @@ final class AppModel: ObservableObject {
             statusMessage = "Loaded \(changedFiles.count) changed files. \(reviewCoverageSummary.statusMessage)"
             try restoreDraftIfAvailable(repository: selectedRepository, pullRequest: pullRequest)
         }
+    }
+
+    func clearSelectedPullRequestForVisibleFilter(hasVisibleRows: Bool) {
+        guard selectedPullRequest != nil else {
+            return
+        }
+
+        clearPullRequestContext(clearPullRequests: false)
+        statusMessage = hasVisibleRows
+            ? "Selected pull request is hidden by the current filter."
+            : "No pull requests match the current filter."
     }
 
     func startGenerateReview() {
@@ -702,11 +716,7 @@ final class AppModel: ObservableObject {
             return
         }
 
-        if selectedEvent == .comment {
-            Task { @MainActor in
-                await submitReview()
-            }
-        } else {
+        if ReviewSubmissionConfirmationPolicy.requiresConfirmation(for: selectedEvent) {
             isSubmitConfirmationPresented = true
         }
     }

@@ -19,23 +19,32 @@ struct ReviewInboxView: View {
                     description: Text(emptyDescription)
                 )
             } else {
-                List(rows) { row in
-                    Button {
-                        Task {
-                            await model.selectTriageRow(row)
-                        }
-                    } label: {
-                        PullRequestTriageRowView(
-                            row: row,
-                            isSelected: isSelected(row)
-                        )
-                    }
-                    .buttonStyle(.plain)
+                List(rows, selection: selectedRowIDBinding) { row in
+                    PullRequestTriageRowView(
+                        row: row,
+                        isSelected: isSelected(row)
+                    )
+                    .tag(row.id)
                 }
                 .listStyle(.inset)
             }
         }
         .navigationTitle(AppL10n.string(selectedSection.displayName))
+        .onChange(of: selectedSection) { _, _ in
+            Task {
+                await syncSelectionToVisibleRows()
+            }
+        }
+        .onChange(of: model.pullRequestSearchText) { _, _ in
+            Task {
+                await syncSelectionToVisibleRows()
+            }
+        }
+        .onChange(of: rows.map(\.id)) { _, _ in
+            Task {
+                await syncSelectionToVisibleRows()
+            }
+        }
     }
 
     private var rows: [PullRequestTriageRow] {
@@ -94,6 +103,41 @@ struct ReviewInboxView: View {
     private func isSelected(_ row: PullRequestTriageRow) -> Bool {
         model.selectedRepository?.fullName == row.repositoryFullName
             && model.selectedPullRequest?.number == row.number
+    }
+
+    private var selectedRowIDBinding: Binding<String?> {
+        Binding(
+            get: {
+                rows.first(where: isSelected)?.id
+            },
+            set: { newValue in
+                guard let newValue,
+                      let row = rows.first(where: { $0.id == newValue }) else {
+                    return
+                }
+
+                Task {
+                    await model.selectTriageRow(row)
+                }
+            }
+        )
+    }
+
+    private func syncSelectionToVisibleRows() async {
+        let visiblePullRequests = rows.map(\.pullRequest)
+        guard let visibleSelection = StableSelection.visiblePullRequest(
+            in: visiblePullRequests,
+            previousSelection: model.selectedPullRequest
+        ) else {
+            model.clearSelectedPullRequestForVisibleFilter(hasVisibleRows: !rows.isEmpty)
+            return
+        }
+        guard visibleSelection.id != model.selectedPullRequest?.id,
+              let row = rows.first(where: { $0.pullRequest.id == visibleSelection.id }) else {
+            return
+        }
+
+        await model.selectTriageRow(row)
     }
 }
 
