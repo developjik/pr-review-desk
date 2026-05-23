@@ -30,8 +30,9 @@ enum GitHubRepositoryAccessPolicyTests {
 
         try expectEqual(decision, .denied(
             reason: "Private repositories require the repo OAuth scope.",
-            recoverySuggestion: "Re-authorize GitHub with the repo scope or use a PAT that can read and review private pull requests."
+            recoverySuggestion: "Re-authorize GitHub OAuth with the repo scope to read and review private pull requests."
         ))
+        try expectTrue(!decision.recoverySuggestion.localizedCaseInsensitiveContains("PAT"))
     }
 
     private static func testKnownScopesWithoutRepoDenyPrivateRepositories() throws {
@@ -39,6 +40,7 @@ enum GitHubRepositoryAccessPolicyTests {
 
         try expectEqual(decision.isAllowed, false)
         try expectTrue(decision.recoverySuggestion.contains("repo scope"))
+        try expectTrue(!decision.recoverySuggestion.localizedCaseInsensitiveContains("PAT"))
     }
 
     private static func testUnknownScopesDoNotBlockAccessLocally() throws {

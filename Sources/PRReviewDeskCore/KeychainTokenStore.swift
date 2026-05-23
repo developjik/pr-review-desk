@@ -122,7 +122,7 @@ public enum CredentialStoreError: Error, Equatable, CustomStringConvertible, Sen
     public var description: String {
         switch self {
         case .unsupportedCredentialKind:
-            return "This credential store only supports personal access tokens"
+            return "This credential store only supports the requested credential kind"
         }
     }
 }

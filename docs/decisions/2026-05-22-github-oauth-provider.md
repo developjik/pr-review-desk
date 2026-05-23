@@ -1,14 +1,15 @@
 # GitHub OAuth Provider Decision
 
 Date: 2026-05-22
+Updated: 2026-05-23
 
-Issue: #36
+Issue: #36, #91
 
 ## Decision
 
-Use a GitHub OAuth App device flow for the first OAuth implementation, while keeping the credential model open for GitHub App user access tokens later.
+Use a GitHub OAuth App device flow as the only interactive GitHub authentication path, while keeping the credential model open for GitHub App user access tokens later.
 
-This app is still a personal, local macOS tool. The first OAuth version should remove manual PAT entry without adding a backend service, local callback server, app installation picker, or organization rollout flow. OAuth App device flow fits that shape: the app shows a user code, opens GitHub in the browser, polls GitHub at the required interval, and stores the returned bearer token in the existing versioned Keychain credential store.
+This app is still a personal, local macOS tool. OAuth-only authentication should remove manual personal-token entry without adding a backend service, local callback server, app installation picker, or organization rollout flow. OAuth App device flow fits that shape: the app shows a user code, opens GitHub in the browser, polls GitHub at the required interval, and stores the returned bearer token in the existing versioned Keychain credential store.
 
 GitHub App user auth is the better long-term model for least privilege and repository-scoped access, but it introduces installation scope and expiring user-token handling before the app needs those operational controls. Revisit GitHub App user auth when this moves beyond personal/local use or needs per-repository installation governance.
 
@@ -21,7 +22,7 @@ Pros:
 - No local callback listener or custom URL scheme is required.
 - No backend is required.
 - The UX matches a desktop app: show a code, open `https://github.com/login/device`, and poll until authorized.
-- It can replace manual PAT entry with a first-party sign-in flow while preserving current REST API usage.
+- It can replace manual token entry with a first-party sign-in flow while preserving current REST API usage.
 
 Cons:
 
@@ -77,7 +78,7 @@ Minimum future GitHub App permissions:
 - Device flow codes expire after 15 minutes, so the sign-in sheet needs an explicit retry path.
 - Polling must respect the returned `interval` and handle `authorization_pending`, `slow_down`, `expired_token`, and `access_denied`.
 - The app should open the verification URL in the default browser and also provide a copyable code for users who prefer another browser/profile.
-- The current app should continue to support PAT entry as fallback until OAuth has been exercised across private repositories and organization SSO.
+- The app should not expose manual personal-token entry as a fallback. If a legacy saved personal credential is found, it should not be used for API access; the app should require GitHub OAuth re-authorization.
 - Tokens stay in the existing versioned Keychain credential store. The stored credential should record token kind, scopes, login, token type, creation/update timestamps, and future expiration fields.
 
 ## Follow-Up Implementation Issues
@@ -88,6 +89,7 @@ Created implementation issues:
 2. #51 Add GitHub OAuth sign-in UI.
 3. #52 Validate OAuth scopes and repository access.
 4. #53 Add OAuth token revocation and replacement controls.
+5. #91 Convert GitHub authentication to OAuth-only.
 
 Deferred follow-up: revisit GitHub App user auth after the OAuth App device-flow MVP is stable.
 

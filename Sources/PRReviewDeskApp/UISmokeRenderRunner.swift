@@ -121,8 +121,7 @@ enum UISmokeRenderRunner {
         case .firstRunSetup:
             return [
                 AppL10n.string("Guided setup path"),
-                AppL10n.string("Save PAT"),
-                AppL10n.string("Advanced GitHub OAuth"),
+                AppL10n.string("Sign in with GitHub"),
                 AppL10n.string("Technical readiness details")
             ]
         case .repositorySidebar:
@@ -520,7 +519,7 @@ enum UISmokeRenderRunner {
     private static func firstRunLoadedTokenModel() -> AppModel {
         let model = firstRunModel()
         model.hasToken = true
-        model.credentialKindDescription = AppL10n.string(GitHubCredentialKind.personalAccessToken.displayName)
+        model.credentialKindDescription = AppL10n.string(GitHubCredentialKind.oauthUserToken.displayName)
         model.tokenValidationStatus = AppL10n.string("GitHub credential is loaded. Validate scopes before generating reviews.")
         return model
     }
@@ -543,7 +542,7 @@ enum UISmokeRenderRunner {
         let pullRequest = samplePullRequest()
 
         model.hasToken = true
-        model.credentialKindDescription = AppL10n.string(GitHubCredentialKind.personalAccessToken.displayName)
+        model.credentialKindDescription = AppL10n.string(GitHubCredentialKind.oauthUserToken.displayName)
         model.repositories = [repository]
         model.selectedRepository = repository
         model.pullRequests = [pullRequest]
@@ -563,7 +562,7 @@ enum UISmokeRenderRunner {
         let pullRequest = samplePullRequest()
 
         model.hasToken = true
-        model.credentialKindDescription = AppL10n.string(GitHubCredentialKind.personalAccessToken.displayName)
+        model.credentialKindDescription = AppL10n.string(GitHubCredentialKind.oauthUserToken.displayName)
         model.repositories = [repository]
         model.selectedRepository = repository
         model.pullRequests = [pullRequest]
