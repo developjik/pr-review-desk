@@ -61,92 +61,93 @@ struct SettingsView: View {
                     }
                 }
 
-                TextField(AppL10n.string("OAuth App client ID"), text: $model.oauthClientID)
-                    .textFieldStyle(.roundedBorder)
-
-                Text(AppL10n.string("Use OAuth when you have a GitHub OAuth App client ID. Otherwise use the personal access token fallback below."))
+                Text(AppL10n.string("Paste a GitHub token with repository access, save it locally, then validate scopes."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                SecureField(AppL10n.string("Personal access token"), text: $model.tokenInput)
+                    .textFieldStyle(.roundedBorder)
 
                 HStack {
                     Button {
-                        model.startOAuthDeviceSignIn()
+                        Task {
+                            await model.saveTokenAndRefresh()
+                        }
                     } label: {
-                        Label(
-                            model.hasToken ? AppL10n.string("Replace with GitHub OAuth") : AppL10n.string("Sign in with GitHub"),
-                            systemImage: "person.crop.circle.badge.checkmark"
-                        )
+                        Label(AppL10n.string("Save or Replace with PAT"), systemImage: "key")
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(model.isOAuthSignInPending || model.oauthClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(model.isWorking || model.tokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-                    if model.isOAuthSignInPending {
-                        Button {
-                            model.cancelOAuthDeviceSignIn()
-                        } label: {
-                            Label(AppL10n.string("Cancel"), systemImage: "xmark.circle")
-                        }
+                    Button {
+                        model.loadStoredToken()
+                    } label: {
+                        Label(AppL10n.string("Load"), systemImage: "lock.open")
                     }
+                    .disabled(model.isWorking)
 
-                    if let authorization = model.oauthAuthorization {
-                        Button {
-                            model.copyOAuthUserCode()
-                        } label: {
-                            Label(AppL10n.string("Copy Code"), systemImage: "doc.on.doc")
-                        }
-
-                        Link(AppL10n.string("Open GitHub"), destination: authorization.verificationURI)
+                    Button(role: .destructive) {
+                        model.deleteStoredToken()
+                    } label: {
+                        Label(AppL10n.string("Delete Local Credential"), systemImage: "trash")
                     }
+                    .disabled(model.isWorking || !model.hasToken)
                 }
 
-                if let authorization = model.oauthAuthorization {
-                    HStack {
-                        Text(AppL10n.string("Device code"))
-                        Spacer()
-                        Text(authorization.userCode)
-                            .font(.system(.body, design: .monospaced))
-                            .textSelection(.enabled)
-                    }
-                }
+                DisclosureGroup(AppL10n.string("Advanced GitHub OAuth")) {
+                    TextField(AppL10n.string("OAuth App client ID"), text: $model.oauthClientID)
+                        .textFieldStyle(.roundedBorder)
 
-                Text(model.oauthStatus)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                DisclosureGroup(AppL10n.string("Personal access token fallback")) {
-                    Text(AppL10n.string("For personal use, paste a GitHub token with repository access, save it locally, then validate scopes."))
+                    Text(AppL10n.string("Use OAuth only when you already have a GitHub OAuth App client ID."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    SecureField(AppL10n.string("Personal access token"), text: $model.tokenInput)
-
                     HStack {
                         Button {
-                            Task {
-                                await model.saveTokenAndRefresh()
+                            model.startOAuthDeviceSignIn()
+                        } label: {
+                            Label(
+                                model.hasToken ? AppL10n.string("Replace with GitHub OAuth") : AppL10n.string("Sign in with GitHub"),
+                                systemImage: "person.crop.circle.badge.checkmark"
+                            )
+                        }
+                        .disabled(model.isOAuthSignInPending || model.oauthClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                        if model.isOAuthSignInPending {
+                            Button {
+                                model.cancelOAuthDeviceSignIn()
+                            } label: {
+                                Label(AppL10n.string("Cancel"), systemImage: "xmark.circle")
                             }
-                        } label: {
-                            Label(AppL10n.string("Save or Replace with PAT"), systemImage: "key")
                         }
-                        .disabled(model.isWorking)
 
-                        Button {
-                            model.loadStoredToken()
-                        } label: {
-                            Label(AppL10n.string("Load"), systemImage: "lock.open")
-                        }
-                        .disabled(model.isWorking)
+                        if let authorization = model.oauthAuthorization {
+                            Button {
+                                model.copyOAuthUserCode()
+                            } label: {
+                                Label(AppL10n.string("Copy Code"), systemImage: "doc.on.doc")
+                            }
 
-                        Button(role: .destructive) {
-                            model.deleteStoredToken()
-                        } label: {
-                            Label(AppL10n.string("Delete Local Credential"), systemImage: "trash")
+                            Link(AppL10n.string("Open GitHub"), destination: authorization.verificationURI)
                         }
-                        .disabled(model.isWorking || !model.hasToken)
                     }
+
+                    if let authorization = model.oauthAuthorization {
+                        HStack {
+                            Text(AppL10n.string("Device code"))
+                            Spacer()
+                            Text(authorization.userCode)
+                                .font(.system(.body, design: .monospaced))
+                                .textSelection(.enabled)
+                        }
+                    }
+
+                    Text(model.oauthStatus)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     HStack {
                         Text(AppL10n.string("Revoke OAuth access"))

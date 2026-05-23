@@ -76,7 +76,7 @@ struct MainView: View {
                 } label: {
                     Label(AppL10n.string("Submit Review"), systemImage: "paperplane")
                 }
-                .disabled(!model.canSubmitReview)
+                .disabled(!model.canPreviewReviewSubmission)
                 .keyboardShortcut(.return, modifiers: [.command])
 
                 if model.canCancelCurrentOperation {
@@ -142,8 +142,18 @@ struct MainView: View {
             ReviewSubmissionPreviewSheet(
                 preview: model.submissionPreview,
                 eventDisplayName: model.selectedEvent.localizedDisplayName,
+                isRefreshingSafety: model.isWorking,
                 onCancel: {
                     model.isSubmitConfirmationPresented = false
+                },
+                onRefreshSafety: {
+                    Task {
+                        await model.refreshSubmitSafety()
+                    }
+                },
+                onRegenerate: {
+                    model.isSubmitConfirmationPresented = false
+                    model.startGenerateReview()
                 },
                 onSubmit: {
                     model.isSubmitConfirmationPresented = false

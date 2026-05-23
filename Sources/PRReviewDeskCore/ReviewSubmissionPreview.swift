@@ -18,6 +18,7 @@ public struct ReviewSubmissionPreview: Equatable, Hashable, Sendable {
     public let bodyPreview: String
     public let selectedInlineComments: [InlineCommentPreview]
     public let safetyState: ReviewSubmissionSafetyState
+    public let safetyCheckedAt: Date?
 
     public var selectedInlineCommentCount: Int {
         selectedInlineComments.count
@@ -47,11 +48,39 @@ public struct ReviewSubmissionPreview: Equatable, Hashable, Sendable {
         return "Ready to submit."
     }
 
+    public var safetyCheckedMessage: String {
+        guard let safetyCheckedAtDisplay else {
+            return "Safety has not been refreshed yet."
+        }
+
+        return "Last checked at \(safetyCheckedAtDisplay) UTC."
+    }
+
+    public var safetyCheckedAtDisplay: String? {
+        guard let safetyCheckedAt else {
+            return nil
+        }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: safetyCheckedAt)
+        guard let year = components.year,
+              let month = components.month,
+              let day = components.day,
+              let hour = components.hour,
+              let minute = components.minute else {
+            return nil
+        }
+
+        return String(format: "%04d-%02d-%02d %02d:%02d", year, month, day, hour, minute)
+    }
+
     public static func make(
         event: ReviewEvent,
         body: String,
         draft: ReviewDraft,
-        safetyState: ReviewSubmissionSafetyState? = nil
+        safetyState: ReviewSubmissionSafetyState? = nil,
+        safetyCheckedAt: Date? = nil
     ) -> ReviewSubmissionPreview {
         let selectedComments = draft.inlineComments.filter(\.isSelected)
         return ReviewSubmissionPreview(
@@ -72,7 +101,8 @@ public struct ReviewSubmissionPreview: Equatable, Hashable, Sendable {
                 currentHeadSha: nil,
                 selectedInlineCommentCount: selectedComments.count,
                 invalidSelectedInlineComments: []
-            )
+            ),
+            safetyCheckedAt: safetyCheckedAt
         )
     }
 

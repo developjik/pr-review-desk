@@ -120,7 +120,7 @@ private struct ReviewEventSection: View {
             } label: {
                 Label("\(AppL10n.string("Submit Review")) (\(model.selectedInlineCommentCount))", systemImage: "paperplane")
             }
-            .disabled(!model.canSubmitReview)
+            .disabled(!model.canPreviewReviewSubmission)
         }
     }
 }

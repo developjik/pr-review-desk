@@ -13,11 +13,7 @@ struct ReviewInboxView: View {
             if selectedSection == .needsSetup && !model.readinessChecklist.isReady {
                 FirstRunSetupView(model: model)
             } else if rows.isEmpty {
-                ContentUnavailableView(
-                    AppL10n.string(selectedSection.displayName),
-                    systemImage: selectedSection.systemImage,
-                    description: Text(emptyDescription)
-                )
+                emptyState
             } else {
                 List(rows, selection: selectedRowIDBinding) { row in
                     PullRequestTriageRowView(
@@ -70,6 +66,12 @@ struct ReviewInboxView: View {
 
                 if let activeSearchSummary {
                     StatusBadge(title: activeSearchSummary, systemImage: "magnifyingglass", tone: .info)
+                    Button {
+                        clearPullRequestSearch()
+                    } label: {
+                        Label(AppL10n.string("Clear search"), systemImage: "xmark.circle")
+                    }
+                    .controlSize(.small)
                 }
 
                 if model.canWatchSelectedRepository {
@@ -85,6 +87,26 @@ struct ReviewInboxView: View {
             }
         }
         .padding()
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            ContentUnavailableView(
+                AppL10n.string(selectedSection.displayName),
+                systemImage: selectedSection.systemImage,
+                description: Text(emptyDescription)
+            )
+
+            if hasActiveSearch {
+                Button {
+                    clearPullRequestSearch()
+                } label: {
+                    Label(AppL10n.string("Clear search"), systemImage: "xmark.circle")
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var emptyDescription: String {
@@ -110,6 +132,10 @@ struct ReviewInboxView: View {
         ))
     }
 
+    private var hasActiveSearch: Bool {
+        !model.pullRequestSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var activeSearchSummary: String? {
         let trimmedQuery = model.pullRequestSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuery.isEmpty else {
@@ -117,6 +143,10 @@ struct ReviewInboxView: View {
         }
 
         return AppL10n.string("Search \"%@\" - %d visible", trimmedQuery, rows.count)
+    }
+
+    private func clearPullRequestSearch() {
+        model.pullRequestSearchText = ""
     }
 
     private func isSelected(_ row: PullRequestTriageRow) -> Bool {
@@ -271,21 +301,11 @@ private struct FirstRunSetupView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Label(AppL10n.string("Recommended path"), systemImage: "1.circle")
-                        .font(.headline)
-                    Text(AppL10n.string("Use GitHub OAuth if you have an OAuth App client ID configured. For this personal-alpha build, the personal access token fallback is the fastest reliable path."))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(10)
-                .background(AppTheme.panelBackground)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(AppTheme.border(.info))
-                }
+                guidedSetupPath
 
-                ReadinessChecklistView(model: model, mode: .detailed)
+                DisclosureGroup(AppL10n.string("Technical readiness details")) {
+                    ReadinessChecklistView(model: model, mode: .detailed)
+                }
 
                 SettingsLink {
                     Label(AppL10n.string("Open Settings"), systemImage: "gear")
@@ -293,6 +313,214 @@ private struct FirstRunSetupView: View {
             }
             .padding()
             .frame(maxWidth: 620, alignment: .leading)
+        }
+    }
+
+    private var guidedSetupSteps: [FirstRunSetupStep] {
+        let checklist = model.readinessChecklist
+        let gitHubReady = checklist.items
+            .filter { $0.id == .githubCredential || $0.id == .githubTokenValidation }
+            .allSatisfy { $0.state == .ready }
+        let codexReady = checklist.items
+            .filter { $0.id == .codexCLI || $0.id == .codexLogin }
+            .allSatisfy { $0.state == .ready }
+
+        return FirstRunSetupPresentation.steps(
+            hasGitHubCredential: model.hasToken,
+            isGitHubReady: gitHubReady,
+            isCodexReady: codexReady,
+            isPrivacyAcknowledged: model.isPrivacyDisclosureAcknowledged
+        )
+    }
+
+    private var guidedSetupPath: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(AppL10n.string("Guided setup path"), systemImage: "1.circle")
+                .font(.headline)
+
+            ForEach(Array(guidedSetupSteps.enumerated()), id: \.element.id) { enumeratedStep in
+                guidedSetupRow(index: enumeratedStep.offset, step: enumeratedStep.element)
+            }
+        }
+        .padding(10)
+        .background(AppTheme.panelBackground)
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(AppTheme.border(.info))
+        }
+    }
+
+    private func guidedSetupRow(index: Int, step: FirstRunSetupStep) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: step.state == .complete ? "checkmark.circle.fill" : "\(index + 1).circle")
+                .foregroundStyle(step.state == .complete ? AppTheme.foreground(.success) : AppTheme.foreground(.focus))
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(AppL10n.string(step.title))
+                    .fontWeight(.medium)
+                Text(AppL10n.string(step.detail))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                guidedSetupAction(for: step)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func guidedSetupAction(for step: FirstRunSetupStep) -> some View {
+        if step.state == .complete {
+            StatusBadge(title: AppL10n.string("Complete"), systemImage: "checkmark.circle", tone: .success)
+        } else {
+            switch step.id {
+            case "github":
+                GitHubCredentialSetupControls(model: model)
+            case "codex":
+                Button {
+                    Task {
+                        await model.refreshCodexCLIStatus()
+                    }
+                } label: {
+                    Label(AppL10n.string(step.actionTitle), systemImage: "terminal")
+                }
+                .controlSize(.small)
+                .disabled(model.isWorking)
+            case "privacy":
+                Button {
+                    model.acknowledgePrivacyDisclosure()
+                } label: {
+                    Label(AppL10n.string(step.actionTitle), systemImage: "hand.raised")
+                }
+                .controlSize(.small)
+                .disabled(model.isWorking)
+            default:
+                EmptyView()
+            }
+        }
+    }
+}
+
+private struct GitHubCredentialSetupControls: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if model.hasToken {
+                HStack(spacing: 8) {
+                    Button {
+                        Task {
+                            await model.validateCurrentToken()
+                        }
+                    } label: {
+                        Label(AppL10n.string("Validate GitHub"), systemImage: "checkmark.seal")
+                    }
+                    .disabled(model.isWorking)
+
+                    Button {
+                        model.loadStoredToken()
+                        Task {
+                            await model.refreshRepositories()
+                        }
+                    } label: {
+                        Label(AppL10n.string("Reload credential"), systemImage: "lock.open")
+                    }
+                    .disabled(model.isWorking)
+                }
+                .controlSize(.small)
+
+                Text(AppL10n.string(model.tokenValidationStatus))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(AppL10n.string("Paste a GitHub token with repository access, save it locally, then validate scopes."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                SecureField(AppL10n.string("Personal access token"), text: $model.tokenInput)
+                    .textFieldStyle(.roundedBorder)
+
+                HStack(spacing: 8) {
+                    Button {
+                        Task {
+                            await model.saveTokenAndRefresh()
+                        }
+                    } label: {
+                        Label(AppL10n.string("Save PAT"), systemImage: "key")
+                    }
+                    .disabled(model.isWorking || model.tokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    Button {
+                        model.loadStoredToken()
+                        Task {
+                            await model.refreshRepositories()
+                        }
+                    } label: {
+                        Label(AppL10n.string("Load from Keychain"), systemImage: "lock.open")
+                    }
+                    .disabled(model.isWorking)
+                }
+                .controlSize(.small)
+            }
+
+            DisclosureGroup(AppL10n.string("Advanced GitHub OAuth")) {
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField(AppL10n.string("OAuth App client ID"), text: $model.oauthClientID)
+                        .textFieldStyle(.roundedBorder)
+
+                    Text(AppL10n.string("Use OAuth only when you already have a GitHub OAuth App client ID."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: 8) {
+                        Button {
+                            model.startOAuthDeviceSignIn()
+                        } label: {
+                            Label(
+                                model.hasToken ? AppL10n.string("Replace with GitHub OAuth") : AppL10n.string("Sign in with GitHub"),
+                                systemImage: "person.crop.circle.badge.checkmark"
+                            )
+                        }
+                        .disabled(model.isOAuthSignInPending || model.oauthClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                        if model.isOAuthSignInPending {
+                            Button {
+                                model.cancelOAuthDeviceSignIn()
+                            } label: {
+                                Label(AppL10n.string("Cancel"), systemImage: "xmark.circle")
+                            }
+                        }
+                    }
+                    .controlSize(.small)
+
+                    if let authorization = model.oauthAuthorization {
+                        HStack(spacing: 8) {
+                            Button {
+                                model.copyOAuthUserCode()
+                            } label: {
+                                Label(AppL10n.string("Copy Code"), systemImage: "doc.on.doc")
+                            }
+
+                            Link(AppL10n.string("Open GitHub"), destination: authorization.verificationURI)
+                        }
+                        .controlSize(.small)
+
+                        Text(AppL10n.string("Device code"))
+                            + Text(" \(authorization.userCode)")
+                            .font(.system(.caption, design: .monospaced))
+                    }
+
+                    Text(AppL10n.string(model.oauthStatus))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, 4)
+            }
+            .font(.caption)
         }
     }
 }

@@ -4,7 +4,10 @@ import PRReviewDeskCore
 struct ReviewSubmissionPreviewSheet: View {
     let preview: ReviewSubmissionPreview?
     let eventDisplayName: String
+    let isRefreshingSafety: Bool
     let onCancel: () -> Void
+    let onRefreshSafety: () -> Void
+    let onRegenerate: () -> Void
     let onSubmit: () -> Void
 
     var body: some View {
@@ -35,7 +38,7 @@ struct ReviewSubmissionPreviewSheet: View {
             Divider()
             footer
         }
-        .frame(width: 640, height: 620)
+        .frame(minWidth: 520, idealWidth: 640, maxWidth: 640, minHeight: 620, idealHeight: 620)
     }
 
     private var header: some View {
@@ -59,6 +62,25 @@ struct ReviewSubmissionPreviewSheet: View {
         HStack {
             Button(AppL10n.string("Cancel"), role: .cancel) {
                 onCancel()
+            }
+            if preview?.canSubmit != true {
+                Button {
+                    onRefreshSafety()
+                } label: {
+                    Label(
+                        isRefreshingSafety ? AppL10n.string("Refreshing Safety") : AppL10n.string("Refresh Safety"),
+                        systemImage: "shield.lefthalf.filled"
+                    )
+                }
+                .disabled(isRefreshingSafety)
+                if preview?.safetyState.isStale == true {
+                    Button {
+                        onRegenerate()
+                    } label: {
+                        Label(AppL10n.string("Regenerate"), systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .disabled(isRefreshingSafety)
+                }
             }
             Spacer()
             Button {
@@ -108,6 +130,11 @@ struct ReviewSubmissionPreviewSheet: View {
             .font(.headline)
             .foregroundStyle(state.canSubmit ? AppTheme.foreground(.success) : AppTheme.foreground(.warning))
             .fixedSize(horizontal: false, vertical: true)
+
+            Text(safetyCheckedText(for: preview))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             InspectorMetricGroup(metrics: [
                 InspectorMetric(
@@ -212,5 +239,13 @@ struct ReviewSubmissionPreviewSheet: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(AppTheme.border(.neutral))
         }
+    }
+
+    private func safetyCheckedText(for preview: ReviewSubmissionPreview) -> String {
+        guard let display = preview.safetyCheckedAtDisplay else {
+            return AppL10n.string(preview.safetyCheckedMessage)
+        }
+
+        return AppL10n.string("Last checked at %@ UTC.", display)
     }
 }

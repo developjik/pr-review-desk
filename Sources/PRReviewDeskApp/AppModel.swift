@@ -79,6 +79,7 @@ final class AppModel: ObservableObject {
     @Published var isWorking = false
     @Published var canCancelCurrentOperation = false
     @Published var preflightHeadSha: String?
+    @Published var submitSafetyLastCheckedAt: Date?
     @Published var recoverableError: RecoverableErrorDetails?
     @Published var tokenValidationStatus = "Not validated."
     @Published var codexCLIStatus = "Not checked."
@@ -174,7 +175,8 @@ final class AppModel: ObservableObject {
             event: selectedEvent,
             body: reviewBody,
             draft: draft,
-            safetyState: submitSafetyState
+            safetyState: submitSafetyState,
+            safetyCheckedAt: submitSafetyLastCheckedAt
         )
     }
 
@@ -183,6 +185,7 @@ final class AppModel: ObservableObject {
             hasToken: hasToken,
             hasSelectedPullRequest: selectedPullRequest != nil,
             hasSubmittableDraft: hasSubmittableDraft,
+            hasDraft: draft != nil,
             isWorking: isWorking,
             hasSelectedFile: selectedChangedFile != nil,
             hasFocusedInlineComment: focusedInlineCommentTarget != nil,
@@ -249,6 +252,10 @@ final class AppModel: ObservableObject {
 
     var canSubmitReview: Bool {
         commandAvailability.canSubmitReview
+    }
+
+    var canPreviewReviewSubmission: Bool {
+        commandAvailability.canPreviewReviewSubmission
     }
 
     var canWatchSelectedPullRequest: Bool {
@@ -593,21 +600,29 @@ final class AppModel: ObservableObject {
         draft = nil
         reviewBody = ""
         reviewedHeadSha = nil
+        submitSafetyLastCheckedAt = nil
         selectedChangedFilePath = nil
         focusedInlineCommentTarget = nil
         focusedDiffLineIndex = nil
         diffReviewFileState = DiffReviewFileState()
-        preflightHeadSha = pullRequest.headSha
+        preflightHeadSha = nil
 
         guard let selectedRepository, let githubClient else {
             return
         }
 
         await runWorking("Loading changed files...") {
-            changedFiles = try await githubClient.pullRequestFiles(repository: selectedRepository, pullRequest: pullRequest)
+            let currentPullRequest = try await githubClient.pullRequestDetails(
+                repository: selectedRepository,
+                number: pullRequest.number
+            )
+            self.selectedPullRequest = currentPullRequest
+            changedFiles = try await githubClient.pullRequestFiles(repository: selectedRepository, pullRequest: currentPullRequest)
             selectedChangedFilePath = changedFiles.first?.path
+            preflightHeadSha = currentPullRequest.headSha
+            submitSafetyLastCheckedAt = Date()
             statusMessage = "Loaded \(changedFiles.count) changed files. \(reviewCoverageSummary.statusMessage)"
-            try restoreDraftIfAvailable(repository: selectedRepository, pullRequest: pullRequest)
+            try restoreDraftIfAvailable(repository: selectedRepository, pullRequest: currentPullRequest)
         }
     }
 
@@ -728,7 +743,7 @@ final class AppModel: ObservableObject {
     }
 
     func requestSubmitReview() {
-        guard canSubmitReview else {
+        guard canPreviewReviewSubmission else {
             return
         }
 
@@ -753,7 +768,7 @@ final class AppModel: ObservableObject {
             return
         }
 
-        await runWorking("Refreshing submit safety...") {
+        let didRefresh = await runWorking("Refreshing submit safety...") {
             let previousSelectedFilePath = selectedChangedFilePath
             let currentPullRequest = try await githubClient.pullRequestDetails(
                 repository: selectedRepository,
@@ -768,17 +783,18 @@ final class AppModel: ObservableObject {
             changedFiles = currentFiles
             selectedChangedFilePath = changedFiles.first(where: { $0.path == previousSelectedFilePath })?.path ?? changedFiles.first?.path
             preflightHeadSha = currentPullRequest.headSha
+            submitSafetyLastCheckedAt = Date()
             markWatchedDraftStaleIfNeeded(repository: selectedRepository, pullRequest: currentPullRequest)
         }
-
-        guard canSubmitReview else {
-            statusMessage = submitSafetyMessage
+        guard didRefresh else {
             return
         }
 
         if ReviewSubmissionConfirmationPolicy.requiresConfirmation(for: selectedEvent) {
             isSubmitConfirmationPresented = true
-            statusMessage = "Submit safety refreshed. Review the preview before posting."
+            statusMessage = canSubmitReview
+                ? "Submit safety refreshed. Review the preview before posting."
+                : submitSafetyMessage
         }
     }
 
@@ -838,6 +854,7 @@ final class AppModel: ObservableObject {
             focusedInlineCommentTarget = nil
             reviewedHeadSha = pullRequestForReview.headSha
             preflightHeadSha = pullRequestForReview.headSha
+            submitSafetyLastCheckedAt = Date()
             selectedEvent = .comment
             draft = generated
             reviewBody = composeReviewBody(from: generated)
@@ -852,6 +869,9 @@ final class AppModel: ObservableObject {
     }
 
     func refreshSubmitSafety() async {
+        guard !isWorking else {
+            return
+        }
         guard let selectedRepository, let selectedPullRequest, let githubClient else {
             statusMessage = "Select a pull request first."
             return
@@ -872,6 +892,7 @@ final class AppModel: ObservableObject {
             changedFiles = currentFiles
             selectedChangedFilePath = changedFiles.first(where: { $0.path == previousSelectedFilePath })?.path ?? changedFiles.first?.path
             preflightHeadSha = currentPullRequest.headSha
+            submitSafetyLastCheckedAt = Date()
             markWatchedDraftStaleIfNeeded(repository: selectedRepository, pullRequest: currentPullRequest)
             statusMessage = "Submit safety refreshed. \(submitSafetyMessage)"
         }
@@ -1025,6 +1046,7 @@ final class AppModel: ObservableObject {
         draft = nil
         reviewBody = ""
         reviewedHeadSha = nil
+        submitSafetyLastCheckedAt = nil
         focusedInlineCommentTarget = nil
         focusedDiffLineIndex = nil
         selectedEvent = .comment
@@ -1401,6 +1423,7 @@ final class AppModel: ObservableObject {
         focusedDiffLineIndex = nil
         reviewedHeadSha = pullRequest.headSha
         preflightHeadSha = pullRequest.headSha
+        submitSafetyLastCheckedAt = Date()
         selectedEvent = .comment
         self.draft = draft
         self.reviewBody = reviewBody
@@ -1484,6 +1507,7 @@ final class AppModel: ObservableObject {
         focusedDiffLineIndex = nil
         reviewedHeadSha = storedDraft.key.headSha
         preflightHeadSha = pullRequest.headSha
+        submitSafetyLastCheckedAt = Date()
         draft = storedDraft.draft
         reviewBody = storedDraft.reviewBody
         selectedEvent = storedDraft.selectedEvent
@@ -1589,6 +1613,7 @@ final class AppModel: ObservableObject {
         focusedInlineCommentTarget = nil
         focusedDiffLineIndex = nil
         preflightHeadSha = nil
+        submitSafetyLastCheckedAt = nil
     }
 
     private func selectChangedFile(offset: Int) {
@@ -1666,12 +1691,14 @@ final class AppModel: ObservableObject {
             changedFiles = currentFiles
             selectedChangedFilePath = changedFiles.first(where: { $0.path == previousSelectedFilePath })?.path ?? changedFiles.first?.path
             preflightHeadSha = currentPullRequest.headSha
+            submitSafetyLastCheckedAt = Date()
             markWatchedDraftStaleIfNeeded(repository: selectedRepository, pullRequest: currentPullRequest)
             statusMessage = "Refreshed pull request and \(changedFiles.count) changed files. \(reviewCoverageSummary.statusMessage)"
         }
     }
 
-    private func runWorking(_ message: String, isCancellable: Bool = false, operation: () async throws -> Void) async {
+    @discardableResult
+    private func runWorking(_ message: String, isCancellable: Bool = false, operation: () async throws -> Void) async -> Bool {
         isWorking = true
         canCancelCurrentOperation = isCancellable
         statusMessage = message
@@ -1683,8 +1710,10 @@ final class AppModel: ObservableObject {
         do {
             try Task.checkCancellation()
             try await operation()
+            return true
         } catch is CancellationError {
             statusMessage = "Operation cancelled."
+            return false
         } catch {
             let details = SensitiveTextRedactor.redact("\(error)")
             statusMessage = "Failed: \(shortOperationName(message))"
@@ -1694,6 +1723,7 @@ final class AppModel: ObservableObject {
                 details: details,
                 recoverySuggestion: recoverySuggestion(for: error)
             )
+            return false
         }
     }
 
