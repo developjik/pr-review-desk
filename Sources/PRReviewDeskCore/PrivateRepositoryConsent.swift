@@ -17,11 +17,11 @@ public struct PrivateRepositoryConsentRequest: Identifiable, Equatable, Hashable
 
 public enum PrivateRepositoryConsentPolicy {
     public static let outboundDataDescriptions = [
-        "PR metadata",
-        "Reviewable patch content",
-        "PR body, existing comments, and check status summaries",
-        "Selected repository and pull request identifiers",
-        "Generated review prompt context"
+        "Pull request title, description, and author",
+        "Reviewable code changes",
+        "Existing comments and check summaries",
+        "Selected repository and pull request names",
+        "Information needed to write the review draft"
     ]
 
     public static func request(

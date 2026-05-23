@@ -1,6 +1,10 @@
 import SwiftUI
 import PRReviewDeskCore
 
+extension Notification.Name {
+    static let openReviewCommandPanel = Notification.Name("PRReviewDesk.openReviewCommandPanel")
+}
+
 struct MainView: View {
     @ObservedObject var model: AppModel
     @SceneStorage("main.selectedInboxSection.v4") private var selectedInboxSectionRaw = ReviewWorkspaceLayoutPolicy.defaultInboxSection.rawValue
@@ -29,7 +33,9 @@ struct MainView: View {
                 max: CGFloat(ReviewWorkspaceLayoutPolicy.pullRequestListMaximumColumnWidth)
             )
         } detail: {
-            ReviewPaneView(model: model)
+            ReviewPaneView(model: model) {
+                isInspectorPresented = true
+            }
                 .inspector(isPresented: $isInspectorPresented) {
                     ReviewInspectorView(model: model)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -155,6 +161,14 @@ struct MainView: View {
                     model.isSubmitConfirmationPresented = false
                     model.startGenerateReview()
                 },
+                onRevealInvalidComment: { comment in
+                    model.isSubmitConfirmationPresented = false
+                    model.revealInlineComment(path: comment.path, position: comment.position)
+                    isInspectorPresented = true
+                },
+                onDeselectInvalidComment: { comment in
+                    model.deselectInlineComment(path: comment.path, position: comment.position)
+                },
                 onSubmit: {
                     model.isSubmitConfirmationPresented = false
                     Task {
@@ -171,10 +185,17 @@ struct MainView: View {
                 isInspectorPresented = true
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .openReviewCommandPanel)) { _ in
+            isCommandPanelPresented = true
+        }
     }
 
     private var selectedInboxSection: ReviewInboxSection {
-        ReviewInboxSection(rawValue: selectedInboxSectionRaw) ?? .draftReady
+        let storedSection = ReviewInboxSection(rawValue: selectedInboxSectionRaw) ?? ReviewWorkspaceLayoutPolicy.defaultInboxSection
+        return ReviewWorkspaceLayoutPolicy.effectiveInboxSection(
+            storedSection: storedSection,
+            isReady: model.readinessChecklist.isReady
+        )
     }
 
     private var selectedInboxSectionBinding: Binding<ReviewInboxSection> {

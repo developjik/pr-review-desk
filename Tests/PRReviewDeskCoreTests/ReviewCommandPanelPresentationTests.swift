@@ -6,6 +6,8 @@ enum ReviewCommandPanelPresentationTests {
         try testReturnExecutesSelectedEnabledAction()
         try testSelectionFallsBackToFirstEnabledFilteredAction()
         try testKeyboardMoveSelectsNextEnabledAction()
+        try testEmptyQueryShowsDisabledActionsWithGuidance()
+        try testCoreMenuActionsHaveStableCommandPanelIDs()
     }
 
     private static func testReturnExecutesSelectedEnabledAction() throws {
@@ -54,6 +56,33 @@ enum ReviewCommandPanelPresentationTests {
 
         try expectEqual(nextID, ReviewCommandPanelActionKind.selectSection(.stale).stableID)
         try expectEqual(previousID, ReviewCommandPanelActionKind.selectSection(.draftReady).stableID)
+    }
+
+    private static func testEmptyQueryShowsDisabledActionsWithGuidance() throws {
+        let actions = sampleActions()
+
+        let defaultVisibleActions = ReviewCommandPanelPresentation.visibleActions(actions, query: "")
+        let searchedActions = ReviewCommandPanelPresentation.visibleActions(actions, query: "submit")
+
+        try expectEqual(defaultVisibleActions.map(\.kind), [
+            .generateReview,
+            .submitReview,
+            .selectSection(.draftReady),
+            .selectSection(.stale)
+        ])
+        try expectEqual(searchedActions.map(\.kind), [
+            .submitReview
+        ])
+    }
+
+    private static func testCoreMenuActionsHaveStableCommandPanelIDs() throws {
+        try expectEqual(ReviewCommandPanelActionKind.cancelReviewGeneration.stableID, "cancel-review-generation")
+        try expectEqual(ReviewCommandPanelActionKind.copyCodexLoginCommand.stableID, "copy-codex-login-command")
+        try expectEqual(ReviewCommandPanelActionKind.startGitHubSignIn.stableID, "start-github-sign-in")
+        try expectEqual(ReviewCommandPanelActionKind.validateGitHubAccess.stableID, "validate-github-access")
+        try expectEqual(ReviewCommandPanelActionKind.checkCodexReadiness.stableID, "check-codex-readiness")
+        try expectEqual(ReviewCommandPanelActionKind.openCodexLoginTerminal.stableID, "open-codex-login-terminal")
+        try expectEqual(ReviewCommandPanelActionKind.acknowledgePrivacyDisclosure.stableID, "acknowledge-privacy-disclosure")
     }
 
     private static func sampleActions() -> [ReviewCommandPanelAction] {

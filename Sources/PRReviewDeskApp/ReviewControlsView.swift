@@ -7,11 +7,12 @@ struct ReviewControlsView: View {
     var body: some View {
         HStack(spacing: 10) {
             Button {
-                model.startWatchingSelectedPullRequest()
+                model.addSelectedPullRequestDraft()
             } label: {
-                Label(AppL10n.string("Watch PR"), systemImage: "eye")
+                Label(AppL10n.string("Add Draft"), systemImage: "tray.and.arrow.down")
             }
-            .disabled(!model.canWatchSelectedPullRequest)
+            .disabled(!model.canAddDraftForSelectedPullRequest)
+            .smokeAccessibilityIdentifier("review-controls.queue-pull-request")
 
             Button {
                 model.openSelectedPullRequestInBrowser()

@@ -32,7 +32,7 @@ struct SubmitSafetyView: View {
                             await model.refreshSubmitSafety()
                         }
                     } label: {
-                        Label(AppL10n.string("Refresh Safety"), systemImage: "shield.lefthalf.filled")
+                        Label(AppL10n.string("Check Again"), systemImage: "shield.lefthalf.filled")
                     }
                     .disabled(model.isWorking)
                 }
@@ -53,23 +53,27 @@ struct SubmitSafetyView: View {
                 ),
                 InspectorMetric(
                     id: "invalid",
-                    title: AppL10n.string("Invalid %d", state.invalidSelectedInlineComments.count),
+                    title: AppL10n.string("Needs fix %d", state.invalidSelectedInlineComments.count),
                     systemImage: state.invalidSelectedInlineComments.isEmpty ? "checkmark.circle" : "exclamationmark.triangle",
                     tone: state.invalidSelectedInlineComments.isEmpty ? .success : .invalid
-                ),
-                InspectorMetric(
-                    id: "reviewed",
-                    title: AppL10n.string("Reviewed %@", ReviewViewSupport.shortSha(state.reviewedHeadSha)),
-                    systemImage: "number",
-                    tone: .neutral
-                ),
-                InspectorMetric(
-                    id: "current",
-                    title: AppL10n.string("Current %@", ReviewViewSupport.shortSha(state.currentHeadSha)),
-                    systemImage: "number",
-                    tone: .neutral
                 )
             ])
+
+            DisclosureGroup(AppL10n.string("Version details")) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(
+                        AppL10n.string("Draft version %@", ReviewViewSupport.shortSha(state.reviewedHeadSha)),
+                        systemImage: "number"
+                    )
+                    Label(
+                        AppL10n.string("Latest version %@", ReviewViewSupport.shortSha(state.currentHeadSha)),
+                        systemImage: "number"
+                    )
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .font(.caption)
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)

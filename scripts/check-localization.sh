@@ -104,9 +104,25 @@ reject_raw_ui_copy() {
   fi
 }
 
+reject_awkward_korean_copy() {
+  local matches
+  matches="$(
+    rg -n \
+      '= ".*(GitHub 로그인 정보과|GitHub 로그인 정보이|로그인 정보을|접근 권한를|접근 권한가|GitHub GitHub|OAuth|Keychain|키체인|PATH|Homebrew|npm|CLI|codex login|터미널|메타데이터|패치|컨텍스트|디바이스 코드|SHA|토큰)' \
+      "$KO_STRINGS" "$KO_STRINGSDICT" || true
+  )"
+
+  if [[ -n "$matches" ]]; then
+    echo "Korean localization contains awkward or technical setup copy:" >&2
+    printf "%s\n" "$matches" >&2
+    return 1
+  fi
+}
+
 missing_keys "en" "$EN_STRINGS"
 missing_keys "ko" "$KO_STRINGS"
 compare_locale_keys "$EN_STRINGS" "$KO_STRINGS"
 reject_raw_ui_copy
+reject_awkward_korean_copy
 
 echo "Localization checks passed"

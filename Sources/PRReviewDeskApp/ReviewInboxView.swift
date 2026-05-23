@@ -84,14 +84,15 @@ struct ReviewInboxView: View {
 
                 Spacer()
 
-                if model.canWatchSelectedRepository {
+                if model.canAddDraftsForSelectedRepository {
                     Button {
-                        model.startWatchingSelectedRepository()
+                        model.addSelectedRepositoryDrafts()
                     } label: {
-                        Label(AppL10n.string("Watch all"), systemImage: "eye")
+                        Label(AppL10n.string("Add drafts"), systemImage: "tray.full")
                     }
                     .controlSize(.small)
-                    .help(AppL10n.string("Watch all open pull requests in this repository"))
+                    .help(AppL10n.string("Create drafts for all open pull requests in this repository."))
+                    .smokeAccessibilityIdentifier("review-inbox.queue-repository")
                 }
             }
 
@@ -129,9 +130,45 @@ struct ReviewInboxView: View {
                 } label: {
                     Label(AppL10n.string("Clear search"), systemImage: "xmark.circle")
                 }
+            } else {
+                emptyStateAction
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var emptyStateAction: some View {
+        if (selectedSection == .draftReady || selectedSection == .running), model.canAddDraftsForSelectedRepository {
+            Button {
+                model.addSelectedRepositoryDrafts()
+            } label: {
+                Label(AppL10n.string("Add drafts for this repository"), systemImage: "tray.full")
+            }
+            .accessibilityHint(AppL10n.string("Creates saved drafts for the open PRs in the selected repository."))
+            .smokeAccessibilityIdentifier("review-inbox.empty.queue-repository")
+        } else if model.hasToken, model.canRefreshActiveScope {
+            Button {
+                Task {
+                    await model.refreshActiveScope()
+                }
+            } label: {
+                Label(
+                    AppL10n.string(model.selectedRepository == nil ? "Load repositories" : "Refresh pull requests"),
+                    systemImage: "arrow.clockwise"
+                )
+            }
+            .accessibilityHint(AppL10n.string("Loads the latest repositories and PRs from GitHub."))
+            .smokeAccessibilityIdentifier("review-inbox.empty.refresh")
+        } else if !model.hasToken {
+            Button {
+                model.startOAuthDeviceSignIn()
+            } label: {
+                Label(AppL10n.string("Sign in with GitHub"), systemImage: "person.crop.circle.badge.checkmark")
+            }
+            .accessibilityHint(AppL10n.string("Opens GitHub sign-in and then checks repository access."))
+            .smokeAccessibilityIdentifier("review-inbox.empty.github-sign-in")
+        }
     }
 
     private var emptyDescription: String {
@@ -279,24 +316,14 @@ private struct PullRequestTriageRowView: View {
                 .lineLimit(ReviewWorkspaceLayoutPolicy.pullRequestMetadataLineLimit)
 
                 HStack(spacing: 8) {
-                    Label("\(row.fileCount)", systemImage: "doc.on.doc")
-                    Text("+\(row.additions)")
-                        .foregroundStyle(AppTheme.foreground(.addition))
-                    Text("-\(row.deletions)")
-                        .foregroundStyle(AppTheme.foreground(.deletion))
+                    Label(AppL10n.string("%d files", row.fileCount), systemImage: "doc.on.doc")
+                        .foregroundStyle(.secondary)
                     StatusBadge(title: AppL10n.string(row.draftStatus.displayName), systemImage: statusIcon, tone: statusTone)
                     if row.hasCoverageWarning {
                         StatusBadge(title: AppL10n.string("Coverage warning"), systemImage: "exclamationmark.triangle", tone: .warning)
                     }
                     if row.repositoryIsPrivate {
                         StatusBadge(title: AppL10n.string("Private"), systemImage: "lock", tone: .neutral)
-                    }
-                    if let topSeverity = row.topSeverity {
-                        StatusBadge(
-                            title: topSeverity.localizedDisplayName,
-                            systemImage: "exclamationmark.bubble",
-                            tone: ReviewViewSupport.severityTone(topSeverity)
-                        )
                     }
                 }
                 .font(.caption)
@@ -367,13 +394,13 @@ private struct FirstRunSetupView: View {
                     .font(.title3)
                     .fontWeight(.semibold)
 
-                Text(AppL10n.string("Connect GitHub, confirm Codex CLI and ChatGPT login, and acknowledge privacy before generating reviews."))
+                Text(AppL10n.string("Connect GitHub, confirm Codex, sign in with ChatGPT, and acknowledge privacy before generating reviews."))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 guidedSetupPath
 
-                DisclosureGroup(AppL10n.string("Technical readiness details")) {
+                DisclosureGroup(AppL10n.string("Setup details")) {
                     ReadinessChecklistView(model: model, mode: .detailed)
                 }
 
@@ -437,9 +464,43 @@ private struct FirstRunSetupView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if step.id == "privacy", step.state != .complete {
+                    privacyDisclosureCallout
+                }
                 guidedSetupAction(for: step)
             }
         }
+    }
+
+    private var isCodexCLIReady: Bool {
+        model.readinessChecklist.items
+            .first { $0.id == .codexCLI }?
+            .state == .ready
+    }
+
+    private var needsCodexInstallAction: Bool {
+        model.readinessChecklist.items
+            .first { $0.id == .codexCLI }?
+            .state == .needsAction
+    }
+
+    private var privacyDisclosureCallout: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(AppL10n.string("Privacy disclosure"), systemImage: "hand.raised")
+                .font(.caption)
+                .fontWeight(.medium)
+            Text(AppL10n.string("When you generate an AI review draft, pull request details and reviewable changes may be sent to Codex and OpenAI. Files without reviewable changes are not sent to Codex by this app."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.leading, 8)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(AppTheme.border(.warning))
+                .frame(width: 2)
+        }
+        .smokeAccessibilityIdentifier("first-run.privacy.disclosure")
     }
 
     @ViewBuilder
@@ -451,31 +512,104 @@ private struct FirstRunSetupView: View {
             case "github":
                 GitHubCredentialSetupControls(model: model)
             case "codex":
-                Button {
-                    Task {
-                        await model.refreshCodexCLIStatus()
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Button {
+                            Task {
+                                await model.refreshCodexCLIStatus()
+                            }
+                        } label: {
+                            Label(AppL10n.string(step.actionTitle), systemImage: "terminal")
+                        }
+                        .accessibilityHint(AppL10n.string("Checks whether AI review setup is ready on this Mac."))
+                        .disabled(model.isWorking)
+                        .smokeAccessibilityIdentifier("first-run.codex.check")
+
+                        Link(
+                            AppL10n.string("Open Codex help"),
+                            destination: URL(string: "https://developers.openai.com/codex/quickstart?setup=cli")!
+                        )
+                        .accessibilityHint(AppL10n.string("Opens official Codex setup help in your browser."))
+                        .smokeAccessibilityIdentifier("first-run.codex.help")
                     }
-                } label: {
-                    Label(AppL10n.string(step.actionTitle), systemImage: "terminal")
+
+                    if needsCodexInstallAction {
+                        DisclosureGroup(AppL10n.string("Advanced install options")) {
+                            Text(AppL10n.string("Use these only if Codex help asks you to install the command-line helper."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            Button {
+                                model.copyHomebrewCodexInstallCommand()
+                            } label: {
+                                Label(AppL10n.string("Copy Homebrew Install"), systemImage: "doc.on.doc")
+                            }
+                            .accessibilityHint(AppL10n.string("Copies the official Homebrew install command for Codex."))
+
+                            Button {
+                                model.copyNPMCodexInstallCommand()
+                            } label: {
+                                Label(AppL10n.string("Copy npm Install"), systemImage: "doc.on.doc")
+                            }
+                            .accessibilityHint(AppL10n.string("Copies the official npm install command for Codex."))
+                        }
+                        .font(.caption)
+                        .controlSize(.small)
+                    }
                 }
                 .controlSize(.small)
-                .disabled(model.isWorking)
-                .smokeAccessibilityIdentifier("first-run.codex.check")
             case "codexLogin":
-                Button {
-                    model.copyCodexLoginCommand()
-                } label: {
-                    Label(AppL10n.string(step.actionTitle), systemImage: "doc.on.doc")
+                if isCodexCLIReady {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Button {
+                                Task {
+                                    await model.refreshCodexCLIStatus()
+                                }
+                            } label: {
+                                Label(AppL10n.string("Check again"), systemImage: "arrow.clockwise")
+                            }
+                            .accessibilityHint(AppL10n.string("Checks whether ChatGPT sign-in is complete."))
+                            .disabled(model.isWorking)
+                            .smokeAccessibilityIdentifier("first-run.codex-login.check")
+                        }
+
+                        DisclosureGroup(AppL10n.string("Manual sign-in options")) {
+                            Button {
+                                model.copyCodexLoginCommand()
+                            } label: {
+                                Label(AppL10n.string(step.actionTitle), systemImage: "doc.on.doc")
+                            }
+                            .accessibilityHint(AppL10n.string("Copies codex login so you can sign in with ChatGPT."))
+                            .disabled(model.isWorking)
+                            .smokeAccessibilityIdentifier("first-run.codex-login.copy")
+
+                            Button {
+                                model.openTerminalForCodexLogin()
+                            } label: {
+                                Label(AppL10n.string("Open Terminal Sign-In Step"), systemImage: "terminal")
+                            }
+                            .accessibilityHint(AppL10n.string("Copies the Codex sign-in step, opens Terminal, and asks you to paste it."))
+                            .disabled(model.isWorking)
+                            .smokeAccessibilityIdentifier("first-run.codex-login.open-terminal")
+                        }
+                        .font(.caption)
+                    }
+                    .controlSize(.small)
+                } else {
+                    Text(AppL10n.string("Check Codex first. Login actions appear after Codex is ready."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .controlSize(.small)
-                .disabled(model.isWorking)
-                .smokeAccessibilityIdentifier("first-run.codex-login.copy")
             case "privacy":
                 Button {
                     model.acknowledgePrivacyDisclosure()
                 } label: {
                     Label(AppL10n.string(step.actionTitle), systemImage: "hand.raised")
                 }
+                .accessibilityHint(AppL10n.string("Marks the privacy disclosure as read so setup can continue."))
                 .controlSize(.small)
                 .disabled(model.isWorking)
                 .smokeAccessibilityIdentifier("first-run.privacy.acknowledge")
@@ -498,8 +632,9 @@ private struct GitHubCredentialSetupControls: View {
                             await model.validateCurrentToken()
                         }
                     } label: {
-                        Label(AppL10n.string("Validate GitHub"), systemImage: "checkmark.seal")
+                        Label(AppL10n.string("Check GitHub Access"), systemImage: "checkmark.seal")
                     }
+                    .accessibilityHint(AppL10n.string("Checks that GitHub can read repositories and reviews for this account."))
                     .disabled(model.isWorking)
                     .smokeAccessibilityIdentifier("first-run.github.validate")
 
@@ -511,6 +646,7 @@ private struct GitHubCredentialSetupControls: View {
                     } label: {
                         Label(AppL10n.string("Reload credential"), systemImage: "lock.open")
                     }
+                    .accessibilityHint(AppL10n.string("Loads your saved GitHub sign-in from macOS and refreshes repositories."))
                     .disabled(model.isWorking)
                     .smokeAccessibilityIdentifier("first-run.github.reload")
                 }
@@ -521,7 +657,7 @@ private struct GitHubCredentialSetupControls: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                Text(AppL10n.string("Sign in with GitHub OAuth to authorize repository review access."))
+                Text(AppL10n.string("Sign in with GitHub to authorize repository review access."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -532,8 +668,20 @@ private struct GitHubCredentialSetupControls: View {
                     } label: {
                         Label(AppL10n.string("Sign in with GitHub"), systemImage: "person.crop.circle.badge.checkmark")
                     }
+                    .accessibilityHint(AppL10n.string("Opens GitHub sign-in and then checks repository access."))
                     .disabled(model.isOAuthSignInPending)
                     .smokeAccessibilityIdentifier("first-run.github.oauth")
+
+                    Button {
+                        Task {
+                            await model.retryGitHubSessionRestore()
+                        }
+                    } label: {
+                        Label(AppL10n.string("Use saved sign-in"), systemImage: "lock.open")
+                    }
+                    .accessibilityHint(AppL10n.string("Uses a GitHub sign-in already saved on this Mac."))
+                    .disabled(model.isWorking || model.isOAuthSignInPending)
+                    .smokeAccessibilityIdentifier("first-run.github.restore")
 
                     if model.isOAuthSignInPending {
                         Button {
@@ -541,6 +689,7 @@ private struct GitHubCredentialSetupControls: View {
                         } label: {
                             Label(AppL10n.string("Cancel"), systemImage: "xmark.circle")
                         }
+                        .accessibilityHint(AppL10n.string("Cancels the current GitHub sign-in."))
                     }
 
                     if let authorization = model.oauthAuthorization {
@@ -549,8 +698,10 @@ private struct GitHubCredentialSetupControls: View {
                         } label: {
                             Label(AppL10n.string("Copy Code"), systemImage: "doc.on.doc")
                         }
+                        .accessibilityHint(AppL10n.string("Copies the GitHub sign-in code to the clipboard."))
 
                         Link(AppL10n.string("Open GitHub"), destination: authorization.verificationURI)
+                            .accessibilityHint(AppL10n.string("Opens GitHub so you can enter the copied sign-in code."))
                     }
                 }
                 .controlSize(.small)

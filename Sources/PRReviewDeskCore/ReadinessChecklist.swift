@@ -86,15 +86,15 @@ public struct ReadinessChecklist: Equatable, Hashable, Sendable {
         items = [
             ReadinessChecklistItem(
                 id: .githubCredential,
-                title: "GitHub credential",
-                detail: hasGitHubCredential ? "OAuth credential loaded from Keychain." : "Sign in with GitHub OAuth.",
+                title: "GitHub sign-in",
+                detail: hasGitHubCredential ? "GitHub sign-in is loaded." : "Sign in with GitHub.",
                 state: hasGitHubCredential ? .ready : .needsAction,
                 action: .loadGitHubCredential,
                 actionTitle: hasGitHubCredential ? "Reload" : "Sign in"
             ),
             ReadinessChecklistItem(
                 id: .githubTokenValidation,
-                title: "GitHub scopes",
+                title: "GitHub access",
                 detail: tokenValidation.detail,
                 state: tokenValidation.itemState,
                 action: .validateGitHubToken,
@@ -102,7 +102,7 @@ public struct ReadinessChecklist: Equatable, Hashable, Sendable {
             ),
             ReadinessChecklistItem(
                 id: .codexCLI,
-                title: "Codex CLI",
+                title: "AI review setup",
                 detail: codexCLI.detail,
                 state: codexCLI.itemState,
                 action: .checkCodexReadiness,
@@ -110,18 +110,18 @@ public struct ReadinessChecklist: Equatable, Hashable, Sendable {
             ),
             ReadinessChecklistItem(
                 id: .codexLogin,
-                title: "ChatGPT Codex login",
+                title: "ChatGPT sign-in",
                 detail: codexLogin.detail,
                 state: codexLogin.itemState,
                 action: .copyCodexLoginCommand,
-                actionTitle: "Copy command"
+                actionTitle: "Copy sign-in step"
             ),
             ReadinessChecklistItem(
                 id: .privacyDisclosure,
                 title: "Privacy disclosure",
                 detail: isPrivacyDisclosureAcknowledged
-                    ? "PR metadata and reviewable patches disclosure acknowledged."
-                    : "Review generation may send PR metadata and reviewable patches to Codex and OpenAI.",
+                    ? "Pull request details and reviewable changes disclosure acknowledged."
+                    : "AI review drafts may send pull request details and reviewable changes to Codex and OpenAI.",
                 state: isPrivacyDisclosureAcknowledged ? .ready : .needsAction,
                 action: .acknowledgePrivacyDisclosure,
                 actionTitle: "Acknowledge"

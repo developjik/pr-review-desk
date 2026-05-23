@@ -8,6 +8,8 @@ enum ReviewWorkspaceLayoutPolicyTests {
         try testMultipleFilePullRequestUsesFileSidebar()
         try testRepositoriesAreCollapsedByDefault()
         try testNeedsSetupIsDefaultInboxSection()
+        try testBlockedReadinessOverridesRestoredInboxSection()
+        try testReadySetupSelectionMovesToRecents()
         try testInspectorOpensOnlyAfterGeneratedDraftRevisionAdvances()
         try testReviewWorkspaceUsesCompactReadableColumnWidths()
         try testInspectorHasReadablePreferredColumnWidths()
@@ -34,6 +36,26 @@ enum ReviewWorkspaceLayoutPolicyTests {
 
     private static func testNeedsSetupIsDefaultInboxSection() throws {
         try expectEqual(ReviewWorkspaceLayoutPolicy.defaultInboxSection, .needsSetup)
+    }
+
+    private static func testBlockedReadinessOverridesRestoredInboxSection() throws {
+        try expectEqual(
+            ReviewWorkspaceLayoutPolicy.effectiveInboxSection(
+                storedSection: .recents,
+                isReady: false
+            ),
+            .needsSetup
+        )
+    }
+
+    private static func testReadySetupSelectionMovesToRecents() throws {
+        try expectEqual(
+            ReviewWorkspaceLayoutPolicy.effectiveInboxSection(
+                storedSection: .needsSetup,
+                isReady: true
+            ),
+            .recents
+        )
     }
 
     private static func testInspectorOpensOnlyAfterGeneratedDraftRevisionAdvances() throws {

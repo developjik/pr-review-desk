@@ -20,24 +20,33 @@ struct DraftEditorView: View {
             Text(AppL10n.string("Inline Comments"))
                 .font(.headline)
             if let draft = model.draft, !draft.inlineComments.isEmpty {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(ReviewViewSupport.commentsGroupedByPath(draft.inlineComments), id: \.path) { group in
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(group.path)
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                ForEach(group.comments) { comment in
-                                    InlineCommentEditorRow(
-                                        model: model,
-                                        comment: comment,
-                                        isInvalid: model.isInlineCommentInvalid(comment)
-                                    )
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 10) {
+                            ForEach(ReviewViewSupport.commentsGroupedByPath(draft.inlineComments), id: \.path) { group in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(group.path)
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                    ForEach(group.comments) { comment in
+                                        InlineCommentEditorRow(
+                                            model: model,
+                                            comment: comment,
+                                            isInvalid: model.isInlineCommentInvalid(comment)
+                                        )
+                                        .id(comment.id)
+                                    }
                                 }
                             }
                         }
+                        .padding(.vertical, 2)
                     }
-                    .padding(.vertical, 2)
+                    .onAppear {
+                        scrollToFocusedComment(proxy)
+                    }
+                    .onChange(of: model.focusedInlineCommentTarget) { _, _ in
+                        scrollToFocusedComment(proxy)
+                    }
                 }
             } else {
                 Text(AppL10n.string("No inline comments generated yet."))
@@ -45,6 +54,14 @@ struct DraftEditorView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func scrollToFocusedComment(_ proxy: ScrollViewProxy) {
+        guard let target = model.focusedInlineCommentTarget else {
+            return
+        }
+
+        proxy.scrollTo(target.commentID, anchor: .center)
     }
 }
 
@@ -63,14 +80,14 @@ private struct InlineCommentEditorRow: View {
                     HStack {
                         Text(comment.path)
                             .fontWeight(.medium)
-                        Text(AppL10n.string("Position %d", comment.position))
+                        Text(AppL10n.string("Comment spot %d", comment.position))
                             .foregroundStyle(.secondary)
                         Text(comment.severity.localizedDisplayName)
                             .foregroundStyle(AppTheme.foreground(ReviewViewSupport.severityTone(comment.severity)))
                     }
                 }
                 .accessibilityLabel(AppL10n.string(
-                    "%@ position %d %@",
+                    "%@ comment spot %d %@",
                     comment.path,
                     comment.position,
                     comment.severity.localizedDisplayName
@@ -88,7 +105,7 @@ private struct InlineCommentEditorRow: View {
                 .accessibilityLabel(AppL10n.string("Reveal in diff"))
             }
             if isInvalid {
-                Text(AppL10n.string("Invalid selected target. Refresh safety or regenerate before submitting."))
+                Text(AppL10n.string("This selected comment no longer matches the PR. Check again or regenerate before posting."))
                     .font(.caption)
                     .foregroundStyle(AppTheme.foreground(.invalid))
             }
@@ -102,7 +119,7 @@ private struct InlineCommentEditorRow: View {
                     .stroke(.quaternary)
             }
             .accessibilityLabel(AppL10n.string(
-                "Inline comment for %@ position %d",
+                "Inline comment for %@ comment spot %d",
                 comment.path,
                 comment.position
             ))

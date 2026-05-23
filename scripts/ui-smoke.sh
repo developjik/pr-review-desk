@@ -6,9 +6,7 @@ APP_BINARY="$ROOT_DIR/.build/debug/PRReviewDeskApp"
 
 cd "$ROOT_DIR"
 
-if [[ ! -x "$APP_BINARY" ]]; then
-  swift build --product PRReviewDeskApp >/dev/null
-fi
+swift build --product PRReviewDeskApp >/dev/null
 
 output_en="$("$APP_BINARY" --ui-smoke --ui-smoke-language en)"
 output_ko="$("$APP_BINARY" --ui-smoke --ui-smoke-language ko)"
@@ -39,7 +37,7 @@ required=(
   "ui_preference_language=ko"
   "preference_localized_sample=submit-preview-title:리뷰 제출 미리보기"
   "language_switch_default=credentialKindDescription:없음"
-  "language_switch_default=tokenValidationStatus:검증 안 됨."
+  "language_switch_default=tokenValidationStatus:확인 안 됨."
   "language_switch_default=codexCLIStatus:확인하지 않음."
   "language_switch_default=codexLoginStatus:확인하지 않음."
   "localization=Submit Review Preview"
@@ -55,6 +53,8 @@ required=(
   "render=command-panel:desktop"
   "render=settings-readiness:desktop"
   "semantic=first-run-setup:desktop"
+  "semantic=first-run-setup:desktop:privacy-disclosure"
+  "semantic=first-run-setup:compact:privacy-disclosure"
   "semantic=submit-preview:desktop"
   "semantic=command-panel:desktop"
   "interaction=command-panel:filtered=1"
@@ -66,12 +66,21 @@ required=(
   "visual=command-panel:selected-row=select-section-stale"
   "layout=review-inbox:top-content-y="
   "layout=repository-sidebar:top-content-y="
-  "accessibility=first-run-setup.no-token:rendered-controls=first-run.codex-login.copy,first-run.codex.check,first-run.github.oauth,first-run.privacy.acknowledge"
-  "accessibility=first-run-setup.loaded-token:rendered-controls=first-run.codex-login.copy,first-run.codex.check,first-run.github.reload,first-run.github.validate,first-run.privacy.acknowledge"
-  "accessibility=submit-preview:rendered-controls=submit-preview.refresh-safety[enabled],submit-preview.regenerate[enabled],submit-preview.submit[disabled]"
-  "accessibility=command-panel:rendered-controls=command-panel.action.select-section-stale[selected],command-panel.search"
+  "accessibility=first-run-setup.no-token:rendered-controls=first-run.codex.check,first-run.codex.help,first-run.github.oauth,first-run.github.restore,first-run.privacy.acknowledge"
+  "accessibility=first-run-setup.loaded-token:rendered-controls=first-run.codex-login.check,first-run.github.reload,first-run.github.validate,first-run.privacy.acknowledge"
+  "accessibility=submit-preview:rendered-controls=submit-preview.invalid.deselect[enabled],submit-preview.invalid.reveal[enabled],submit-preview.refresh-safety[enabled],submit-preview.regenerate[enabled],submit-preview.submit[disabled]"
+  "semantic=command-panel:complete-actions="
+  "semantic=command-panel:accessibility-hints"
+  "accessibility=review-inbox.stale-saved-draft:rendered-controls=review-inbox.pull-request.74"
+  "accessibility=review-inbox.empty-draft-ready:rendered-controls=review-inbox.empty.queue-repository"
+  "accessibility=command-panel:rendered-controls="
+  "command-panel.action.select-section-stale[selected]"
+  "command-panel.search"
   "accessibility=settings.loaded-token:rendered-controls=settings.github.delete,settings.github.oauth,settings.github.restore,settings.github.validate"
   "accessibility=review-inbox:rendered-controls=review-inbox.pull-request.74[selected]"
+  "accessibility=review-inbox.queue-recovery:rendered-controls="
+  "review-inbox.queue.retry[enabled]"
+  "review-inbox.queue.remove[enabled]"
 )
 
 for needle in "${required[@]}"; do

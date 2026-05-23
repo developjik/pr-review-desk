@@ -18,25 +18,29 @@ public struct StoredReviewDraft: Codable, Equatable, Hashable, Sendable {
     public var reviewBody: String
     public var selectedEvent: ReviewEvent
     public var savedAt: Date
+    public var repositoryIsPrivate: Bool?
 
     public init(
         key: ReviewDraftKey,
         draft: ReviewDraft,
         reviewBody: String,
         selectedEvent: ReviewEvent,
-        savedAt: Date
+        savedAt: Date,
+        repositoryIsPrivate: Bool? = nil
     ) {
         self.key = key
         self.draft = draft
         self.reviewBody = reviewBody
         self.selectedEvent = selectedEvent
         self.savedAt = savedAt
+        self.repositoryIsPrivate = repositoryIsPrivate
     }
 }
 
 public protocol ReviewDraftStore: Sendable {
     func loadDraft(key: ReviewDraftKey) throws -> StoredReviewDraft?
     func loadLatestDraft(repositoryFullName: String, pullRequestNumber: Int) throws -> StoredReviewDraft?
+    func loadAllDrafts() throws -> [StoredReviewDraft]
     func saveDraft(_ draft: StoredReviewDraft) throws
     func deleteDraft(key: ReviewDraftKey) throws
 }
@@ -61,6 +65,10 @@ public final class InMemoryReviewDraftStore: ReviewDraftStore, @unchecked Sendab
             }
             .sorted { $0.savedAt > $1.savedAt }
             .first
+    }
+
+    public func loadAllDrafts() throws -> [StoredReviewDraft] {
+        drafts.values.sorted { $0.savedAt > $1.savedAt }
     }
 
     public func saveDraft(_ draft: StoredReviewDraft) throws {
@@ -106,8 +114,17 @@ public struct FileReviewDraftStore: ReviewDraftStore, @unchecked Sendable {
         repositoryFullName: String,
         pullRequestNumber: Int
     ) throws -> StoredReviewDraft? {
+        try loadAllDrafts()
+        .filter {
+            $0.key.repositoryFullName == repositoryFullName
+                && $0.key.pullRequestNumber == pullRequestNumber
+        }
+        .first
+    }
+
+    public func loadAllDrafts() throws -> [StoredReviewDraft] {
         guard fileManager.fileExists(atPath: directoryURL.path) else {
-            return nil
+            return []
         }
 
         return try fileManager.contentsOfDirectory(
@@ -119,12 +136,7 @@ public struct FileReviewDraftStore: ReviewDraftStore, @unchecked Sendable {
             let data = try Data(contentsOf: url)
             return try Self.decoder.decode(StoredReviewDraft.self, from: data)
         }
-        .filter {
-            $0.key.repositoryFullName == repositoryFullName
-                && $0.key.pullRequestNumber == pullRequestNumber
-        }
         .sorted { $0.savedAt > $1.savedAt }
-        .first
     }
 
     public func saveDraft(_ draft: StoredReviewDraft) throws {

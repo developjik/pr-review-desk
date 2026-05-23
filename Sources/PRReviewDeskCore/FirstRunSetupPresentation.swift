@@ -27,27 +27,27 @@ public enum FirstRunSetupPresentation {
                 id: "github",
                 title: "GitHub access",
                 detail: gitHubDetail(hasCredential: hasGitHubCredential, isReady: isGitHubReady),
-                actionTitle: hasGitHubCredential ? "Validate GitHub" : "Sign in with GitHub",
+                actionTitle: hasGitHubCredential ? "Check GitHub Access" : "Sign in with GitHub",
                 systemImage: "person.crop.circle.badge.checkmark",
                 state: isGitHubReady ? .complete : .needsAction
             ),
             FirstRunSetupStep(
                 id: "codex",
-                title: "Codex CLI",
+                title: "AI review setup",
                 detail: isCodexCLIReady
-                    ? "Codex CLI is available on PATH."
-                    : "Check that Codex CLI is installed and available on PATH.",
+                    ? "AI review drafting is ready on this Mac."
+                    : "Check whether this Mac can create AI review drafts.",
                 actionTitle: "Check Codex",
                 systemImage: "terminal",
                 state: isCodexCLIReady ? .complete : .needsAction
             ),
             FirstRunSetupStep(
                 id: "codexLogin",
-                title: "ChatGPT Codex login",
+                title: "ChatGPT sign-in",
                 detail: isCodexChatGPTLoginReady
-                    ? "Codex is signed in with ChatGPT."
-                    : "Run `codex login` and sign in with ChatGPT before generating reviews.",
-                actionTitle: "Copy command",
+                    ? "ChatGPT sign-in is ready."
+                    : "Sign in to Codex with ChatGPT before generating reviews.",
+                actionTitle: "Copy sign-in step",
                 systemImage: "person.crop.circle.badge.checkmark",
                 state: isCodexChatGPTLoginReady ? .complete : .needsAction
             ),
@@ -66,13 +66,13 @@ public enum FirstRunSetupPresentation {
 
     private static func gitHubDetail(hasCredential: Bool, isReady: Bool) -> String {
         if isReady {
-            return "GitHub credential and scopes are ready."
+            return "GitHub sign-in and repository access are ready."
         }
 
         if hasCredential {
-            return "GitHub credential is loaded. Validate scopes before generating reviews."
+            return "GitHub sign-in is saved. Check repository access before generating reviews."
         }
 
-        return "Sign in with GitHub OAuth to authorize repository review access."
+        return "Sign in with GitHub to authorize repository review access."
     }
 }

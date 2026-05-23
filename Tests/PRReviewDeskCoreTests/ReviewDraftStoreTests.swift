@@ -5,6 +5,7 @@ enum ReviewDraftStoreTests {
     static func run() throws {
         try testInMemoryStoreRoundTripsDraftByKey()
         try testInMemoryStoreFindsLatestDraftForPullRequest()
+        try testInMemoryStoreListsDraftsNewestFirst()
     }
 
     private static func testInMemoryStoreRoundTripsDraftByKey() throws {
@@ -58,5 +59,28 @@ enum ReviewDraftStoreTests {
             try store.loadLatestDraft(repositoryFullName: "developjik/desk", pullRequestNumber: 13),
             nil
         )
+    }
+
+    private static func testInMemoryStoreListsDraftsNewestFirst() throws {
+        let store = InMemoryReviewDraftStore()
+        let older = StoredReviewDraft(
+            key: ReviewDraftKey(repositoryFullName: "developjik/desk", pullRequestNumber: 12, headSha: "old"),
+            draft: ReviewDraft(summary: "Old", risks: [], inlineComments: []),
+            reviewBody: "Old body",
+            selectedEvent: .comment,
+            savedAt: Date(timeIntervalSince1970: 100)
+        )
+        let newer = StoredReviewDraft(
+            key: ReviewDraftKey(repositoryFullName: "developjik/desk", pullRequestNumber: 13, headSha: "new"),
+            draft: ReviewDraft(summary: "New", risks: [], inlineComments: []),
+            reviewBody: "New body",
+            selectedEvent: .approve,
+            savedAt: Date(timeIntervalSince1970: 200)
+        )
+
+        try store.saveDraft(older)
+        try store.saveDraft(newer)
+
+        try expectEqual(try store.loadAllDrafts(), [newer, older])
     }
 }

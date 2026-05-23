@@ -21,7 +21,7 @@ struct PrivateRepositoryConsentSheet: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(request.outboundDataDescriptions, id: \.self) { description in
-                    Label(description, systemImage: "arrow.up.forward.app")
+                    Label(AppL10n.string(description), systemImage: "arrow.up.forward.app")
                         .font(.subheadline)
                 }
             }
@@ -37,15 +37,17 @@ struct PrivateRepositoryConsentSheet: View {
                 } label: {
                     Label(AppL10n.string("Cancel"), systemImage: "xmark")
                 }
+                .accessibilityHint(AppL10n.string("Closes this consent sheet without generating a review draft."))
 
                 Spacer()
 
                 Button {
                     onAcknowledge()
                 } label: {
-                    Label(AppL10n.string("Acknowledge"), systemImage: "checkmark.shield")
+                    Label(AppL10n.string("Allow and Continue"), systemImage: "checkmark.shield")
                 }
                 .buttonStyle(.borderedProminent)
+                .accessibilityHint(AppL10n.string("Allows this private repository context to be used for review drafts."))
             }
         }
         .padding(24)

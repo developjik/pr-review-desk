@@ -58,7 +58,7 @@ public enum CodexReviewError: Error, Equatable, CustomStringConvertible, Sendabl
         case let .missingOutput(url):
             return "Codex did not write expected output at \(url.path)"
         case .noReviewableFiles:
-            return "The pull request has no reviewable patch content"
+            return "The pull request has no reviewable changes"
         }
     }
 }

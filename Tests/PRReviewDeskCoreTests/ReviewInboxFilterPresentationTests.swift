@@ -51,7 +51,7 @@ enum ReviewInboxFilterPresentationTests {
                 query: "",
                 hasSelectedRepository: true
             ),
-            "No open pull requests in this repository."
+            "No open pull requests in this repository. Refresh or choose another repository."
         )
         try expectEqual(
             ReviewInboxFilterPresentation.emptyDescription(

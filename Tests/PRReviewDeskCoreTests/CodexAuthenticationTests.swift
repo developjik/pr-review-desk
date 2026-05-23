@@ -9,6 +9,7 @@ enum CodexAuthenticationTests {
         try await testUnknownSuccessfulLoginOutputIsUnsupported()
         try await testNonzeroLoginStatusRequiresLogin()
         try await testMissingCodexCLIRequiresInstall()
+        try await testFallbackCodexPathWorksWhenAppPathIsMissingCodex()
         try await testLoginFailureDetailsAreRedacted()
     }
 
@@ -107,14 +108,44 @@ enum CodexAuthenticationTests {
     }
 
     private static func testMissingCodexCLIRequiresInstall() async throws {
-        let checker = CodexCLIAuthenticationChecker(commandRunner: SequenceCommandRunner(results: [
-            .success(CommandResult(exitCode: 1, standardOutput: "", standardError: "codex not found\n"))
-        ]))
+        let checker = CodexCLIAuthenticationChecker(
+            commandRunner: SequenceCommandRunner(results: [
+                .success(CommandResult(exitCode: 1, standardOutput: "", standardError: "codex not found\n"))
+            ]),
+            fallbackExecutablePaths: [],
+            isExecutableFile: { _ in false }
+        )
 
         let state = try await checker.status()
 
-        try expectEqual(state, .missingCLI(message: "Codex CLI not found on PATH."))
+        try expectEqual(
+            state,
+            .missingCLI(message: "Codex is not installed or this app cannot find it. Install the Codex command-line helper with Homebrew or npm, then check again.")
+        )
         try expectTrue(!state.isReadyForChatGPTSubscription)
+    }
+
+    private static func testFallbackCodexPathWorksWhenAppPathIsMissingCodex() async throws {
+        let checker = CodexCLIAuthenticationChecker(
+            commandRunner: SequenceCommandRunner(results: [
+                .success(CommandResult(exitCode: 1, standardOutput: "", standardError: "codex not found\n")),
+                .success(CommandResult(exitCode: 0, standardOutput: "Logged in using ChatGPT\n", standardError: ""))
+            ]),
+            fallbackExecutablePaths: ["/opt/homebrew/bin/codex"],
+            isExecutableFile: { $0 == "/opt/homebrew/bin/codex" }
+        )
+
+        let state = try await checker.status()
+
+        try expectEqual(
+            state,
+            .ready(
+                executablePath: "/opt/homebrew/bin/codex",
+                method: .chatGPT,
+                message: "Logged in using ChatGPT"
+            )
+        )
+        try expectTrue(state.isReadyForChatGPTSubscription)
     }
 
     private static func testLoginFailureDetailsAreRedacted() async throws {

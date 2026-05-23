@@ -8,6 +8,8 @@ struct ReviewSubmissionPreviewSheet: View {
     let onCancel: () -> Void
     let onRefreshSafety: () -> Void
     let onRegenerate: () -> Void
+    let onRevealInvalidComment: (InvalidInlineComment) -> Void
+    let onDeselectInvalidComment: (InvalidInlineComment) -> Void
     let onSubmit: () -> Void
 
     var body: some View {
@@ -68,7 +70,7 @@ struct ReviewSubmissionPreviewSheet: View {
                     onRefreshSafety()
                 } label: {
                     Label(
-                        isRefreshingSafety ? AppL10n.string("Refreshing Safety") : AppL10n.string("Refresh Safety"),
+                        isRefreshingSafety ? AppL10n.string("Checking") : AppL10n.string("Check Again"),
                         systemImage: "shield.lefthalf.filled"
                     )
                 }
@@ -77,18 +79,17 @@ struct ReviewSubmissionPreviewSheet: View {
                     "submit-preview.refresh-safety",
                     state: isRefreshingSafety ? "disabled" : "enabled"
                 )
-                if preview?.safetyState.isStale == true {
-                    Button {
-                        onRegenerate()
-                    } label: {
-                        Label(AppL10n.string("Regenerate"), systemImage: "arrow.triangle.2.circlepath")
-                    }
-                    .disabled(isRefreshingSafety)
-                    .smokeAccessibilityIdentifier(
-                        "submit-preview.regenerate",
-                        state: isRefreshingSafety ? "disabled" : "enabled"
-                    )
+                Button {
+                    onRegenerate()
+                } label: {
+                    Label(AppL10n.string("Regenerate"), systemImage: "arrow.triangle.2.circlepath")
                 }
+                .accessibilityHint(AppL10n.string("Creates a fresh draft when comments no longer match the PR."))
+                .disabled(isRefreshingSafety)
+                .smokeAccessibilityIdentifier(
+                    "submit-preview.regenerate",
+                    state: isRefreshingSafety ? "disabled" : "enabled"
+                )
             }
             Spacer()
             Button {
@@ -157,32 +158,71 @@ struct ReviewSubmissionPreviewSheet: View {
                 ),
                 InspectorMetric(
                     id: "invalid",
-                    title: AppL10n.string("Invalid %d", state.invalidSelectedInlineComments.count),
+                    title: AppL10n.string("Needs fix %d", state.invalidSelectedInlineComments.count),
                     systemImage: state.invalidSelectedInlineComments.isEmpty ? "checkmark.circle" : "exclamationmark.triangle",
                     tone: state.invalidSelectedInlineComments.isEmpty ? .success : .invalid
-                ),
-                InspectorMetric(
-                    id: "reviewed",
-                    title: AppL10n.string("Reviewed %@", ReviewViewSupport.shortSha(state.reviewedHeadSha)),
-                    systemImage: "number",
-                    tone: .neutral
-                ),
-                InspectorMetric(
-                    id: "current",
-                    title: AppL10n.string("Current %@", ReviewViewSupport.shortSha(state.currentHeadSha)),
-                    systemImage: "number",
-                    tone: .neutral
                 )
             ])
 
-            if !state.invalidSelectedInlineComments.isEmpty {
-                Text(AppL10n.string(
-                    "Invalid inline targets: %@",
-                    state.invalidSelectedInlineComments.map { "\($0.path):\($0.position)" }.joined(separator: ", ")
-                ))
+            DisclosureGroup(AppL10n.string("Version details")) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(
+                        AppL10n.string("Draft version %@", ReviewViewSupport.shortSha(state.reviewedHeadSha)),
+                        systemImage: "number"
+                    )
+                    Label(
+                        AppL10n.string("Latest version %@", ReviewViewSupport.shortSha(state.currentHeadSha)),
+                        systemImage: "number"
+                    )
+                }
                 .font(.caption)
-                .foregroundStyle(AppTheme.foreground(.invalid))
-                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(.secondary)
+            }
+            .font(.caption)
+
+            if !state.invalidSelectedInlineComments.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(AppL10n.string("Comments to review:"))
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.foreground(.invalid))
+
+                    ForEach(state.invalidSelectedInlineComments, id: \.self) { comment in
+                        HStack(spacing: 8) {
+                            Text(AppL10n.string("%@ comment spot %d", comment.path, comment.position))
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.foreground(.invalid))
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer()
+                            Button {
+                                onRevealInvalidComment(comment)
+                            } label: {
+                                Label(AppL10n.string("Reveal"), systemImage: "scope")
+                            }
+                            .accessibilityHint(AppL10n.string("Opens this comment in the review inspector. Its original diff spot may no longer exist."))
+                            .smokeAccessibilityIdentifier(
+                                "submit-preview.invalid.reveal",
+                                state: "enabled",
+                                details: AppL10n.string("Opens this comment in the review inspector. Its original diff spot may no longer exist.")
+                            )
+                            Button {
+                                onDeselectInvalidComment(comment)
+                            } label: {
+                                Label(AppL10n.string("Deselect"), systemImage: "checkmark.circle")
+                            }
+                            .accessibilityHint(AppL10n.string("Removes this comment from the submission preview."))
+                            .smokeAccessibilityIdentifier(
+                                "submit-preview.invalid.deselect",
+                                state: "enabled",
+                                details: AppL10n.string("Removes this comment from the submission preview.")
+                            )
+                        }
+                    }
+                }
+
+                Text(AppL10n.string("Regenerate the draft, reveal a comment, or deselect comments that need fixing."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(10)
@@ -225,7 +265,7 @@ struct ReviewSubmissionPreviewSheet: View {
                 ForEach(comments) { comment in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text(comment.location)
+                            Text(displayLocation(for: comment))
                                 .font(.caption)
                                 .fontWeight(.medium)
                             Spacer()
@@ -259,5 +299,9 @@ struct ReviewSubmissionPreviewSheet: View {
         }
 
         return AppL10n.string("Last checked at %@ UTC.", display)
+    }
+
+    private func displayLocation(for comment: ReviewSubmissionPreview.InlineCommentPreview) -> String {
+        AppL10n.string("%@ comment spot %d", comment.path, comment.position)
     }
 }

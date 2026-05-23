@@ -73,7 +73,7 @@ public struct AnnotatedDiff: Equatable, Hashable, Sendable {
                     oldLine: nil,
                     newLine: nil,
                     text: text,
-                    kind: text.hasSuffix("was not sent to Codex because GitHub did not provide reviewable patch content.")
+                    kind: text.hasSuffix("was not sent to Codex because GitHub did not provide reviewable changes.")
                         ? .omitted
                         : .metadata
                 )

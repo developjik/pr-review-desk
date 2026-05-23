@@ -3,6 +3,7 @@ import PRReviewDeskCore
 
 struct SelectedFileDetailView: View {
     @ObservedObject var model: AppModel
+    var onFocusInlineComment: () -> Void = {}
 
     var body: some View {
         if let file = model.selectedChangedFile {
@@ -33,16 +34,25 @@ struct SelectedFileDetailView: View {
                         scrollTargetLineIndex: scrollTargetLineIndex(for: file),
                         onSelectInlineComment: { comment in
                             model.focusInlineComment(comment)
+                            onFocusInlineComment()
                         }
                     )
                 }
             }
         } else {
-            ContentUnavailableView(
-                AppL10n.string("No File Selected"),
-                systemImage: "doc.text",
-                description: Text(AppL10n.string("Select a changed file."))
-            )
+            ContentUnavailableView {
+                Label(AppL10n.string("No File Selected"), systemImage: "doc.text")
+            } description: {
+                Text(AppL10n.string("Select a changed file."))
+            } actions: {
+                if let firstFile = model.changedFiles.first {
+                    Button {
+                        model.selectedChangedFilePath = firstFile.path
+                    } label: {
+                        Label(AppL10n.string("Select first changed file"), systemImage: "doc.text")
+                    }
+                }
+            }
         }
     }
 
@@ -58,12 +68,12 @@ struct SelectedFileDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                if let reviewedHeadSha = model.reviewedHeadShaForDisplay {
-                    Text(AppL10n.string("Draft %@", String(reviewedHeadSha.prefix(8))))
+                if model.reviewedHeadShaForDisplay != nil {
+                    Text(AppL10n.string("Draft version available"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text(AppL10n.string("No draft SHA"))
+                    Text(AppL10n.string("No draft version"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -128,7 +138,7 @@ struct SelectedFileDetailView: View {
             return AnnotatedDiff(
                 path: file.path,
                 annotatedPatch: AppL10n.string(
-                    "%@. This file was not sent to Codex because GitHub did not provide reviewable patch content.",
+                    "%@. This file was not sent to Codex because GitHub did not provide reviewable changes.",
                     AppL10n.string(reason.displayName)
                 ),
                 positionsByNewLine: [:]
