@@ -26,6 +26,30 @@ struct PRReviewDeskApp: App {
             Foundation.exit(0)
         }
 
+        if CommandLine.arguments.contains("--ui-smoke-command-keyboard") {
+            let report = MainActor.assumeIsolated {
+                UISmokeRenderRunner.commandPanelKeyboardReport()
+            }
+            print(report)
+            Foundation.exit(0)
+        }
+
+        if CommandLine.arguments.contains("--ui-smoke-command-selection-visual") {
+            let report = MainActor.assumeIsolated {
+                UISmokeRenderRunner.commandPanelSelectionVisualReport()
+            }
+            print(report)
+            Foundation.exit(0)
+        }
+
+        if CommandLine.arguments.contains("--ui-smoke-accessibility-contract") {
+            let report = MainActor.assumeIsolated {
+                UISmokeRenderRunner.accessibilityReport()
+            }
+            print(report)
+            Foundation.exit(0)
+        }
+
         if CommandLine.arguments.contains("--ui-smoke") {
             let report = MainActor.assumeIsolated {
                 UISmokeRenderRunner.run()

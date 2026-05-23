@@ -96,4 +96,21 @@ public enum ReviewCommandPanelPresentation {
 
         return selectedAction ?? filteredActions.first(where: \.isEnabled)
     }
+
+    public static func movedSelectionID(
+        currentSelectionID: String?,
+        filteredActions: [ReviewCommandPanelAction],
+        offset: Int
+    ) -> String? {
+        let enabledActions = filteredActions.filter(\.isEnabled)
+        guard !enabledActions.isEmpty else {
+            return nil
+        }
+
+        let currentIndex = currentSelectionID.flatMap { currentSelectionID in
+            enabledActions.firstIndex { $0.id == currentSelectionID }
+        } ?? (offset > 0 ? -1 : enabledActions.count)
+        let nextIndex = (currentIndex + offset + enabledActions.count) % enabledActions.count
+        return enabledActions[nextIndex].id
+    }
 }

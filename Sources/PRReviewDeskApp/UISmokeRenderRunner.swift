@@ -30,21 +30,7 @@ enum UISmokeRenderRunner {
     }
 
     private static func render(surface: UISmokeSurface, size: UISmokeRenderSize) throws -> String {
-        let hostingView = NSHostingView(
-            rootView: AnyView(
-                view(for: surface)
-                    .frame(width: size.width, height: size.height)
-                    .background(Color(nsColor: .windowBackgroundColor))
-            )
-        )
-        hostingView.frame = NSRect(origin: .zero, size: NSSize(width: size.width, height: size.height))
-        hostingView.layoutSubtreeIfNeeded()
-
-        guard let bitmap = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds) else {
-            throw UISmokeRenderError.bitmapUnavailable
-        }
-
-        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let bitmap = try renderedBitmap(for: view(for: surface), size: size)
         guard let data = bitmap.representation(using: .png, properties: [:]), !data.isEmpty else {
             throw UISmokeRenderError.pngUnavailable
         }
@@ -71,9 +57,41 @@ enum UISmokeRenderRunner {
 
         return [
             "render=\(surface.rawValue):\(size.name):\(bitmap.pixelsWide)x\(bitmap.pixelsHigh):bytes=\(data.count):checksum=\(checksum)",
-            "semantic=\(surface.rawValue):\(size.name):ocr=\(recognizedText.count):matched=\(semanticExpectations.count)",
-            "assert=\(surface.rawValue):\(assertions(for: surface).joined(separator: ","))"
+            "semantic=\(surface.rawValue):\(size.name):ocr=\(recognizedText.count):matched=\(semanticExpectations.count)"
         ].joined(separator: "\n")
+    }
+
+    private static func renderedBitmap<Content: View>(
+        for view: Content,
+        size: UISmokeRenderSize
+    ) throws -> NSBitmapImageRep {
+        let hostingView = NSHostingView(
+            rootView: AnyView(
+                view
+                    .frame(width: size.width, height: size.height)
+                    .background(Color(nsColor: .windowBackgroundColor))
+            )
+        )
+        hostingView.frame = NSRect(origin: .zero, size: NSSize(width: size.width, height: size.height))
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: size.width, height: size.height),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        window.makeKeyAndOrderFront(nil)
+        hostingView.layoutSubtreeIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+
+        guard let bitmap = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds) else {
+            window.close()
+            throw UISmokeRenderError.bitmapUnavailable
+        }
+
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        window.close()
+        return bitmap
     }
 
     private static func recognizedStrings(from bitmap: NSBitmapImageRep) throws -> [String] {
@@ -183,25 +201,202 @@ enum UISmokeRenderRunner {
         ].joined(separator: "\n")
     }
 
-    private static func assertions(for surface: UISmokeSurface) -> [String] {
-        switch surface {
-        case .firstRunSetup:
-            return ["finish-setup", "guided-setup", "github-codex-privacy"]
-        case .repositorySidebar:
-            return ["repository-sidebar", "queue-control"]
-        case .reviewInbox:
-            return ["review-inbox", "pull-request-row"]
-        case .diffWorkspace:
-            return ["diff-workspace", "changed-files"]
-        case .reviewInspector:
-            return ["review-inspector", "submit-safety"]
-        case .submitPreview:
-            return ["submit-preview", "preflight-state", "last-checked", "refresh-action", "regenerate-action", "submit-disabled"]
-        case .commandPanel:
-            return ["command-panel", "shortcut-hints", "selected-row", "return-execution"]
-        case .settingsReadiness:
-            return ["settings-readiness", "pat-fallback"]
+    static func commandPanelKeyboardReport() -> String {
+        let state = CommandPanelKeyboardSmokeState()
+        let hostingView = NSHostingView(
+            rootView: ReviewCommandPanelView(
+                model: populatedModel(),
+                selectedSection: Binding(
+                    get: { state.selectedSection },
+                    set: { state.selectedSection = $0 }
+                ),
+                isInspectorPresented: Binding(
+                    get: { state.isInspectorPresented },
+                    set: { state.isInspectorPresented = $0 }
+                ),
+                isPresented: Binding(
+                    get: { state.isPresented },
+                    set: { state.isPresented = $0 }
+                ),
+                initialQuery: AppL10n.string("Filter"),
+                initialSelectedActionID: nil,
+                onDeferredSubmit: {
+                    state.deferredSubmitCount += 1
+                }
+            )
+        )
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 560),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        window.makeKeyAndOrderFront(nil)
+        hostingView.layoutSubtreeIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+
+        sendKey(to: window, keyCode: 125, characters: String(UnicodeScalar(NSDownArrowFunctionKey)!))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        sendKey(to: window, keyCode: 36, characters: "\r")
+        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        window.close()
+
+        return [
+            "interaction=command-panel-keyboard:selected-section=\(state.selectedSection.rawValue)",
+            "interaction=command-panel-keyboard:is-presented=\(state.isPresented)",
+            "interaction=command-panel-keyboard:deferred-submit=\(state.deferredSubmitCount)"
+        ].joined(separator: "\n")
+    }
+
+    static func commandPanelSelectionVisualReport() -> String {
+        do {
+            let size = UISmokeRenderSize(name: "command-panel-selection", width: 520, height: 520)
+            let bitmap = try renderedBitmap(for: view(for: .commandPanel), size: size)
+            let metrics = selectedRowFocusMetrics(in: bitmap)
+            guard metrics.focusPixels >= 600, metrics.maxRowPixels >= 180 else {
+                return [
+                    "visual_failed=command-panel:selected-row=select-section-stale",
+                    "visual_failed=command-panel:focus-pixels=\(metrics.focusPixels):max-row=\(metrics.maxRowPixels)"
+                ].joined(separator: "\n")
+            }
+
+            return "visual=command-panel:selected-row=select-section-stale:focus-pixels=\(metrics.focusPixels):max-row=\(metrics.maxRowPixels)"
+        } catch {
+            return "visual_failed=command-panel:selected-row=select-section-stale:error=\(error)"
         }
+    }
+
+    static func accessibilityReport() -> String {
+        let firstRunNoTokenControls = renderedAccessibilityControls(
+            for: ReviewInboxView(model: firstRunModel(), selectedSection: .needsSetup)
+        )
+        let firstRunLoadedTokenControls = renderedAccessibilityControls(
+            for: ReviewInboxView(model: firstRunLoadedTokenModel(), selectedSection: .needsSetup)
+        )
+        let submitPreviewControls = renderedAccessibilityControls(
+            for: ReviewSubmissionPreviewSheet(
+                preview: stalePreview(),
+                eventDisplayName: "Comment",
+                isRefreshingSafety: false,
+                onCancel: {},
+                onRefreshSafety: {},
+                onRegenerate: {},
+                onSubmit: {}
+            )
+        )
+        let commandPanelControls = renderedAccessibilityControls(
+            for: ReviewCommandPanelView(
+                model: populatedModel(),
+                selectedSection: .constant(.recents),
+                isInspectorPresented: .constant(true),
+                isPresented: .constant(true),
+                initialQuery: AppL10n.string("Filter %@", AppL10n.string("Stale")),
+                initialSelectedActionID: ReviewCommandPanelActionKind.selectSection(.stale).stableID,
+                onDeferredSubmit: {}
+            )
+        )
+
+        return [
+            accessibilityLine(surface: "first-run-setup.no-token", controls: firstRunNoTokenControls),
+            accessibilityLine(surface: "first-run-setup.loaded-token", controls: firstRunLoadedTokenControls),
+            accessibilityLine(surface: "submit-preview", controls: submitPreviewControls),
+            accessibilityLine(surface: "command-panel", controls: commandPanelControls)
+        ].joined(separator: "\n")
+    }
+
+    private static func sendKey(to window: NSWindow, keyCode: UInt16, characters: String) {
+        guard let event = NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window.windowNumber,
+            context: nil,
+            characters: characters,
+            charactersIgnoringModifiers: characters,
+            isARepeat: false,
+            keyCode: keyCode
+        ) else {
+            return
+        }
+
+        window.sendEvent(event)
+    }
+
+    private static func selectedRowFocusMetrics(in bitmap: NSBitmapImageRep) -> (focusPixels: Int, maxRowPixels: Int) {
+        let minX = 24
+        let maxX = max(minX, bitmap.pixelsWide - 24)
+        let minY = 80
+        let maxY = max(minY, bitmap.pixelsHigh - 120)
+        var focusPixels = 0
+        var maxRowPixels = 0
+
+        for y in minY..<maxY {
+            var rowPixels = 0
+            for x in minX..<maxX {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                      color.alphaComponent > 0.9,
+                      color.blueComponent > 0.72,
+                      color.blueComponent > color.redComponent + 0.035,
+                      color.blueComponent > color.greenComponent + 0.01
+                else {
+                    continue
+                }
+
+                rowPixels += 1
+            }
+            focusPixels += rowPixels
+            maxRowPixels = max(maxRowPixels, rowPixels)
+        }
+
+        return (focusPixels, maxRowPixels)
+    }
+
+    private static func renderedAccessibilityControls<Content: View>(
+        for view: Content,
+        size: UISmokeRenderSize = .desktop
+    ) -> [UISmokeAccessibilityControl] {
+        let state = UISmokeAccessibilityCaptureState()
+        let hostingView = NSHostingView(
+            rootView: AnyView(
+                view
+                    .frame(width: size.width, height: size.height)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                    .onPreferenceChange(UISmokeAccessibilityControlPreferenceKey.self) { controls in
+                        state.controls = controls
+                    }
+            )
+        )
+        hostingView.frame = NSRect(origin: .zero, size: NSSize(width: size.width, height: size.height))
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: size.width, height: size.height),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        window.makeKeyAndOrderFront(nil)
+        hostingView.layoutSubtreeIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        hostingView.layoutSubtreeIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        window.close()
+
+        return state.controls
+    }
+
+    private static func accessibilityLine(
+        surface: String,
+        controls: [UISmokeAccessibilityControl]
+    ) -> String {
+        let uniqueControls = Dictionary(grouping: controls, by: \.identifier)
+            .compactMap { _, controls in controls.last }
+            .sorted { lhs, rhs in lhs.identifier < rhs.identifier }
+            .map(\.reportToken)
+
+        return "accessibility=\(surface):rendered-controls=\(uniqueControls.joined(separator: ","))"
     }
 
     @ViewBuilder
@@ -248,6 +443,14 @@ enum UISmokeRenderRunner {
             reviewDraftStore: InMemoryReviewDraftStore(),
             userDefaults: UserDefaults(suiteName: "PRReviewDesk.UISmoke.\(UUID().uuidString)") ?? .standard
         )
+    }
+
+    private static func firstRunLoadedTokenModel() -> AppModel {
+        let model = firstRunModel()
+        model.hasToken = true
+        model.credentialKindDescription = GitHubCredentialKind.personalAccessToken.displayName
+        model.tokenValidationStatus = "GitHub credential is loaded. Validate scopes before generating reviews."
+        return model
     }
 
     private static func populatedModel() -> AppModel {
@@ -353,6 +556,19 @@ private enum UISmokeRenderError: Error {
     case bitmapUnavailable
     case pngUnavailable
     case missingSemanticContent(surface: String, size: String, missing: [String], recognized: [String])
+}
+
+@MainActor
+private final class CommandPanelKeyboardSmokeState {
+    var selectedSection = ReviewInboxSection.draftReady
+    var isInspectorPresented = true
+    var isPresented = true
+    var deferredSubmitCount = 0
+}
+
+@MainActor
+private final class UISmokeAccessibilityCaptureState {
+    var controls: [UISmokeAccessibilityControl] = []
 }
 
 private struct UISmokeRenderSize {

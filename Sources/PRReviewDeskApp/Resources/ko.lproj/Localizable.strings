@@ -51,6 +51,7 @@
 "Refresh Safety" = "안전 상태 새로 고침";
 "Refreshing Safety" = "안전 상태 새로 고치는 중";
 "Event %@" = "이벤트 %@";
+"Selected" = "선택됨";
 "Selected %d" = "선택 %d개";
 "Invalid %d" = "유효하지 않음 %d개";
 "Reviewed %@" = "검토 SHA %@";
