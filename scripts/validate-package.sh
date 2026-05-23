@@ -7,6 +7,7 @@ source "$ROOT_DIR/scripts/app-metadata.sh"
 APP_DIR="${1:-$ROOT_DIR/.build/app/$APP_BUNDLE_NAME.app}"
 PLIST="$APP_DIR/Contents/Info.plist"
 EXECUTABLE="$APP_DIR/Contents/MacOS/$APP_EXECUTABLE_NAME"
+RESOURCE_BUNDLE="$APP_DIR/Contents/Resources/PRReviewDesk_PRReviewDeskApp.bundle"
 
 clean_code_signing_xattrs() {
   /usr/bin/xattr -cr "$APP_DIR" 2>/dev/null || true
@@ -29,6 +30,23 @@ if [[ ! -x "$EXECUTABLE" ]]; then
   echo "Missing executable: $EXECUTABLE" >&2
   exit 1
 fi
+
+if [[ ! -d "$RESOURCE_BUNDLE" ]]; then
+  echo "Missing SwiftPM resource bundle: $RESOURCE_BUNDLE" >&2
+  exit 1
+fi
+
+for locale in en ko; do
+  if [[ ! -f "$RESOURCE_BUNDLE/$locale.lproj/Localizable.strings" ]]; then
+    echo "Missing $locale Localizable.strings in resource bundle" >&2
+    exit 1
+  fi
+
+  if [[ ! -f "$RESOURCE_BUNDLE/$locale.lproj/Localizable.stringsdict" ]]; then
+    echo "Missing $locale Localizable.stringsdict in resource bundle" >&2
+    exit 1
+  fi
+done
 
 plutil -lint "$PLIST" >/dev/null
 
