@@ -6,6 +6,7 @@ enum ReviewCommandAvailabilityTests {
         try testCommandsAreDisabledWhileWorking()
         try testGenerateRequiresSelectedPullRequest()
         try testSubmitMatchesSubmittableDraftState()
+        try testEveryReviewSubmissionEventRequiresConfirmation()
     }
 
     private static func testCommandsAreDisabledWhileWorking() throws {
@@ -49,5 +50,11 @@ enum ReviewCommandAvailabilityTests {
 
         try expectEqual(unavailable.canSubmitReview, false)
         try expectTrue(available.canSubmitReview)
+    }
+
+    private static func testEveryReviewSubmissionEventRequiresConfirmation() throws {
+        try expectTrue(ReviewSubmissionConfirmationPolicy.requiresConfirmation(for: .comment))
+        try expectTrue(ReviewSubmissionConfirmationPolicy.requiresConfirmation(for: .approve))
+        try expectTrue(ReviewSubmissionConfirmationPolicy.requiresConfirmation(for: .requestChanges))
     }
 }

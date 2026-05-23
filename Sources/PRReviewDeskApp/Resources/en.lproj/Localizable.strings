@@ -189,8 +189,11 @@
 "Copy the terminal command for Codex login." = "Copy the terminal command for Codex login.";
 "Hide draft and submit controls." = "Hide draft and submit controls.";
 "Show draft and submit controls." = "Show draft and submit controls.";
-"Use the toolbar search field to filter PRs." = "Use the toolbar search field to filter PRs.";
 "Show %@ inbox items." = "Show %@ inbox items.";
 "Filter %@" = "Filter %@";
 "Show granted scopes" = "Show granted scopes";
 "%d scopes granted" = "%d scopes granted";
+"No Draft Yet" = "No Draft Yet";
+"Generate an AI review draft before editing or submitting a review." = "Generate an AI review draft before editing or submitting a review.";
+"Discard this draft?" = "Discard this draft?";
+"This removes the local editable draft. Nothing is posted to GitHub." = "This removes the local editable draft. Nothing is posted to GitHub.";

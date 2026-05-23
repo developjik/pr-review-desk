@@ -60,13 +60,11 @@ struct ReviewCommandPanelView: View {
         return [
             ReviewCommandAction(title: AppL10n.string("Open PR"), subtitle: availability.canOpenPullRequest ? AppL10n.string("Open the selected pull request on GitHub.") : AppL10n.string("Select a pull request first."), systemImage: "arrow.up.right.square", shortcut: "O", isEnabled: availability.canOpenPullRequest, kind: .openPullRequest),
             ReviewCommandAction(title: AppL10n.string(model.aiReviewDraftActionPresentation.title), subtitle: AppL10n.string(model.aiReviewDraftActionPresentation.subtitle), systemImage: "sparkles", shortcut: "⇧⌘R", isEnabled: model.canGenerateReview, kind: .generateReview),
-            ReviewCommandAction(title: AppL10n.string("Regenerate AI Review Draft"), subtitle: model.draft == nil ? AppL10n.string("Generate an AI review draft before regenerating.") : AppL10n.string("Replace the current editable draft. Nothing is posted to GitHub."), systemImage: "arrow.triangle.2.circlepath", shortcut: nil, isEnabled: model.canGenerateReview && model.draft != nil, kind: .generateReview),
             ReviewCommandAction(title: AppL10n.string("Regenerate Selected File"), subtitle: AppL10n.string("Not available yet; regenerate the full review."), systemImage: "doc.badge.gearshape", shortcut: nil, isEnabled: availability.canRegenerateSelectedFile, kind: .regenerateSelectedFile),
             ReviewCommandAction(title: AppL10n.string("Submit Review"), subtitle: model.canSubmitReview ? AppL10n.string("Submit the selected comments and review body.") : AppL10n.string("Generate a valid AI review draft before submitting."), systemImage: "paperplane", shortcut: nil, isEnabled: model.canSubmitReview, kind: .submitReview),
             ReviewCommandAction(title: AppL10n.string("Reveal Inline Comment"), subtitle: availability.canRevealInlineComment ? AppL10n.string("Scroll the diff to the focused comment.") : AppL10n.string("Focus an inline comment first."), systemImage: "scope", shortcut: nil, isEnabled: availability.canRevealInlineComment, kind: .revealInlineComment),
             ReviewCommandAction(title: AppL10n.string("Copy Codex Login Command"), subtitle: AppL10n.string("Copy the terminal command for Codex login."), systemImage: "doc.on.doc", shortcut: nil, isEnabled: availability.canCopyCodexLoginCommand, kind: .copyCodexLoginCommand),
-            ReviewCommandAction(title: AppL10n.string("Toggle Inspector"), subtitle: isInspectorPresented ? AppL10n.string("Hide draft and submit controls.") : AppL10n.string("Show draft and submit controls."), systemImage: "sidebar.trailing", shortcut: nil, isEnabled: availability.canToggleInspector, kind: .toggleInspector),
-            ReviewCommandAction(title: AppL10n.string("Focus Search"), subtitle: AppL10n.string("Use the toolbar search field to filter PRs."), systemImage: "magnifyingglass", shortcut: nil, isEnabled: availability.canFocusSearch, kind: .focusSearch)
+            ReviewCommandAction(title: AppL10n.string("Toggle Inspector"), subtitle: isInspectorPresented ? AppL10n.string("Hide draft and submit controls.") : AppL10n.string("Show draft and submit controls."), systemImage: "sidebar.trailing", shortcut: nil, isEnabled: availability.canToggleInspector, kind: .toggleInspector)
         ] + ReviewInboxSection.allCases.map { section in
             ReviewCommandAction(
                 title: AppL10n.string("Filter %@", AppL10n.string(section.displayName)),
@@ -95,8 +93,6 @@ struct ReviewCommandPanelView: View {
             model.copyCodexLoginCommand()
         case .toggleInspector:
             isInspectorPresented.toggle()
-        case .focusSearch:
-            model.statusMessage = "Use the toolbar search field to filter pull requests."
         case let .selectSection(section):
             selectedSection = section
         }
@@ -122,6 +118,5 @@ private enum ReviewCommandActionKind {
     case revealInlineComment
     case copyCodexLoginCommand
     case toggleInspector
-    case focusSearch
     case selectSection(ReviewInboxSection)
 }

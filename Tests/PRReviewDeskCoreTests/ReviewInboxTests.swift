@@ -98,7 +98,6 @@ enum ReviewInboxTests {
         try expectTrue(availability.canRegenerateSelectedFile)
         try expectTrue(availability.canRevealInlineComment)
         try expectTrue(availability.canToggleInspector)
-        try expectTrue(availability.canFocusSearch)
         try expectTrue(availability.canCopyCodexLoginCommand)
     }
 

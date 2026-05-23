@@ -10,7 +10,7 @@ struct DraftEditorView: View {
                 .font(.headline)
             TextEditor(text: $model.reviewBody)
                 .font(.body)
-                .frame(minHeight: 130)
+                .frame(maxWidth: .infinity, minHeight: 160, alignment: .leading)
                 .overlay {
                     RoundedRectangle(cornerRadius: 6)
                         .stroke(.quaternary)
@@ -44,6 +44,7 @@ struct DraftEditorView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -90,7 +91,7 @@ private struct InlineCommentEditorRow: View {
                 get: { comment.body },
                 set: { model.setInlineCommentBody(id: comment.id, body: $0) }
             ))
-            .frame(minHeight: 76)
+            .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
             .overlay {
                 RoundedRectangle(cornerRadius: 6)
                     .stroke(.quaternary)
@@ -98,6 +99,7 @@ private struct InlineCommentEditorRow: View {
             .accessibilityLabel("Inline comment for \(comment.path) position \(comment.position)")
         }
         .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppTheme.panelBackground)
         .overlay {
             RoundedRectangle(cornerRadius: 8)
