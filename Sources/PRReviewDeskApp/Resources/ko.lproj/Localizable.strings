@@ -212,3 +212,8 @@
 "%@ review - %d selected inline comments" = "%@ 리뷰 - 선택한 인라인 코멘트 %d개";
 "Nothing is posted until you confirm this preview." = "이 미리보기를 확인하기 전까지 아무것도 게시되지 않습니다.";
 "No inline comments selected. Only the review body will be posted." = "선택된 인라인 코멘트가 없습니다. 리뷰 본문만 게시됩니다.";
+"Refresh safety before submitting." = "제출 전에 안전 상태를 새로 고치세요.";
+"Invalid inline targets: %@" = "유효하지 않은 인라인 대상: %@";
+"Search \"%@\" - %d visible" = "\"%@\" 검색 - %d개 표시";
+"Search \"%@\" is hiding pull requests in this repository. Clear search to show saved drafts and open PRs again." = "\"%@\" 검색어가 이 저장소의 pull request를 숨기고 있습니다. 저장된 초안과 열린 PR을 다시 보려면 검색을 지우세요.";
+"Search \"%@\" is hiding pull requests in the current scope. Clear search to show saved drafts and open PRs again." = "\"%@\" 검색어가 현재 범위의 pull request를 숨기고 있습니다. 저장된 초안과 열린 PR을 다시 보려면 검색을 지우세요.";

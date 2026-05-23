@@ -212,3 +212,8 @@
 "%@ review - %d selected inline comments" = "%@ review - %d selected inline comments";
 "Nothing is posted until you confirm this preview." = "Nothing is posted until you confirm this preview.";
 "No inline comments selected. Only the review body will be posted." = "No inline comments selected. Only the review body will be posted.";
+"Refresh safety before submitting." = "Refresh safety before submitting.";
+"Invalid inline targets: %@" = "Invalid inline targets: %@";
+"Search \"%@\" - %d visible" = "Search \"%@\" - %d visible";
+"Search \"%@\" is hiding pull requests in this repository. Clear search to show saved drafts and open PRs again." = "Search \"%@\" is hiding pull requests in this repository. Clear search to show saved drafts and open PRs again.";
+"Search \"%@\" is hiding pull requests in the current scope. Clear search to show saved drafts and open PRs again." = "Search \"%@\" is hiding pull requests in the current scope. Clear search to show saved drafts and open PRs again.";

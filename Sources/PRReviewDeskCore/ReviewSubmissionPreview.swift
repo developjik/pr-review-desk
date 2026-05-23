@@ -17,15 +17,41 @@ public struct ReviewSubmissionPreview: Equatable, Hashable, Sendable {
     public let summaryLine: String
     public let bodyPreview: String
     public let selectedInlineComments: [InlineCommentPreview]
+    public let safetyState: ReviewSubmissionSafetyState
 
     public var selectedInlineCommentCount: Int {
         selectedInlineComments.count
     }
 
+    public var canSubmit: Bool {
+        safetyState.canSubmit
+    }
+
+    public var safetyMessage: String {
+        if safetyState.isStale {
+            return "Draft is stale. Regenerate before submitting."
+        }
+
+        if !safetyState.invalidSelectedInlineComments.isEmpty {
+            return "\(safetyState.invalidSelectedInlineComments.count) selected inline comments target invalid diff positions."
+        }
+
+        if !safetyState.couldValidateDiffPositions {
+            return "Refresh safety before submitting."
+        }
+
+        if !safetyState.canSubmit {
+            return "Refresh safety before submitting."
+        }
+
+        return "Ready to submit."
+    }
+
     public static func make(
         event: ReviewEvent,
         body: String,
-        draft: ReviewDraft
+        draft: ReviewDraft,
+        safetyState: ReviewSubmissionSafetyState? = nil
     ) -> ReviewSubmissionPreview {
         let selectedComments = draft.inlineComments.filter(\.isSelected)
         return ReviewSubmissionPreview(
@@ -40,7 +66,13 @@ public struct ReviewSubmissionPreview: Equatable, Hashable, Sendable {
                     severity: comment.severity,
                     bodyPreview: previewText(comment.body)
                 )
-            }
+            },
+            safetyState: safetyState ?? ReviewSubmissionSafetyState(
+                reviewedHeadSha: nil,
+                currentHeadSha: nil,
+                selectedInlineCommentCount: selectedComments.count,
+                invalidSelectedInlineComments: []
+            )
         )
     }
 

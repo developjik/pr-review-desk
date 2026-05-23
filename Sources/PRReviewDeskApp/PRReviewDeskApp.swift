@@ -13,7 +13,10 @@ struct PRReviewDeskApp: App {
 
     init() {
         if CommandLine.arguments.contains("--ui-smoke") {
-            print(UISmokeManifest.current.renderedReport())
+            let report = MainActor.assumeIsolated {
+                UISmokeRenderRunner.run()
+            }
+            print(report)
             Foundation.exit(0)
         }
     }

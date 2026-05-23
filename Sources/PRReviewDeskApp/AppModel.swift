@@ -147,17 +147,22 @@ final class AppModel: ObservableObject {
     }
 
     var submitSafetyState: ReviewSubmissionSafetyState {
-        (try? ReviewSubmissionValidator.safetyState(
-            reviewedHeadSha: reviewedHeadSha,
-            currentHeadSha: preflightHeadSha ?? selectedPullRequest?.headSha,
-            draft: draft,
-            files: changedFiles
-        )) ?? ReviewSubmissionSafetyState(
-            reviewedHeadSha: reviewedHeadSha,
-            currentHeadSha: preflightHeadSha ?? selectedPullRequest?.headSha,
-            selectedInlineCommentCount: selectedInlineCommentCount,
-            invalidSelectedInlineComments: []
-        )
+        do {
+            return try ReviewSubmissionValidator.safetyState(
+                reviewedHeadSha: reviewedHeadSha,
+                currentHeadSha: preflightHeadSha ?? selectedPullRequest?.headSha,
+                draft: draft,
+                files: changedFiles
+            )
+        } catch {
+            return ReviewSubmissionSafetyState(
+                reviewedHeadSha: reviewedHeadSha,
+                currentHeadSha: preflightHeadSha ?? selectedPullRequest?.headSha,
+                selectedInlineCommentCount: selectedInlineCommentCount,
+                invalidSelectedInlineComments: [],
+                couldValidateDiffPositions: false
+            )
+        }
     }
 
     var submissionPreview: ReviewSubmissionPreview? {
@@ -168,7 +173,8 @@ final class AppModel: ObservableObject {
         return ReviewSubmissionPreview.make(
             event: selectedEvent,
             body: reviewBody,
-            draft: draft
+            draft: draft,
+            safetyState: submitSafetyState
         )
     }
 
@@ -611,9 +617,7 @@ final class AppModel: ObservableObject {
         }
 
         clearPullRequestContext(clearPullRequests: false)
-        statusMessage = hasVisibleRows
-            ? "Selected pull request is hidden by the current filter."
-            : "No pull requests match the current filter."
+        statusMessage = ReviewInboxFilterPresentation.selectionClearedStatus(hasVisibleRows: hasVisibleRows)
     }
 
     func startGenerateReview() {
@@ -728,8 +732,53 @@ final class AppModel: ObservableObject {
             return
         }
 
+        if githubClient != nil {
+            Task { @MainActor in
+                await refreshSubmitSafetyForPreview()
+            }
+            return
+        }
+
         if ReviewSubmissionConfirmationPolicy.requiresConfirmation(for: selectedEvent) {
             isSubmitConfirmationPresented = true
+        }
+    }
+
+    private func refreshSubmitSafetyForPreview() async {
+        guard !isWorking else {
+            return
+        }
+        guard let selectedRepository, let selectedPullRequest, let githubClient else {
+            statusMessage = "Select a pull request first."
+            return
+        }
+
+        await runWorking("Refreshing submit safety...") {
+            let previousSelectedFilePath = selectedChangedFilePath
+            let currentPullRequest = try await githubClient.pullRequestDetails(
+                repository: selectedRepository,
+                number: selectedPullRequest.number
+            )
+            let currentFiles = try await githubClient.pullRequestFiles(
+                repository: selectedRepository,
+                pullRequest: currentPullRequest
+            )
+
+            self.selectedPullRequest = currentPullRequest
+            changedFiles = currentFiles
+            selectedChangedFilePath = changedFiles.first(where: { $0.path == previousSelectedFilePath })?.path ?? changedFiles.first?.path
+            preflightHeadSha = currentPullRequest.headSha
+            markWatchedDraftStaleIfNeeded(repository: selectedRepository, pullRequest: currentPullRequest)
+        }
+
+        guard canSubmitReview else {
+            statusMessage = submitSafetyMessage
+            return
+        }
+
+        if ReviewSubmissionConfirmationPolicy.requiresConfirmation(for: selectedEvent) {
+            isSubmitConfirmationPresented = true
+            statusMessage = "Submit safety refreshed. Review the preview before posting."
         }
     }
 

@@ -16,6 +16,7 @@ struct ReviewSubmissionPreviewSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         previewSummary(preview)
+                        preflightPreview(preview)
                         bodyPreview(preview.bodyPreview)
                         inlineCommentsPreview(preview.selectedInlineComments)
                     }
@@ -66,7 +67,7 @@ struct ReviewSubmissionPreviewSheet: View {
                 Label(AppL10n.string("Submit %@ Review", eventDisplayName), systemImage: "paperplane")
             }
             .buttonStyle(.borderedProminent)
-            .disabled(preview == nil)
+            .disabled(preview?.canSubmit != true)
             .keyboardShortcut(.return, modifiers: [.command])
         }
         .padding()
@@ -93,6 +94,64 @@ struct ReviewSubmissionPreviewSheet: View {
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(AppTheme.border(.focus))
+        }
+    }
+
+    private func preflightPreview(_ preview: ReviewSubmissionPreview) -> some View {
+        let state = preview.safetyState
+
+        return VStack(alignment: .leading, spacing: 8) {
+            Label(
+                AppL10n.string(preview.safetyMessage),
+                systemImage: state.canSubmit ? "checkmark.shield" : "exclamationmark.triangle"
+            )
+            .font(.headline)
+            .foregroundStyle(state.canSubmit ? AppTheme.foreground(.success) : AppTheme.foreground(.warning))
+            .fixedSize(horizontal: false, vertical: true)
+
+            InspectorMetricGroup(metrics: [
+                InspectorMetric(
+                    id: "selected",
+                    title: AppL10n.string("Selected %d", state.selectedInlineCommentCount),
+                    systemImage: "text.bubble",
+                    tone: .info
+                ),
+                InspectorMetric(
+                    id: "invalid",
+                    title: AppL10n.string("Invalid %d", state.invalidSelectedInlineComments.count),
+                    systemImage: state.invalidSelectedInlineComments.isEmpty ? "checkmark.circle" : "exclamationmark.triangle",
+                    tone: state.invalidSelectedInlineComments.isEmpty ? .success : .invalid
+                ),
+                InspectorMetric(
+                    id: "reviewed",
+                    title: AppL10n.string("Reviewed %@", ReviewViewSupport.shortSha(state.reviewedHeadSha)),
+                    systemImage: "number",
+                    tone: .neutral
+                ),
+                InspectorMetric(
+                    id: "current",
+                    title: AppL10n.string("Current %@", ReviewViewSupport.shortSha(state.currentHeadSha)),
+                    systemImage: "number",
+                    tone: .neutral
+                )
+            ])
+
+            if !state.invalidSelectedInlineComments.isEmpty {
+                Text(AppL10n.string(
+                    "Invalid inline targets: %@",
+                    state.invalidSelectedInlineComments.map { "\($0.path):\($0.position)" }.joined(separator: ", ")
+                ))
+                .font(.caption)
+                .foregroundStyle(AppTheme.foreground(.invalid))
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.panelBackground)
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(state.canSubmit ? AppTheme.border(.success) : AppTheme.border(.warning))
         }
     }
 

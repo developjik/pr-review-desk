@@ -15,17 +15,20 @@ public struct ReviewSubmissionSafetyState: Equatable, Hashable, Sendable {
     public let currentHeadSha: String?
     public let selectedInlineCommentCount: Int
     public let invalidSelectedInlineComments: [InvalidInlineComment]
+    public let couldValidateDiffPositions: Bool
 
     public init(
         reviewedHeadSha: String?,
         currentHeadSha: String?,
         selectedInlineCommentCount: Int,
-        invalidSelectedInlineComments: [InvalidInlineComment]
+        invalidSelectedInlineComments: [InvalidInlineComment],
+        couldValidateDiffPositions: Bool = true
     ) {
         self.reviewedHeadSha = reviewedHeadSha
         self.currentHeadSha = currentHeadSha
         self.selectedInlineCommentCount = selectedInlineCommentCount
         self.invalidSelectedInlineComments = invalidSelectedInlineComments
+        self.couldValidateDiffPositions = couldValidateDiffPositions
     }
 
     public var isStale: Bool {
@@ -40,6 +43,7 @@ public struct ReviewSubmissionSafetyState: Equatable, Hashable, Sendable {
         reviewedHeadSha != nil
             && currentHeadSha != nil
             && !isStale
+            && couldValidateDiffPositions
             && invalidSelectedInlineComments.isEmpty
     }
 }
