@@ -154,7 +154,7 @@ private struct PullRequestTriageRowView: View {
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                     Text(row.title)
-                        .lineLimit(1)
+                        .lineLimit(ReviewWorkspaceLayoutPolicy.pullRequestTitleLineLimit)
                         .fontWeight(isSelected ? .semibold : .regular)
                 }
 
@@ -167,7 +167,7 @@ private struct PullRequestTriageRowView: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .lineLimit(ReviewWorkspaceLayoutPolicy.pullRequestMetadataLineLimit)
 
                 HStack(spacing: 8) {
                     Label("\(row.fileCount)", systemImage: "doc.on.doc")
@@ -251,6 +251,20 @@ private struct FirstRunSetupView: View {
                 Text(AppL10n.string("Connect GitHub, confirm Codex readiness, and acknowledge privacy before generating reviews."))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(AppL10n.string("Recommended path"), systemImage: "1.circle")
+                        .font(.headline)
+                    Text(AppL10n.string("Use GitHub OAuth if you have an OAuth App client ID configured. For this personal-alpha build, the personal access token fallback is the fastest reliable path."))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(10)
+                .background(AppTheme.panelBackground)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(AppTheme.border(.info))
+                }
 
                 ReadinessChecklistView(model: model, mode: .detailed)
 

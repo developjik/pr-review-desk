@@ -160,6 +160,18 @@ final class AppModel: ObservableObject {
         )
     }
 
+    var submissionPreview: ReviewSubmissionPreview? {
+        guard let draft else {
+            return nil
+        }
+
+        return ReviewSubmissionPreview.make(
+            event: selectedEvent,
+            body: reviewBody,
+            draft: draft
+        )
+    }
+
     var commandAvailability: ReviewCommandAvailability {
         ReviewCommandAvailability(
             hasToken: hasToken,

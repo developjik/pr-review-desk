@@ -7,4 +7,5 @@ cd "$ROOT_DIR"
 
 scripts/probe-swift-testing.sh
 swift build --product PRReviewDeskApp
+scripts/ui-smoke.sh
 swift run PRReviewDeskCoreTests

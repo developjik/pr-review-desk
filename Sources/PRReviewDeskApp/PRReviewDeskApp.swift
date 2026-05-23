@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import PRReviewDeskCore
 
@@ -8,6 +9,13 @@ struct PRReviewDeskApp: App {
 
     private var appearance: AppAppearance {
         AppAppearance(rawValue: appearanceRawValue) ?? .system
+    }
+
+    init() {
+        if CommandLine.arguments.contains("--ui-smoke") {
+            print(UISmokeManifest.current.renderedReport())
+            Foundation.exit(0)
+        }
     }
 
     var body: some Scene {
@@ -52,6 +60,7 @@ struct PRReviewDeskApp: App {
                 Button(AppL10n.string("Submit Review")) {
                     model.requestSubmitReview()
                 }
+                .keyboardShortcut(.return, modifiers: [.command])
                 .disabled(!model.canSubmitReview)
 
                 Button(AppL10n.string("Open PR")) {

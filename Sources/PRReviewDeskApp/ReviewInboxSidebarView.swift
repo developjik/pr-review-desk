@@ -40,18 +40,28 @@ struct ReviewInboxSidebarView: View {
                         TextField(AppL10n.string("Search repositories"), text: $model.repositorySearchText)
                             .textFieldStyle(.roundedBorder)
 
-                        ForEach(model.filteredRepositories) { repository in
-                            Button {
-                                Task {
-                                    await model.selectRepository(repository)
-                                }
-                            } label: {
-                                RepositoryFilterRow(
-                                    repository: repository,
-                                    isSelected: model.selectedRepository?.id == repository.id
-                                )
+                        if RepositorySearchPresentation.showsNoMatches(
+                            totalRepositoryCount: model.repositories.count,
+                            filteredRepositoryCount: model.filteredRepositories.count,
+                            query: model.repositorySearchText
+                        ) {
+                            RepositorySearchEmptyRow(query: RepositorySearchPresentation.trimmedQuery(model.repositorySearchText)) {
+                                model.repositorySearchText = ""
                             }
-                            .buttonStyle(.plain)
+                        } else {
+                            ForEach(model.filteredRepositories) { repository in
+                                Button {
+                                    Task {
+                                        await model.selectRepository(repository)
+                                    }
+                                } label: {
+                                    RepositoryFilterRow(
+                                        repository: repository,
+                                        isSelected: model.selectedRepository?.id == repository.id
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
                     }
                 }
@@ -122,11 +132,11 @@ private struct RepositoryFilterRow: View {
                 .frame(width: 16)
             VStack(alignment: .leading, spacing: 2) {
                 Text(repository.name)
-                    .lineLimit(1)
+                    .lineLimit(ReviewWorkspaceLayoutPolicy.repositoryOwnerLineLimit)
                 Text(repository.owner)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(ReviewWorkspaceLayoutPolicy.repositoryOwnerLineLimit)
             }
             Spacer()
             if isSelected {
@@ -140,8 +150,33 @@ private struct RepositoryFilterRow: View {
     }
 }
 
+private struct RepositorySearchEmptyRow: View {
+    let query: String
+    let onClear: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(AppL10n.string("No matching repositories"), systemImage: "magnifyingglass")
+                .font(.callout)
+                .fontWeight(.medium)
+            Text(AppL10n.string("No repositories match \"%@\".", query))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                onClear()
+            } label: {
+                Label(AppL10n.string("Clear repository search"), systemImage: "xmark.circle")
+            }
+            .controlSize(.small)
+        }
+        .padding(.vertical, 6)
+    }
+}
+
 private struct QueueSummaryRow: View {
     @ObservedObject var model: AppModel
+    @State private var isCancelConfirmationPresented = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -162,7 +197,7 @@ private struct QueueSummaryRow: View {
             }
             Button {
                 if model.isBackgroundReviewQueueRunning {
-                    model.cancelBackgroundReviewQueue()
+                    isCancelConfirmationPresented = true
                 } else {
                     model.startBackgroundReviewQueue()
                 }
@@ -175,7 +210,19 @@ private struct QueueSummaryRow: View {
             }
             .buttonStyle(.plain)
             .disabled(!model.isBackgroundReviewQueueRunning && !model.backgroundReviewQueue.hasQueuedItems)
+            .help(model.isBackgroundReviewQueueRunning ? AppL10n.string("Cancel background queue") : AppL10n.string("Run queued draft generation"))
+            .confirmationDialog(
+                AppL10n.string("Cancel background queue?"),
+                isPresented: $isCancelConfirmationPresented,
+                titleVisibility: .visible
+            ) {
+                Button(AppL10n.string("Cancel background queue"), role: .destructive) {
+                    model.cancelBackgroundReviewQueue()
+                }
+                Button(AppL10n.string("Keep Running"), role: .cancel) {}
+            } message: {
+                Text(AppL10n.string("Queued review drafts that have not started will remain in the queue."))
+            }
         }
-        .accessibilityElement(children: .combine)
     }
 }

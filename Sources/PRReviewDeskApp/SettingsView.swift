@@ -64,6 +64,11 @@ struct SettingsView: View {
                 TextField(AppL10n.string("OAuth App client ID"), text: $model.oauthClientID)
                     .textFieldStyle(.roundedBorder)
 
+                Text(AppL10n.string("Use OAuth when you have a GitHub OAuth App client ID. Otherwise use the personal access token fallback below."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 HStack {
                     Button {
                         model.startOAuthDeviceSignIn()
@@ -110,7 +115,12 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                DisclosureGroup(AppL10n.string("Advanced credential controls")) {
+                DisclosureGroup(AppL10n.string("Personal access token fallback")) {
+                    Text(AppL10n.string("For personal use, paste a GitHub token with repository access, save it locally, then validate scopes."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
                     SecureField(AppL10n.string("Personal access token"), text: $model.tokenInput)
 
                     HStack {
