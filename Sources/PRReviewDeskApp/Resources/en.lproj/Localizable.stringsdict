@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>changed.files.reviewable</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@reviewable@ of %#@total@ changed files have reviewable patches.</string>
+        <key>reviewable</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>d</string>
+            <key>one</key>
+            <string>%d</string>
+            <key>other</key>
+            <string>%d</string>
+        </dict>
+        <key>total</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>d</string>
+            <key>one</key>
+            <string>%d</string>
+            <key>other</key>
+            <string>%d</string>
+        </dict>
+    </dict>
+</dict>
+</plist>

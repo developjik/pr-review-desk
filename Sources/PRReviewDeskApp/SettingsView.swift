@@ -2,23 +2,40 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var model: AppModel
+    @AppStorage("appearance") private var appearanceRawValue = AppAppearance.system.rawValue
+
+    private var appearanceBinding: Binding<AppAppearance> {
+        Binding(
+            get: { AppAppearance(rawValue: appearanceRawValue) ?? .system },
+            set: { appearanceRawValue = $0.rawValue }
+        )
+    }
 
     var body: some View {
         Form {
-            Section("Readiness") {
-                ReadinessChecklistView(model: model)
+            Section(AppL10n.string("Appearance")) {
+                Picker(AppL10n.string("Appearance"), selection: appearanceBinding) {
+                    ForEach(AppAppearance.allCases) { appearance in
+                        Text(appearance.displayName).tag(appearance)
+                    }
+                }
+                .pickerStyle(.segmented)
             }
 
-            Section("GitHub") {
+            Section(AppL10n.string("Readiness")) {
+                ReadinessChecklistView(model: model, mode: .detailed)
+            }
+
+            Section(AppL10n.string("GitHub")) {
                 HStack {
-                    Text("Token")
+                    Text(AppL10n.string("Token"))
                     Spacer()
-                    Text(model.hasToken ? "Loaded" : "Not loaded")
-                        .foregroundStyle(model.hasToken ? .green : .secondary)
+                    Text(model.hasToken ? AppL10n.string("Loaded") : AppL10n.string("Not loaded"))
+                        .foregroundStyle(model.hasToken ? AppTheme.foreground(.success) : .secondary)
                 }
 
                 HStack {
-                    Text("Credential type")
+                    Text(AppL10n.string("Credential type"))
                     Spacer()
                     Text(model.credentialKindDescription)
                         .foregroundStyle(.secondary)
@@ -26,45 +43,25 @@ struct SettingsView: View {
                 }
 
                 HStack {
-                    Text("Granted scopes")
+                    Text(AppL10n.string("Granted scopes"))
                     Spacer()
-                    Text(model.grantedGitHubScopes.isEmpty ? "Unknown" : model.grantedGitHubScopes.joined(separator: ", "))
+                    Text(grantedScopesSummary)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
                         .multilineTextAlignment(.trailing)
                         .textSelection(.enabled)
                 }
 
-                SecureField("Personal access token", text: $model.tokenInput)
-
-                HStack {
-                    Button {
-                        Task {
-                            await model.saveTokenAndRefresh()
-                        }
-                    } label: {
-                        Label("Save or Replace with PAT", systemImage: "key")
+                if !model.grantedGitHubScopes.isEmpty {
+                    DisclosureGroup(AppL10n.string("Show granted scopes")) {
+                        Text(model.grantedGitHubScopes.joined(separator: ", "))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .disabled(model.isWorking)
-
-                    Button {
-                        model.loadStoredToken()
-                    } label: {
-                        Label("Load", systemImage: "lock.open")
-                    }
-                    .disabled(model.isWorking)
-
-                    Button(role: .destructive) {
-                        model.deleteStoredToken()
-                    } label: {
-                        Label("Delete Local Credential", systemImage: "trash")
-                    }
-                    .disabled(model.isWorking || !model.hasToken)
                 }
 
-                Divider()
-
-                TextField("OAuth App client ID", text: $model.oauthClientID)
+                TextField(AppL10n.string("OAuth App client ID"), text: $model.oauthClientID)
                     .textFieldStyle(.roundedBorder)
 
                 HStack {
@@ -72,17 +69,18 @@ struct SettingsView: View {
                         model.startOAuthDeviceSignIn()
                     } label: {
                         Label(
-                            model.hasToken ? "Replace with GitHub OAuth" : "Sign in with GitHub",
+                            model.hasToken ? AppL10n.string("Replace with GitHub OAuth") : AppL10n.string("Sign in with GitHub"),
                             systemImage: "person.crop.circle.badge.checkmark"
                         )
                     }
+                    .buttonStyle(.borderedProminent)
                     .disabled(model.isOAuthSignInPending || model.oauthClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                     if model.isOAuthSignInPending {
                         Button {
                             model.cancelOAuthDeviceSignIn()
                         } label: {
-                            Label("Cancel", systemImage: "xmark.circle")
+                            Label(AppL10n.string("Cancel"), systemImage: "xmark.circle")
                         }
                     }
 
@@ -90,16 +88,16 @@ struct SettingsView: View {
                         Button {
                             model.copyOAuthUserCode()
                         } label: {
-                            Label("Copy Code", systemImage: "doc.on.doc")
+                            Label(AppL10n.string("Copy Code"), systemImage: "doc.on.doc")
                         }
 
-                        Link("Open GitHub", destination: authorization.verificationURI)
+                        Link(AppL10n.string("Open GitHub"), destination: authorization.verificationURI)
                     }
                 }
 
                 if let authorization = model.oauthAuthorization {
                     HStack {
-                        Text("Device code")
+                        Text(AppL10n.string("Device code"))
                         Spacer()
                         Text(authorization.userCode)
                             .font(.system(.body, design: .monospaced))
@@ -112,19 +110,48 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                HStack {
-                    Text("Revoke OAuth access")
-                    Spacer()
-                    Link("Manage on GitHub", destination: URL(string: "https://github.com/settings/applications")!)
+                DisclosureGroup(AppL10n.string("Advanced credential controls")) {
+                    SecureField(AppL10n.string("Personal access token"), text: $model.tokenInput)
+
+                    HStack {
+                        Button {
+                            Task {
+                                await model.saveTokenAndRefresh()
+                            }
+                        } label: {
+                            Label(AppL10n.string("Save or Replace with PAT"), systemImage: "key")
+                        }
+                        .disabled(model.isWorking)
+
+                        Button {
+                            model.loadStoredToken()
+                        } label: {
+                            Label(AppL10n.string("Load"), systemImage: "lock.open")
+                        }
+                        .disabled(model.isWorking)
+
+                        Button(role: .destructive) {
+                            model.deleteStoredToken()
+                        } label: {
+                            Label(AppL10n.string("Delete Local Credential"), systemImage: "trash")
+                        }
+                        .disabled(model.isWorking || !model.hasToken)
+                    }
+
+                    HStack {
+                        Text(AppL10n.string("Revoke OAuth access"))
+                        Spacer()
+                        Link(AppL10n.string("Manage on GitHub"), destination: URL(string: "https://github.com/settings/applications")!)
+                    }
+
+                    Text(AppL10n.string("OAuth authorization must be revoked on GitHub. Deleting here only removes the local credential."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Text("OAuth authorization must be revoked on GitHub. Deleting here only removes the local credential.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
                 HStack {
-                    Text(model.tokenValidationStatus)
+                    Text(tokenValidationSummary)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button {
@@ -132,13 +159,13 @@ struct SettingsView: View {
                             await model.validateCurrentToken()
                         }
                     } label: {
-                        Label("Validate", systemImage: "checkmark.seal")
+                        Label(AppL10n.string("Validate"), systemImage: "checkmark.seal")
                     }
                     .disabled(model.isWorking || !model.hasToken)
                 }
             }
 
-            Section("Codex") {
+            Section(AppL10n.string("Codex")) {
                 HStack {
                     Text(model.codexCLIStatus)
                         .foregroundStyle(.secondary)
@@ -148,28 +175,28 @@ struct SettingsView: View {
                             await model.refreshCodexCLIStatus()
                         }
                     } label: {
-                        Label("Check", systemImage: "terminal")
+                        Label(AppL10n.string("Check"), systemImage: "terminal")
                     }
                     .disabled(model.isWorking)
                 }
             }
 
-            Section("Privacy") {
-                Text("When you generate a review, PR metadata and reviewable patch content may be sent to Codex and OpenAI. Omitted files without GitHub patch content are not sent to Codex by this app.")
+            Section(AppL10n.string("Privacy")) {
+                Text(AppL10n.string("When you generate a review, PR metadata and reviewable patch content may be sent to Codex and OpenAI. Omitted files without GitHub patch content are not sent to Codex by this app."))
                     .fixedSize(horizontal: false, vertical: true)
-                Toggle("I acknowledge this disclosure", isOn: $model.isPrivacyDisclosureAcknowledged)
+                Toggle(AppL10n.string("I acknowledge this disclosure"), isOn: $model.isPrivacyDisclosureAcknowledged)
 
                 HStack {
-                    Text("Private repository consent")
+                    Text(AppL10n.string("Private repository consent"))
                     Spacer()
-                    Text("\(model.privateRepositoryConsentAcknowledgementCount) remembered")
+                    Text(AppL10n.string("%d remembered", model.privateRepositoryConsentAcknowledgementCount))
                         .foregroundStyle(.secondary)
                 }
 
                 Button(role: .destructive) {
                     model.clearPrivateRepositoryConsentAcknowledgements()
                 } label: {
-                    Label("Clear Remembered Private Repository Consent", systemImage: "trash")
+                    Label(AppL10n.string("Clear Remembered Private Repository Consent"), systemImage: "trash")
                 }
                 .disabled(model.privateRepositoryConsentAcknowledgementCount == 0)
             }
@@ -177,5 +204,30 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .padding()
         .frame(width: 620)
+    }
+
+    private var grantedScopesSummary: String {
+        if model.grantedGitHubScopes.isEmpty {
+            return AppL10n.string("Unknown")
+        }
+
+        return AppL10n.string("%d scopes granted", model.grantedGitHubScopes.count)
+    }
+
+    private var tokenValidationSummary: String {
+        guard !model.grantedGitHubScopes.isEmpty,
+              let statusPrefix = tokenValidationStatusPrefix else {
+            return model.tokenValidationStatus
+        }
+
+        return "\(statusPrefix) \(grantedScopesSummary)"
+    }
+
+    private var tokenValidationStatusPrefix: String? {
+        guard let scopesRange = model.tokenValidationStatus.range(of: ". Scopes:") else {
+            return nil
+        }
+
+        return "\(model.tokenValidationStatus[..<scopesRange.lowerBound])."
     }
 }

@@ -6,7 +6,7 @@ enum KeychainTokenStoreTests {
         try testMemoryTokenStoreSavesLoadsAndDeletesToken()
         try testPersonalAccessTokenCredentialStoreWrapsExistingTokenStore()
         try testStaticAccessTokenProviderBuildsBearerAuthorization()
-        try testCredentialStoreAccessTokenProviderReadsCurrentCredential()
+        try testCredentialStoreAccessTokenProviderCachesLoadedCredentialUntilRecreated()
         try testVersionedCredentialStoreMigratesRawPersonalAccessToken()
         try testVersionedCredentialStoreRoundTripsEnvelopeMetadata()
         try testCredentialKindDisplayNamesDoNotExposeTokenValues()
@@ -44,7 +44,7 @@ enum KeychainTokenStoreTests {
         try expectEqual(try provider.authorizationHeader(), "Bearer test-token")
     }
 
-    private static func testCredentialStoreAccessTokenProviderReadsCurrentCredential() throws {
+    private static func testCredentialStoreAccessTokenProviderCachesLoadedCredentialUntilRecreated() throws {
         let tokenStore = InMemoryTokenStore(token: "first-token")
         let credentialStore = PersonalAccessTokenCredentialStore(tokenStore: tokenStore)
         let provider = CredentialStoreAccessTokenProvider(credentialStore: credentialStore)
@@ -53,7 +53,10 @@ enum KeychainTokenStoreTests {
 
         try credentialStore.saveCredential(.personalAccessToken("second-token"))
 
-        try expectEqual(try provider.authorizationHeader(), "Bearer second-token")
+        try expectEqual(try provider.authorizationHeader(), "Bearer first-token")
+
+        let refreshedProvider = CredentialStoreAccessTokenProvider(credentialStore: credentialStore)
+        try expectEqual(try refreshedProvider.authorizationHeader(), "Bearer second-token")
     }
 
     private static func testVersionedCredentialStoreMigratesRawPersonalAccessToken() throws {

@@ -18,6 +18,27 @@ swift build --product PRReviewDeskApp
 swift run PRReviewDeskCoreTests
 ```
 
+## Localization And Appearance
+
+The app declares English as the default localization and includes Korean resources for the SwiftUI app target. UI resources live under:
+
+```text
+Sources/PRReviewDeskApp/Resources/en.lproj
+Sources/PRReviewDeskApp/Resources/ko.lproj
+```
+
+Use `Localizable.strings` for labels, commands, help text, dialogs, and status copy. Use `Localizable.stringsdict` for count-sensitive text. Keep protocol data unlocalized: GitHub API raw values, OAuth scopes, JSON keys, URLs, diff text, repository names, PR titles, authors, file paths, GitHub error bodies, and Codex output schema values.
+
+The packaged app must include the SwiftPM resource bundle in `Contents/Resources`; `scripts/package-app.sh` copies it and `scripts/validate-package.sh` checks English and Korean localization files. Appearance defaults to System, with Light and Dark overrides available from Settings.
+
+## Review Workflow UI
+
+The main window opens around a review inbox, not a repository-first control panel. Inbox sections group work into Draft Ready, Stale, Running, Needs Setup, Submitted, and Recents/Favorites. Repositories remain in the sidebar as scope filters and queue sources.
+
+The detail area uses a focused diff workspace. Changed files stay next to the diff, while review body editing, inline comment selection, submit safety, event selection, and AI trust details live in the trailing inspector. The toolbar and Review menu expose refresh, generation, submission, GitHub opening, file/hunk/comment navigation, and Codex login actions; `Command-K` opens the contextual action panel.
+
+Diff review supports old/new line gutters, GitHub diff positions, inline comment anchors, viewed/unviewed state, file collapse/expand, unified/split display, whitespace markers, and keyboard navigation for files, hunks, and inline comments.
+
 The executable `PRReviewDeskCoreTests` target is the current test harness. It does not require live GitHub credentials or Codex credentials. `scripts/probe-swift-testing.sh` reports whether the selected developer directory can import `XCTest` or `Testing`; it is informational unless run with `--require`.
 
 The package tools version is kept at Swift 6.1 so the GitHub-hosted macOS runner can execute the same gate without installing an additional toolchain. Newer local Swift toolchains can still build the package.

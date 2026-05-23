@@ -285,17 +285,40 @@ public struct StaticAccessTokenProvider: AccessTokenProvider, Sendable {
 
 public struct CredentialStoreAccessTokenProvider: AccessTokenProvider, Sendable {
     private let credentialStore: any CredentialStore
+    private let cache = CredentialStoreAuthorizationHeaderCache()
 
     public init(credentialStore: any CredentialStore) {
         self.credentialStore = credentialStore
     }
 
     public func authorizationHeader() throws -> String {
-        guard let credential = try credentialStore.loadCredential() else {
+        try cache.authorizationHeader {
+            try credentialStore.loadCredential()
+        }
+    }
+}
+
+private final class CredentialStoreAuthorizationHeaderCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cachedAuthorizationHeader: String?
+
+    func authorizationHeader(loadCredential: () throws -> GitHubCredential?) throws -> String {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+
+        if let cachedAuthorizationHeader {
+            return cachedAuthorizationHeader
+        }
+
+        guard let credential = try loadCredential() else {
             throw CredentialStoreError.unsupportedCredentialKind
         }
 
-        return "Bearer \(credential.accessToken)"
+        let authorizationHeader = "Bearer \(credential.accessToken)"
+        cachedAuthorizationHeader = authorizationHeader
+        return authorizationHeader
     }
 }
 

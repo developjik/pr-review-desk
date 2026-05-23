@@ -57,8 +57,18 @@ public struct PullRequest: Codable, Equatable, Identifiable, Hashable, Sendable 
     public let htmlURL: URL
     public let author: String
     public let headSha: String
+    public let updatedAt: String?
 
-    public init(id: Int, number: Int, title: String, body: String? = nil, htmlURL: URL, author: String, headSha: String) {
+    public init(
+        id: Int,
+        number: Int,
+        title: String,
+        body: String? = nil,
+        htmlURL: URL,
+        author: String,
+        headSha: String,
+        updatedAt: String? = nil
+    ) {
         self.id = id
         self.number = number
         self.title = title
@@ -66,6 +76,7 @@ public struct PullRequest: Codable, Equatable, Identifiable, Hashable, Sendable 
         self.htmlURL = htmlURL
         self.author = author
         self.headSha = headSha
+        self.updatedAt = updatedAt
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -76,6 +87,7 @@ public struct PullRequest: Codable, Equatable, Identifiable, Hashable, Sendable 
         case htmlURL = "html_url"
         case user
         case head
+        case updatedAt = "updated_at"
     }
 
     private enum UserKeys: String, CodingKey {
@@ -98,6 +110,7 @@ public struct PullRequest: Codable, Equatable, Identifiable, Hashable, Sendable 
         htmlURL = try container.decode(URL.self, forKey: .htmlURL)
         author = try userContainer.decode(String.self, forKey: .login)
         headSha = try headContainer.decode(String.self, forKey: .sha)
+        updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -107,6 +120,7 @@ public struct PullRequest: Codable, Equatable, Identifiable, Hashable, Sendable 
         try container.encode(title, forKey: .title)
         try container.encodeIfPresent(body, forKey: .body)
         try container.encode(htmlURL, forKey: .htmlURL)
+        try container.encodeIfPresent(updatedAt, forKey: .updatedAt)
         var userContainer = container.nestedContainer(keyedBy: UserKeys.self, forKey: .user)
         try userContainer.encode(author, forKey: .login)
         var headContainer = container.nestedContainer(keyedBy: HeadKeys.self, forKey: .head)

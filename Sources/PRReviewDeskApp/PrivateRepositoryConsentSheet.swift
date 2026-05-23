@@ -8,7 +8,7 @@ struct PrivateRepositoryConsentSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Label("Private Repository", systemImage: "lock.shield")
+            Label(AppL10n.string("Private Repository"), systemImage: "lock.shield")
                 .font(.title3)
                 .fontWeight(.semibold)
 
@@ -16,7 +16,7 @@ struct PrivateRepositoryConsentSheet: View {
                 .font(.headline)
                 .textSelection(.enabled)
 
-            Text("Before Codex generates a review, this app will send the following private repository context to Codex and OpenAI:")
+            Text(AppL10n.string("Before Codex generates an AI review draft, this app will send the following private repository context to Codex and OpenAI:"))
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: 8) {
@@ -26,7 +26,7 @@ struct PrivateRepositoryConsentSheet: View {
                 }
             }
 
-            Text("This acknowledgement is remembered only for this repository. You can clear remembered private repository consent in Settings.")
+            Text(AppL10n.string("This acknowledgement is remembered only for this repository. You can clear remembered private repository consent in Settings."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -35,7 +35,7 @@ struct PrivateRepositoryConsentSheet: View {
                 Button(role: .cancel) {
                     onCancel()
                 } label: {
-                    Label("Cancel", systemImage: "xmark")
+                    Label(AppL10n.string("Cancel"), systemImage: "xmark")
                 }
 
                 Spacer()
@@ -43,7 +43,7 @@ struct PrivateRepositoryConsentSheet: View {
                 Button {
                     onAcknowledge()
                 } label: {
-                    Label("Acknowledge", systemImage: "checkmark.shield")
+                    Label(AppL10n.string("Acknowledge"), systemImage: "checkmark.shield")
                 }
                 .buttonStyle(.borderedProminent)
             }

@@ -22,6 +22,7 @@ fi
 
 APP_DIR="$APP_OUTPUT_ROOT/$APP_BUNDLE_NAME.app"
 EXECUTABLE="$ROOT_DIR/.build/$CONFIGURATION/$APP_EXECUTABLE_NAME"
+RESOURCE_BUNDLE_NAME="PRReviewDesk_PRReviewDeskApp.bundle"
 PLIST="$APP_DIR/Contents/Info.plist"
 
 clean_code_signing_xattrs() {
@@ -37,6 +38,18 @@ rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$EXECUTABLE" "$APP_DIR/Contents/MacOS/$APP_EXECUTABLE_NAME"
 chmod 755 "$APP_DIR/Contents/MacOS/$APP_EXECUTABLE_NAME"
+
+RESOURCE_BUNDLE="$ROOT_DIR/.build/$CONFIGURATION/$RESOURCE_BUNDLE_NAME"
+if [[ ! -d "$RESOURCE_BUNDLE" ]]; then
+  RESOURCE_BUNDLE="$(find "$ROOT_DIR/.build" -path "*/$CONFIGURATION/$RESOURCE_BUNDLE_NAME" -type d -print -quit)"
+fi
+
+if [[ -z "${RESOURCE_BUNDLE:-}" || ! -d "$RESOURCE_BUNDLE" ]]; then
+  echo "Missing SwiftPM resource bundle: $RESOURCE_BUNDLE_NAME" >&2
+  exit 1
+fi
+
+cp -R "$RESOURCE_BUNDLE" "$APP_DIR/Contents/Resources/"
 
 cat > "$PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

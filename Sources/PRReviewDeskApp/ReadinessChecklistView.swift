@@ -1,25 +1,43 @@
 import SwiftUI
 import PRReviewDeskCore
 
+enum ReadinessChecklistMode: Equatable {
+    case compact
+    case detailed
+}
+
 struct ReadinessChecklistView: View {
     @ObservedObject var model: AppModel
+    var mode: ReadinessChecklistMode = .detailed
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("Readiness", systemImage: "checklist")
+                Label(AppL10n.string("Readiness"), systemImage: "checklist")
                     .font(.headline)
                 Spacer()
-                Text(model.readinessChecklist.isReady ? "Ready" : "Needs setup")
-                    .font(.caption)
-                    .foregroundStyle(model.readinessChecklist.isReady ? .green : .orange)
+                StatusBadge(
+                    title: model.readinessChecklist.isReady ? AppL10n.string("Ready") : AppL10n.string("Needs setup"),
+                    systemImage: model.readinessChecklist.isReady ? "checkmark.circle" : "exclamationmark.triangle",
+                    tone: model.readinessChecklist.isReady ? .success : .warning
+                )
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(model.readinessChecklist.items) { item in
+                ForEach(visibleItems) { item in
                     readinessRow(item)
                 }
             }
+        }
+    }
+
+    private var visibleItems: [ReadinessChecklistItem] {
+        switch mode {
+        case .compact:
+            let blockedItems = model.readinessChecklist.items.filter { $0.state != .ready }
+            return Array(blockedItems.prefix(2))
+        case .detailed:
+            return model.readinessChecklist.items
         }
     }
 
@@ -30,21 +48,23 @@ struct ReadinessChecklistView: View {
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.title)
+                Text(AppL10n.string(item.title))
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .lineLimit(1)
 
-                Text(item.detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if mode == .detailed {
+                    Text(readinessDetail(for: item))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 if item.state != .ready {
                     Button {
                         performAction(item.action)
                     } label: {
-                        Label(item.actionTitle, systemImage: actionIcon(for: item.action))
+                        Label(AppL10n.string(item.actionTitle), systemImage: actionIcon(for: item.action))
                     }
                     .controlSize(.small)
                     .disabled(isActionDisabled(item.action))
@@ -87,6 +107,25 @@ struct ReadinessChecklistView: View {
         }
     }
 
+    private func readinessDetail(for item: ReadinessChecklistItem) -> String {
+        if item.id == .githubTokenValidation,
+           item.state == .ready,
+           !model.grantedGitHubScopes.isEmpty,
+           let accountSummary = tokenValidationAccountSummary(from: item.detail) {
+            return "\(accountSummary) \(AppL10n.string("%d scopes granted", model.grantedGitHubScopes.count))"
+        }
+
+        return AppL10n.string(item.detail)
+    }
+
+    private func tokenValidationAccountSummary(from detail: String) -> String? {
+        guard let scopesRange = detail.range(of: ". Scopes:") else {
+            return nil
+        }
+
+        return "\(detail[..<scopesRange.lowerBound])."
+    }
+
     private func stateIcon(for state: ReadinessChecklistItemState) -> String {
         switch state {
         case .ready:
@@ -101,9 +140,9 @@ struct ReadinessChecklistView: View {
     private func stateColor(for state: ReadinessChecklistItemState) -> Color {
         switch state {
         case .ready:
-            return .green
+            return AppTheme.foreground(.success)
         case .needsAction:
-            return .orange
+            return AppTheme.foreground(.warning)
         case .unknown:
             return .secondary
         }

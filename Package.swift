@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "PRReviewDesk",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v14)
     ],
@@ -16,7 +17,10 @@ let package = Package(
         .target(name: "PRReviewDeskCore"),
         .executableTarget(
             name: "PRReviewDeskApp",
-            dependencies: ["PRReviewDeskCore"]
+            dependencies: ["PRReviewDeskCore"],
+            resources: [
+                .process("Resources")
+            ]
         ),
         .executableTarget(
             name: "PRReviewDeskCoreTests",

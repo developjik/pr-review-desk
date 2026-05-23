@@ -6,6 +6,8 @@ enum DiffPositionMapperTests {
         try testSingleHunkMapsNewLinesToGitHubPositions()
         try testMultipleHunksContinuePositionsWithinFile()
         try testAnnotatedLinesExposeDiffPositionsForNavigation()
+        try testAnnotatedLinesExposeSemanticKinds()
+        try testAnnotatedLinesExposeOldAndNewLineNumbers()
     }
 
     private static func testSingleHunkMapsNewLinesToGitHubPositions() throws {
@@ -59,5 +61,45 @@ enum DiffPositionMapperTests {
 
         try expectEqual(annotated.lines.map(\.position), [nil, 1, 2, 3])
         try expectEqual(annotated.lines.first { $0.position == 2 }?.text, "[pos 2] +new")
+    }
+
+    private static func testAnnotatedLinesExposeSemanticKinds() throws {
+        let patch = """
+        diff --git a/Sources/App.swift b/Sources/App.swift
+        @@ -1,3 +1,3 @@
+         context
+        -old
+        +new
+        \\ No newline at end of file
+        """
+
+        let annotated = try DiffPositionMapper.annotate(path: "Sources/App.swift", patch: patch)
+
+        try expectEqual(annotated.lines.map(\.kind), [
+            .metadata,
+            .hunk,
+            .context,
+            .deletion,
+            .addition,
+            .metadata
+        ])
+    }
+
+    private static func testAnnotatedLinesExposeOldAndNewLineNumbers() throws {
+        let patch = """
+        @@ -10,2 +20,3 @@
+         unchanged
+        -removed
+        +added
+        +another
+        """
+
+        let annotated = try DiffPositionMapper.annotate(path: "Sources/App.swift", patch: patch)
+
+        try expectEqual(annotated.lines.map(\.oldLine), [nil, 10, 11, nil, nil])
+        try expectEqual(annotated.lines.map(\.newLine), [nil, 20, nil, 21, 22])
+        try expectEqual(annotated.position(forNewLine: 20), 1)
+        try expectEqual(annotated.position(forNewLine: 21), 3)
+        try expectEqual(annotated.position(forNewLine: 22), 4)
     }
 }

@@ -17,6 +17,23 @@ struct InlineCommentFocusTarget: Equatable, Sendable {
     let position: Int
 }
 
+private enum ProbeReadinessStatus {
+    case ready
+    case needsAction
+    case unknown
+
+    var checklistState: ReadinessChecklistItemState {
+        switch self {
+        case .ready:
+            return .ready
+        case .needsAction:
+            return .needsAction
+        case .unknown:
+            return .unknown
+        }
+    }
+}
+
 private enum PrivateRepositoryConsentContinuation {
     case generateCurrentReview
     case enqueueSelectedPullRequest
@@ -42,7 +59,11 @@ final class AppModel: ObservableObject {
     @Published var pullRequestSearchText = ""
     @Published var changedFiles: [PullRequestFile] = []
     @Published var selectedChangedFilePath: String?
+    @Published var diffReviewFileState = DiffReviewFileState()
+    @Published var diffDisplayMode: DiffDisplayMode = .unified
+    @Published var showsWhitespaceInDiff = false
     @Published var focusedInlineCommentTarget: InlineCommentFocusTarget?
+    @Published var focusedDiffLineIndex: Int?
     @Published var draft: ReviewDraft?
     @Published var reviewBody = "" {
         didSet {
@@ -62,6 +83,9 @@ final class AppModel: ObservableObject {
     @Published var tokenValidationStatus = "Not validated."
     @Published var codexCLIStatus = "Not checked."
     @Published var codexLoginStatus = "Not checked."
+    @Published private var tokenValidationReadinessStatus: ProbeReadinessStatus = .unknown
+    @Published private var codexCLIReadinessStatus: ProbeReadinessStatus = .unknown
+    @Published private var codexLoginReadinessStatus: ProbeReadinessStatus = .unknown
     @Published var isSubmitConfirmationPresented = false
     @Published var backgroundReviewQueue = BackgroundReviewQueue()
     @Published var isBackgroundReviewQueueRunning = false
@@ -72,6 +96,7 @@ final class AppModel: ObservableObject {
     }
     @Published var pendingPrivateRepositoryConsent: PrivateRepositoryConsentRequest?
     @Published private(set) var privateRepositoryConsentAcknowledgementCount = 0
+    @Published private(set) var generatedDraftPresentationRevision = 0
 
     private static let privacyDisclosureAcknowledgedKey = "privacyDisclosureAcknowledged"
     private static let privateRepositoryConsentAcknowledgementsKey = "privateRepositoryConsentAcknowledgements"
@@ -84,6 +109,7 @@ final class AppModel: ObservableObject {
     private let reviewDraftStore: any ReviewDraftStore
     private let userDefaults: UserDefaults
     private var githubClient: GitHubClient?
+    private var activeGitHubCredential: GitHubCredential?
     private var reviewedHeadSha: String?
     private var currentOperationTask: Task<Void, Never>?
     private var backgroundQueueTask: Task<Void, Never>?
@@ -139,8 +165,58 @@ final class AppModel: ObservableObject {
             hasToken: hasToken,
             hasSelectedPullRequest: selectedPullRequest != nil,
             hasSubmittableDraft: hasSubmittableDraft,
-            isWorking: isWorking
+            isWorking: isWorking,
+            hasSelectedFile: selectedChangedFile != nil,
+            hasFocusedInlineComment: focusedInlineCommentTarget != nil,
+            supportsSelectedFileRegeneration: false
         )
+    }
+
+    var reviewInboxRows: [PullRequestTriageRow] {
+        var rows = backgroundReviewQueue.items.map { item in
+            PullRequestTriageRow(
+                repository: item.repository,
+                pullRequest: item.pullRequest,
+                files: filesForTriageRow(repository: item.repository, pullRequest: item.pullRequest),
+                draft: item.draft,
+                queueState: item.state,
+                reviewedHeadSha: item.reviewedHeadSha
+            )
+        }
+
+        if let selectedRepository {
+            rows.append(contentsOf: filteredPullRequests.map { pullRequest in
+                PullRequestTriageRow(
+                    repository: selectedRepository,
+                    pullRequest: pullRequest,
+                    files: filesForTriageRow(repository: selectedRepository, pullRequest: pullRequest),
+                    draft: draftForTriageRow(repository: selectedRepository, pullRequest: pullRequest),
+                    queueState: queueStateForTriageRow(repository: selectedRepository, pullRequest: pullRequest),
+                    reviewedHeadSha: reviewedHeadShaForTriageRow(repository: selectedRepository, pullRequest: pullRequest)
+                )
+            })
+        }
+
+        var seenIDs = Set<String>()
+        return rows.filter { row in
+            seenIDs.insert(row.id).inserted
+        }
+    }
+
+    func reviewInboxRows(for section: ReviewInboxSection) -> [PullRequestTriageRow] {
+        guard section != .needsSetup else {
+            return []
+        }
+
+        return reviewInboxRows.filter { $0.section == section }
+    }
+
+    func reviewInboxCount(for section: ReviewInboxSection) -> Int {
+        if section == .needsSetup {
+            return readinessChecklist.isReady ? 0 : 1
+        }
+
+        return reviewInboxRows(for: section).count
     }
 
     var canRefreshActiveScope: Bool {
@@ -148,7 +224,9 @@ final class AppModel: ObservableObject {
     }
 
     var canGenerateReview: Bool {
-        commandAvailability.canGenerateReview && selectedRepositoryAccessDecision.isAllowed
+        commandAvailability.canGenerateReview
+            && selectedRepositoryAccessDecision.isAllowed
+            && readinessChecklist.isReady
     }
 
     var canSubmitReview: Bool {
@@ -161,6 +239,34 @@ final class AppModel: ObservableObject {
 
     var canWatchSelectedRepository: Bool {
         hasToken && selectedRepository != nil && !pullRequests.isEmpty && selectedRepositoryAccessDecision.isAllowed
+    }
+
+    var aiReviewDraftActionPresentation: AIReviewDraftActionPresentation {
+        AIReviewDraftActionPresentation(
+            hasDraft: draft != nil,
+            isEnabled: canGenerateReview,
+            disabledReason: aiReviewDraftDisabledReason
+        )
+    }
+
+    var aiReviewDraftDisabledReason: String? {
+        if isWorking {
+            return "Finish the current operation before generating another draft."
+        }
+
+        guard selectedPullRequest != nil else {
+            return "Select a pull request first."
+        }
+
+        if let selectedRepositoryAccessMessage {
+            return selectedRepositoryAccessMessage
+        }
+
+        if let blockingItem = readinessChecklist.items.first(where: { $0.state != .ready }) {
+            return "\(blockingItem.title): \(blockingItem.detail)"
+        }
+
+        return nil
     }
 
     var readinessChecklist: ReadinessChecklist {
@@ -227,13 +333,15 @@ final class AppModel: ObservableObject {
     func loadStoredToken() {
         do {
             guard let credential = try credentialStore.loadCredential(), !credential.accessToken.isEmpty else {
+                activeGitHubCredential = nil
                 hasToken = false
                 grantedGitHubScopes = []
                 credentialKindDescription = "None"
                 tokenValidationStatus = "No token saved."
+                tokenValidationReadinessStatus = .unknown
                 return
             }
-            configureGitHubClient()
+            configureGitHubClient(credential: credential)
             tokenInput = ""
             applyStoredCredentialMetadata(fallbackCredential: credential)
             hasToken = true
@@ -251,12 +359,14 @@ final class AppModel: ObservableObject {
         }
 
         do {
-            try credentialStore.saveCredential(.personalAccessToken(trimmed))
-            configureGitHubClient()
+            let credential = GitHubCredential.personalAccessToken(trimmed)
+            try credentialStore.saveCredential(credential)
+            configureGitHubClient(credential: credential)
             tokenInput = ""
             grantedGitHubScopes = []
             credentialKindDescription = GitHubCredentialKind.personalAccessToken.displayName
             tokenValidationStatus = "Not validated."
+            tokenValidationReadinessStatus = .unknown
             hasToken = true
             statusMessage = "GitHub token saved."
             await refreshRepositories()
@@ -269,6 +379,7 @@ final class AppModel: ObservableObject {
         do {
             try credentialStore.deleteCredential()
             githubClient = nil
+            activeGitHubCredential = nil
             hasToken = false
             repositories = []
             pullRequests = []
@@ -280,6 +391,7 @@ final class AppModel: ObservableObject {
             grantedGitHubScopes = []
             credentialKindDescription = "None"
             tokenValidationStatus = "No token saved."
+            tokenValidationReadinessStatus = .unknown
             statusMessage = "GitHub token deleted."
         } catch {
             statusMessage = "Could not delete token: \(error)"
@@ -325,13 +437,14 @@ final class AppModel: ObservableObject {
     func validateCurrentToken() async {
         guard let githubClient else {
             tokenValidationStatus = "Load or save a GitHub token first."
+            tokenValidationReadinessStatus = .needsAction
             return
         }
 
         await runWorking("Validating GitHub token...") {
             let validation = try await githubClient.validateToken()
             grantedGitHubScopes = validation.scopes
-            if let credential = try credentialStore.loadCredential() {
+            if let credential = activeGitHubCredential {
                 credentialKindDescription = GitHubCredentialKind(credential: credential).displayName
                 if let credentialMetadataStore {
                     try credentialMetadataStore.saveCredential(
@@ -348,8 +461,10 @@ final class AppModel: ObservableObject {
             let scopes = scopeSummary(validation.scopes)
             if let message = selectedRepositoryAccessMessage {
                 tokenValidationStatus = "Valid for @\(validation.login). Scopes: \(scopes). \(message)"
+                tokenValidationReadinessStatus = .needsAction
             } else {
                 tokenValidationStatus = "Valid for @\(validation.login). Scopes: \(scopes)."
+                tokenValidationReadinessStatus = .ready
             }
         }
     }
@@ -367,6 +482,7 @@ final class AppModel: ObservableObject {
 
             if result.exitCode == 0 {
                 codexCLIStatus = "Found at \(result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines))."
+                codexCLIReadinessStatus = .ready
                 let loginResult = try await runner.run(
                     executable: "codex",
                     arguments: ["login", "status"],
@@ -377,15 +493,19 @@ final class AppModel: ObservableObject {
 
                 if loginResult.exitCode == 0 {
                     codexLoginStatus = loginResult.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+                    codexLoginReadinessStatus = .ready
                 } else {
                     let details = SensitiveTextRedactor.redact(loginResult.standardError)
                     codexLoginStatus = details.isEmpty
                         ? "Not logged in. Run `codex login` in Terminal."
                         : "Not logged in. \(details)"
+                    codexLoginReadinessStatus = .needsAction
                 }
             } else {
                 codexCLIStatus = "Not found on PATH."
                 codexLoginStatus = "Install or expose Codex CLI before checking login."
+                codexCLIReadinessStatus = .needsAction
+                codexLoginReadinessStatus = .needsAction
             }
         }
     }
@@ -454,6 +574,8 @@ final class AppModel: ObservableObject {
         reviewedHeadSha = nil
         selectedChangedFilePath = nil
         focusedInlineCommentTarget = nil
+        focusedDiffLineIndex = nil
+        diffReviewFileState = DiffReviewFileState()
         preflightHeadSha = pullRequest.headSha
 
         guard let selectedRepository, let githubClient else {
@@ -469,7 +591,8 @@ final class AppModel: ObservableObject {
     }
 
     func startGenerateReview() {
-        guard !isWorking else {
+        guard canGenerateReview else {
+            statusMessage = aiReviewDraftDisabledReason ?? "Finish setup before generating an AI review draft."
             return
         }
 
@@ -588,6 +711,16 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func selectTriageRow(_ row: PullRequestTriageRow) async {
+        let repository = repositories.first { $0.fullName == row.repositoryFullName } ?? row.repository
+        if selectedRepository?.id != repository.id {
+            await selectRepository(repository)
+        }
+
+        let pullRequest = pullRequests.first { $0.number == row.number } ?? row.pullRequest
+        await selectPullRequest(pullRequest)
+    }
+
     func generateReview() async {
         guard let selectedRepository, let selectedPullRequest else {
             statusMessage = "Select a pull request first."
@@ -638,6 +771,7 @@ final class AppModel: ObservableObject {
             draft = generated
             reviewBody = composeReviewBody(from: generated)
             persistCurrentDraftIfPossible()
+            generatedDraftPresentationRevision += 1
             if let warningMessage = coverageSummary.warningMessage {
                 statusMessage = "Generated review draft with \(generated.inlineComments.count) inline comments. \(warningMessage)"
             } else {
@@ -729,7 +863,42 @@ final class AppModel: ObservableObject {
             path: comment.path,
             position: comment.position
         )
+        focusedDiffLineIndex = nil
         statusMessage = "Focused \(comment.path) at diff position \(comment.position)."
+    }
+
+    func revealFocusedInlineComment() {
+        guard let target = focusedInlineCommentTarget else {
+            statusMessage = "No inline comment is focused."
+            return
+        }
+
+        selectedChangedFilePath = target.path
+        statusMessage = "Revealed \(target.path) at diff position \(target.position)."
+    }
+
+    func focusNextInlineComment() {
+        focusInlineComment(offset: 1)
+    }
+
+    func focusPreviousInlineComment() {
+        focusInlineComment(offset: -1)
+    }
+
+    func selectNextChangedFile() {
+        selectChangedFile(offset: 1)
+    }
+
+    func selectPreviousChangedFile() {
+        selectChangedFile(offset: -1)
+    }
+
+    func focusNextHunk() {
+        focusHunk(offset: 1)
+    }
+
+    func focusPreviousHunk() {
+        focusHunk(offset: -1)
     }
 
     func isFocusedInlineComment(_ comment: InlineCommentDraft) -> Bool {
@@ -750,6 +919,29 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func focusInlineComment(offset: Int) {
+        let comments = (draft?.inlineComments ?? [])
+            .sorted {
+                if $0.path == $1.path {
+                    return $0.position < $1.position
+                }
+
+                return $0.path < $1.path
+            }
+
+        guard !comments.isEmpty else {
+            statusMessage = "No inline comments to navigate."
+            return
+        }
+
+        let currentIndex = focusedInlineCommentTarget.flatMap { target in
+            comments.firstIndex { $0.id == target.commentID }
+        } ?? (offset > 0 ? -1 : comments.count)
+
+        let nextIndex = (currentIndex + offset + comments.count) % comments.count
+        focusInlineComment(comments[nextIndex])
+    }
+
     func dismissRecoverableError() {
         recoverableError = nil
     }
@@ -763,6 +955,7 @@ final class AppModel: ObservableObject {
         reviewBody = ""
         reviewedHeadSha = nil
         focusedInlineCommentTarget = nil
+        focusedDiffLineIndex = nil
         selectedEvent = .comment
         statusMessage = "Discarded review draft."
     }
@@ -814,6 +1007,27 @@ final class AppModel: ObservableObject {
         statusMessage = "Copied codex login. Run it in Terminal, then check Codex readiness."
     }
 
+    func openSelectedPullRequestInBrowser() {
+        guard let selectedPullRequest else {
+            statusMessage = "Select a pull request first."
+            return
+        }
+
+        NSWorkspace.shared.open(selectedPullRequest.htmlURL)
+    }
+
+    func toggleViewed(path: String) {
+        diffReviewFileState.toggleViewed(path: path)
+    }
+
+    func toggleCollapsed(path: String) {
+        diffReviewFileState.toggleCollapsed(path: path)
+    }
+
+    func markViewed(path: String, isViewed: Bool) {
+        diffReviewFileState.markViewed(path: path, isViewed: isViewed)
+    }
+
     private var selectedRepositoryAccessDecision: GitHubRepositoryAccessDecision {
         guard let selectedRepository else {
             return .allowed
@@ -859,16 +1073,24 @@ final class AppModel: ObservableObject {
         guard let storedCredential = try? storedCredentialLoader?.loadStoredCredential() else {
             grantedGitHubScopes = []
             credentialKindDescription = GitHubCredentialKind(credential: fallbackCredential).displayName
+            tokenValidationReadinessStatus = .unknown
             return
         }
 
         grantedGitHubScopes = storedCredential.scopes
         credentialKindDescription = storedCredential.kind.displayName
+        if let login = storedCredential.login {
+            tokenValidationStatus = "Valid for @\(login). Scopes: \(scopeSummary(storedCredential.scopes))."
+            tokenValidationReadinessStatus = .ready
+        } else {
+            tokenValidationReadinessStatus = .unknown
+        }
     }
 
-    private func configureGitHubClient() {
+    private func configureGitHubClient(credential: GitHubCredential) {
+        activeGitHubCredential = credential
         githubClient = GitHubClient(
-            accessTokenProvider: CredentialStoreAccessTokenProvider(credentialStore: credentialStore)
+            accessTokenProvider: StaticAccessTokenProvider(credential: credential)
         )
     }
 
@@ -897,11 +1119,12 @@ final class AppModel: ObservableObject {
 
             switch completion {
             case let .success(token):
-                configureGitHubClient()
+                configureGitHubClient(credential: .oauthUserToken(token.accessToken))
                 tokenInput = ""
                 grantedGitHubScopes = token.scopes
                 credentialKindDescription = GitHubCredentialKind.oauthUserToken.displayName
                 tokenValidationStatus = "OAuth token saved. Validate to confirm login. Scopes: \(scopeSummary(token.scopes))."
+                tokenValidationReadinessStatus = .unknown
                 hasToken = true
                 oauthStatus = "Authorized with GitHub."
                 statusMessage = "GitHub OAuth token saved."
@@ -1104,12 +1327,50 @@ final class AppModel: ObservableObject {
         changedFiles = files
         selectedChangedFilePath = changedFiles.first(where: { $0.path == previousSelectedFilePath })?.path ?? changedFiles.first?.path
         focusedInlineCommentTarget = nil
+        focusedDiffLineIndex = nil
         reviewedHeadSha = pullRequest.headSha
         preflightHeadSha = pullRequest.headSha
         selectedEvent = .comment
         self.draft = draft
         self.reviewBody = reviewBody
         persistCurrentDraftIfPossible()
+    }
+
+    private func filesForTriageRow(repository: Repository, pullRequest: PullRequest) -> [PullRequestFile] {
+        guard isCurrentSelection(repository: repository, pullRequest: pullRequest) else {
+            return []
+        }
+
+        return changedFiles
+    }
+
+    private func draftForTriageRow(repository: Repository, pullRequest: PullRequest) -> ReviewDraft? {
+        guard isCurrentSelection(repository: repository, pullRequest: pullRequest) else {
+            return backgroundReviewQueue.items.first {
+                $0.repository.fullName == repository.fullName && $0.pullRequest.number == pullRequest.number
+            }?.draft
+        }
+
+        return draft
+    }
+
+    private func queueStateForTriageRow(
+        repository: Repository,
+        pullRequest: PullRequest
+    ) -> BackgroundReviewQueueItemState? {
+        backgroundReviewQueue.items.first {
+            $0.repository.fullName == repository.fullName && $0.pullRequest.number == pullRequest.number
+        }?.state
+    }
+
+    private func reviewedHeadShaForTriageRow(repository: Repository, pullRequest: PullRequest) -> String? {
+        if isCurrentSelection(repository: repository, pullRequest: pullRequest) {
+            return reviewedHeadSha
+        }
+
+        return backgroundReviewQueue.items.first {
+            $0.repository.fullName == repository.fullName && $0.pullRequest.number == pullRequest.number
+        }?.reviewedHeadSha
     }
 
     private func markWatchedDraftStaleIfNeeded(repository: Repository, pullRequest: PullRequest) {
@@ -1149,6 +1410,7 @@ final class AppModel: ObservableObject {
         }
 
         focusedInlineCommentTarget = nil
+        focusedDiffLineIndex = nil
         reviewedHeadSha = storedDraft.key.headSha
         preflightHeadSha = pullRequest.headSha
         draft = storedDraft.draft
@@ -1187,39 +1449,36 @@ final class AppModel: ObservableObject {
             return .needsAction(message)
         }
 
-        if tokenValidationStatus.hasPrefix("Valid for @") {
+        switch tokenValidationReadinessStatus {
+        case .ready:
             return .ready(tokenValidationStatus)
-        }
-
-        if tokenValidationStatus == "Not validated." {
+        case .needsAction:
+            return .needsAction(tokenValidationStatus)
+        case .unknown:
             return .unknown("Validate the token to confirm login and scopes.")
         }
-
-        return .needsAction(tokenValidationStatus)
     }
 
     private var codexCLIReadiness: ReadinessProbeState {
-        if codexCLIStatus.hasPrefix("Found at ") {
+        switch codexCLIReadinessStatus {
+        case .ready:
             return .ready(codexCLIStatus)
-        }
-
-        if codexCLIStatus == "Not checked." {
+        case .needsAction:
+            return .needsAction(codexCLIStatus)
+        case .unknown:
             return .unknown("Check whether the Codex CLI is available on PATH.")
         }
-
-        return .needsAction(codexCLIStatus)
     }
 
     private var codexLoginReadiness: ReadinessProbeState {
-        if codexLoginStatus.hasPrefix("Logged in") {
+        switch codexLoginReadinessStatus {
+        case .ready:
             return .ready(codexLoginStatus)
-        }
-
-        if codexLoginStatus == "Not checked." {
+        case .needsAction:
+            return .needsAction(codexLoginStatus)
+        case .unknown:
             return .unknown("Check Codex login status. If needed, run `codex login` in Terminal.")
         }
-
-        return .needsAction(codexLoginStatus)
     }
 
     private func loadPullRequests(
@@ -1257,7 +1516,62 @@ final class AppModel: ObservableObject {
         reviewBody = ""
         reviewedHeadSha = nil
         focusedInlineCommentTarget = nil
+        focusedDiffLineIndex = nil
         preflightHeadSha = nil
+    }
+
+    private func selectChangedFile(offset: Int) {
+        guard !changedFiles.isEmpty else {
+            statusMessage = "No changed files to navigate."
+            return
+        }
+
+        let currentIndex = selectedChangedFilePath.flatMap { path in
+            changedFiles.firstIndex { $0.path == path }
+        } ?? (offset > 0 ? -1 : changedFiles.count)
+        let nextIndex = (currentIndex + offset + changedFiles.count) % changedFiles.count
+        selectedChangedFilePath = changedFiles[nextIndex].path
+        focusedInlineCommentTarget = nil
+        focusedDiffLineIndex = nil
+        statusMessage = "Selected \(changedFiles[nextIndex].path)."
+    }
+
+    private func focusHunk(offset: Int) {
+        guard let selectedChangedFile else {
+            statusMessage = "Select a changed file first."
+            return
+        }
+
+        let annotatedDiff: AnnotatedDiff
+        switch selectedChangedFile.reviewability {
+        case .includedPatch:
+            guard let patch = selectedChangedFile.patch,
+                  let diff = try? DiffPositionMapper.annotate(path: selectedChangedFile.path, patch: patch)
+            else {
+                statusMessage = "No hunk anchors are available for this file."
+                return
+            }
+            annotatedDiff = diff
+        case .omitted:
+            statusMessage = "No hunk anchors are available for omitted files."
+            return
+        }
+
+        let hunkLineIndexes = annotatedDiff.lines
+            .filter { $0.kind == .hunk }
+            .map(\.index)
+        guard !hunkLineIndexes.isEmpty else {
+            statusMessage = "No hunk anchors are available for this file."
+            return
+        }
+
+        let currentIndex = focusedDiffLineIndex.flatMap { lineIndex in
+            hunkLineIndexes.firstIndex(of: lineIndex)
+        } ?? (offset > 0 ? -1 : hunkLineIndexes.count)
+        let nextIndex = (currentIndex + offset + hunkLineIndexes.count) % hunkLineIndexes.count
+        focusedInlineCommentTarget = nil
+        focusedDiffLineIndex = hunkLineIndexes[nextIndex]
+        statusMessage = "Focused hunk \(nextIndex + 1) of \(hunkLineIndexes.count)."
     }
 
     private func refreshCurrentPullRequest() async {
