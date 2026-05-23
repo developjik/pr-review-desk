@@ -7,6 +7,7 @@ enum ReviewSubmissionPreviewTests {
         try testPreviewPreservesFullSubmittedBodyAndCommentText()
         try testPreviewIncludesSafetyStateAndBlocksUnsafeSubmission()
         try testPreviewBlocksWhenDiffPositionsCouldNotBeValidated()
+        try testPreviewReportsWhenSafetyWasLastChecked()
     }
 
     private static func testPreviewSummarizesBodyAndSelectedInlineComments() throws {
@@ -145,5 +146,25 @@ enum ReviewSubmissionPreviewTests {
 
         try expectEqual(preview.canSubmit, false)
         try expectEqual(preview.safetyMessage, "Refresh safety before submitting.")
+    }
+
+    private static func testPreviewReportsWhenSafetyWasLastChecked() throws {
+        let checkedAt = Date(timeIntervalSince1970: 1_777_777_777)
+        let preview = ReviewSubmissionPreview.make(
+            event: .approve,
+            body: "Ready.",
+            draft: ReviewDraft(summary: "Summary", risks: [], inlineComments: []),
+            safetyState: ReviewSubmissionSafetyState(
+                reviewedHeadSha: "same-sha",
+                currentHeadSha: "same-sha",
+                selectedInlineCommentCount: 0,
+                invalidSelectedInlineComments: []
+            ),
+            safetyCheckedAt: checkedAt
+        )
+
+        try expectEqual(preview.safetyCheckedAt, checkedAt)
+        try expectEqual(preview.safetyCheckedAtDisplay, "2026-05-03 03:09")
+        try expectEqual(preview.safetyCheckedMessage, "Last checked at 2026-05-03 03:09 UTC.")
     }
 }

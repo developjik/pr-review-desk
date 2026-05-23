@@ -19,12 +19,21 @@ public struct UISmokeManifest: Equatable, Hashable, Sendable {
         surfaces: UISmokeSurface.allCases,
         requiredLocalizationKeys: [
             "Finish setup",
+            "Guided setup path",
+            "Save PAT",
+            "Advanced GitHub OAuth",
+            "Technical readiness details",
             "Search repositories",
             "No matching repositories",
+            "Clear search",
             "Review Inspector",
             "Review Body",
             "Inline Comments",
             "Submit Review Preview",
+            "Refresh Safety",
+            "Refreshing Safety",
+            "Regenerate",
+            "Last checked at %@ UTC.",
             "Search actions",
             "Readiness"
         ]

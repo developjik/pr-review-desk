@@ -12,8 +12,17 @@ enum UISmokeManifestTests {
 
         try expectEqual(Set(manifest.surfaces), Set(UISmokeSurface.allCases))
         try expectTrue(manifest.requiredLocalizationKeys.contains("Finish setup"))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("Guided setup path"))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("Save PAT"))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("Advanced GitHub OAuth"))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("Technical readiness details"))
         try expectTrue(manifest.requiredLocalizationKeys.contains("Submit Review Preview"))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("Refresh Safety"))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("Refreshing Safety"))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("Last checked at %@ UTC."))
         try expectTrue(manifest.requiredLocalizationKeys.contains("No matching repositories"))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("Clear search"))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("Regenerate"))
         try expectEqual(Set(manifest.requiredLocalizationKeys).count, manifest.requiredLocalizationKeys.count)
     }
 

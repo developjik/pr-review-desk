@@ -12,6 +12,20 @@ struct PRReviewDeskApp: App {
     }
 
     init() {
+        if CommandLine.arguments.contains("--ui-smoke-localization") {
+            let language = CommandLine.arguments.last == "--ui-smoke-localization" ? "en" : CommandLine.arguments.last ?? "en"
+            print("localized_sample=submit-preview-title:\(Self.localizedString("Submit Review Preview", language: language))")
+            Foundation.exit(0)
+        }
+
+        if CommandLine.arguments.contains("--ui-smoke-command-interaction") {
+            let report = MainActor.assumeIsolated {
+                UISmokeRenderRunner.commandPanelInteractionReport()
+            }
+            print(report)
+            Foundation.exit(0)
+        }
+
         if CommandLine.arguments.contains("--ui-smoke") {
             let report = MainActor.assumeIsolated {
                 UISmokeRenderRunner.run()
@@ -19,6 +33,15 @@ struct PRReviewDeskApp: App {
             print(report)
             Foundation.exit(0)
         }
+    }
+
+    private static func localizedString(_ key: String, language: String) -> String {
+        guard let languageBundlePath = Bundle.module.path(forResource: language, ofType: "lproj"),
+              let languageBundle = Bundle(path: languageBundlePath) else {
+            return AppL10n.string(key)
+        }
+
+        return languageBundle.localizedString(forKey: key, value: nil, table: nil)
     }
 
     var body: some Scene {
@@ -64,7 +87,7 @@ struct PRReviewDeskApp: App {
                     model.requestSubmitReview()
                 }
                 .keyboardShortcut(.return, modifiers: [.command])
-                .disabled(!model.canSubmitReview)
+                .disabled(!model.canPreviewReviewSubmission)
 
                 Button(AppL10n.string("Open PR")) {
                     model.openSelectedPullRequestInBrowser()

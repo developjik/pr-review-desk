@@ -8,11 +8,33 @@ struct ReviewCommandPanelView: View {
     @Binding var isPresented: Bool
     let onDeferredSubmit: () -> Void
     @State private var query = ""
+    @State private var selectedActionID: String?
+
+    init(
+        model: AppModel,
+        selectedSection: Binding<ReviewInboxSection>,
+        isInspectorPresented: Binding<Bool>,
+        isPresented: Binding<Bool>,
+        initialQuery: String = "",
+        initialSelectedActionID: String? = nil,
+        onDeferredSubmit: @escaping () -> Void
+    ) {
+        self.model = model
+        self._selectedSection = selectedSection
+        self._isInspectorPresented = isInspectorPresented
+        self._isPresented = isPresented
+        self.onDeferredSubmit = onDeferredSubmit
+        self._query = State(initialValue: initialQuery)
+        self._selectedActionID = State(initialValue: initialSelectedActionID)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             TextField(AppL10n.string("Search actions"), text: $query)
                 .textFieldStyle(.roundedBorder)
+                .onSubmit {
+                    performSelectedAction()
+                }
 
             if filteredActions.isEmpty {
                 ContentUnavailableView(
@@ -22,8 +44,9 @@ struct ReviewCommandPanelView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(filteredActions) { action in
+                List(filteredActions, selection: $selectedActionID) { action in
                     Button {
+                        selectedActionID = action.id
                         perform(action)
                     } label: {
                         HStack(alignment: .top, spacing: 10) {
@@ -50,40 +73,57 @@ struct ReviewCommandPanelView: View {
                                     )
                             }
                         }
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     .disabled(!action.isEnabled)
+                    .tag(action.id)
+                    .listRowBackground(
+                        selectedActionID == action.id
+                            ? AppTheme.background(.focus)
+                            : Color.clear
+                    )
                 }
                 .listStyle(.inset)
             }
         }
         .padding()
         .frame(width: 520, height: 520)
-    }
-
-    private var filteredActions: [ReviewCommandAction] {
-        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedQuery.isEmpty else {
-            return actions
+        .onAppear {
+            syncSelectedAction()
         }
-
-        return actions.filter {
-            $0.title.lowercased().contains(normalizedQuery)
-                || $0.subtitle.lowercased().contains(normalizedQuery)
+        .onChange(of: query) { _, _ in
+            syncSelectedAction()
+        }
+        .onChange(of: actions.map { "\($0.id):\($0.isEnabled)" }) { _, _ in
+            syncSelectedAction()
         }
     }
 
-    private var actions: [ReviewCommandAction] {
+    private var filteredActions: [ReviewCommandPanelAction] {
+        ReviewCommandPanelPresentation.filteredActions(actions, query: query)
+    }
+
+    private func syncSelectedAction() {
+        selectedActionID = ReviewCommandPanelPresentation.selectedActionID(
+            currentSelectionID: selectedActionID,
+            filteredActions: filteredActions
+        )
+    }
+
+    private var actions: [ReviewCommandPanelAction] {
         let availability = model.commandAvailability
         return [
-            ReviewCommandAction(title: AppL10n.string("Open PR"), subtitle: availability.canOpenPullRequest ? AppL10n.string("Open the selected pull request on GitHub.") : AppL10n.string("Select a pull request first."), systemImage: "arrow.up.right.square", shortcut: "⌘O", isEnabled: availability.canOpenPullRequest, kind: .openPullRequest),
-            ReviewCommandAction(title: AppL10n.string(model.aiReviewDraftActionPresentation.title), subtitle: AppL10n.string(model.aiReviewDraftActionPresentation.subtitle), systemImage: "sparkles", shortcut: "⇧⌘R", isEnabled: model.canGenerateReview, kind: .generateReview),
-            ReviewCommandAction(title: AppL10n.string("Regenerate Selected File"), subtitle: AppL10n.string("Not available yet; regenerate the full review."), systemImage: "doc.badge.gearshape", shortcut: nil, isEnabled: availability.canRegenerateSelectedFile, kind: .regenerateSelectedFile),
-            ReviewCommandAction(title: AppL10n.string("Submit Review"), subtitle: model.canSubmitReview ? AppL10n.string("Preview the review body and selected inline comments before posting.") : AppL10n.string("Generate a valid AI review draft before submitting."), systemImage: "paperplane", shortcut: "⌘↩", isEnabled: model.canSubmitReview, kind: .submitReview),
-            ReviewCommandAction(title: AppL10n.string("Reveal Inline Comment"), subtitle: availability.canRevealInlineComment ? AppL10n.string("Scroll the diff to the focused comment.") : AppL10n.string("Focus an inline comment first."), systemImage: "scope", shortcut: nil, isEnabled: availability.canRevealInlineComment, kind: .revealInlineComment),
-            ReviewCommandAction(title: AppL10n.string("Copy Codex Login Command"), subtitle: AppL10n.string("Copy the terminal command for Codex login."), systemImage: "doc.on.doc", shortcut: nil, isEnabled: availability.canCopyCodexLoginCommand, kind: .copyCodexLoginCommand),
-            ReviewCommandAction(title: AppL10n.string("Toggle Inspector"), subtitle: isInspectorPresented ? AppL10n.string("Hide draft and submit controls.") : AppL10n.string("Show draft and submit controls."), systemImage: "sidebar.trailing", shortcut: "⌥⌘I", isEnabled: availability.canToggleInspector, kind: .toggleInspector)
+            ReviewCommandPanelAction(title: AppL10n.string("Open PR"), subtitle: availability.canOpenPullRequest ? AppL10n.string("Open the selected pull request on GitHub.") : AppL10n.string("Select a pull request first."), systemImage: "arrow.up.right.square", shortcut: "⌘O", isEnabled: availability.canOpenPullRequest, kind: .openPullRequest),
+            ReviewCommandPanelAction(title: AppL10n.string(model.aiReviewDraftActionPresentation.title), subtitle: AppL10n.string(model.aiReviewDraftActionPresentation.subtitle), systemImage: "sparkles", shortcut: "⇧⌘R", isEnabled: model.canGenerateReview, kind: .generateReview),
+            ReviewCommandPanelAction(title: AppL10n.string("Regenerate Selected File"), subtitle: AppL10n.string("Not available yet; regenerate the full review."), systemImage: "doc.badge.gearshape", shortcut: nil, isEnabled: availability.canRegenerateSelectedFile, kind: .regenerateSelectedFile),
+            ReviewCommandPanelAction(title: AppL10n.string("Submit Review"), subtitle: model.canPreviewReviewSubmission ? AppL10n.string("Preview the review body and selected inline comments before posting.") : AppL10n.string("Generate a valid AI review draft before submitting."), systemImage: "paperplane", shortcut: "⌘↩", isEnabled: model.canPreviewReviewSubmission, kind: .submitReview),
+            ReviewCommandPanelAction(title: AppL10n.string("Reveal Inline Comment"), subtitle: availability.canRevealInlineComment ? AppL10n.string("Scroll the diff to the focused comment.") : AppL10n.string("Focus an inline comment first."), systemImage: "scope", shortcut: nil, isEnabled: availability.canRevealInlineComment, kind: .revealInlineComment),
+            ReviewCommandPanelAction(title: AppL10n.string("Copy Codex Login Command"), subtitle: AppL10n.string("Copy the terminal command for Codex login."), systemImage: "doc.on.doc", shortcut: nil, isEnabled: availability.canCopyCodexLoginCommand, kind: .copyCodexLoginCommand),
+            ReviewCommandPanelAction(title: AppL10n.string("Toggle Inspector"), subtitle: isInspectorPresented ? AppL10n.string("Hide draft and submit controls.") : AppL10n.string("Show draft and submit controls."), systemImage: "sidebar.trailing", shortcut: "⌥⌘I", isEnabled: availability.canToggleInspector, kind: .toggleInspector)
         ] + ReviewInboxSection.allCases.map { section in
-            ReviewCommandAction(
+            ReviewCommandPanelAction(
                 title: AppL10n.string("Filter %@", AppL10n.string(section.displayName)),
                 subtitle: AppL10n.string("Show %@ inbox items.", AppL10n.string(section.displayName)),
                 systemImage: section.systemImage,
@@ -94,7 +134,11 @@ struct ReviewCommandPanelView: View {
         }
     }
 
-    private func perform(_ action: ReviewCommandAction) {
+    private func perform(_ action: ReviewCommandPanelAction) {
+        guard action.isEnabled else {
+            return
+        }
+
         switch action.kind {
         case .openPullRequest:
             model.openSelectedPullRequestInBrowser()
@@ -116,25 +160,15 @@ struct ReviewCommandPanelView: View {
         }
         isPresented = false
     }
-}
 
-private struct ReviewCommandAction: Identifiable {
-    let id = UUID()
-    let title: String
-    let subtitle: String
-    let systemImage: String
-    let shortcut: String?
-    let isEnabled: Bool
-    let kind: ReviewCommandActionKind
-}
+    private func performSelectedAction() {
+        guard let action = ReviewCommandPanelPresentation.actionToPerform(
+            selectedActionID: selectedActionID,
+            filteredActions: filteredActions
+        ) else {
+            return
+        }
 
-private enum ReviewCommandActionKind {
-    case openPullRequest
-    case generateReview
-    case regenerateSelectedFile
-    case submitReview
-    case revealInlineComment
-    case copyCodexLoginCommand
-    case toggleInspector
-    case selectSection(ReviewInboxSection)
+        perform(action)
+    }
 }
