@@ -77,6 +77,7 @@ struct MainView: View {
                     Label(AppL10n.string("Submit Review"), systemImage: "paperplane")
                 }
                 .disabled(!model.canSubmitReview)
+                .keyboardShortcut(.return, modifiers: [.command])
 
                 if model.canCancelCurrentOperation {
                     Button {
@@ -91,6 +92,7 @@ struct MainView: View {
                 } label: {
                     Label(AppL10n.string("Toggle Inspector"), systemImage: "sidebar.trailing")
                 }
+                .keyboardShortcut("i", modifiers: [.command, .option])
 
                 SettingsLink {
                     Label(AppL10n.string("Settings"), systemImage: "gear")
@@ -115,7 +117,14 @@ struct MainView: View {
                 model: model,
                 selectedSection: selectedInboxSectionBinding,
                 isInspectorPresented: $isInspectorPresented,
-                isPresented: $isCommandPanelPresented
+                isPresented: $isCommandPanelPresented,
+                onDeferredSubmit: {
+                    isCommandPanelPresented = false
+                    Task { @MainActor in
+                        await Task.yield()
+                        model.requestSubmitReview()
+                    }
+                }
             )
         }
         .sheet(item: $model.pendingPrivateRepositoryConsent) { request in
@@ -129,23 +138,20 @@ struct MainView: View {
                 }
             )
         }
-        .confirmationDialog(
-            AppL10n.string("Submit %@ review?", model.selectedEvent.localizedDisplayName),
-            isPresented: $model.isSubmitConfirmationPresented,
-            titleVisibility: .visible
-        ) {
-            Button(AppL10n.string("Submit %@ Review", model.selectedEvent.localizedDisplayName)) {
-                Task {
-                    await model.submitReview()
+        .sheet(isPresented: $model.isSubmitConfirmationPresented) {
+            ReviewSubmissionPreviewSheet(
+                preview: model.submissionPreview,
+                eventDisplayName: model.selectedEvent.localizedDisplayName,
+                onCancel: {
+                    model.isSubmitConfirmationPresented = false
+                },
+                onSubmit: {
+                    model.isSubmitConfirmationPresented = false
+                    Task {
+                        await model.submitReview()
+                    }
                 }
-            }
-            Button(AppL10n.string("Cancel"), role: .cancel) {}
-        } message: {
-            Text(AppL10n.string(
-                "This will post a %@ review with %d selected inline comments to GitHub.",
-                model.selectedEvent.localizedDisplayName,
-                model.selectedInlineCommentCount
-            ))
+            )
         }
         .onChange(of: model.generatedDraftPresentationRevision) { previousRevision, currentRevision in
             if ReviewWorkspaceLayoutPolicy.shouldOpenInspectorAfterDraftGeneration(

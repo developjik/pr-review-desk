@@ -6,6 +6,7 @@ struct ReviewCommandPanelView: View {
     @Binding var selectedSection: ReviewInboxSection
     @Binding var isInspectorPresented: Bool
     @Binding var isPresented: Bool
+    let onDeferredSubmit: () -> Void
     @State private var query = ""
 
     var body: some View {
@@ -13,32 +14,47 @@ struct ReviewCommandPanelView: View {
             TextField(AppL10n.string("Search actions"), text: $query)
                 .textFieldStyle(.roundedBorder)
 
-            List(filteredActions) { action in
-                Button {
-                    perform(action)
-                } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Image(systemName: action.systemImage)
-                            .frame(width: 18)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(action.title)
-                                .fontWeight(.medium)
-                            Text(action.subtitle)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        Spacer()
-                        if let shortcut = action.shortcut {
-                            Text(shortcut)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+            if filteredActions.isEmpty {
+                ContentUnavailableView(
+                    AppL10n.string("No matching actions"),
+                    systemImage: "command",
+                    description: Text(AppL10n.string("Clear the action search to show every command."))
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(filteredActions) { action in
+                    Button {
+                        perform(action)
+                    } label: {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: action.systemImage)
+                                .frame(width: 18)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(action.title)
+                                    .fontWeight(.medium)
+                                    .lineLimit(1)
+                                Text(action.subtitle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(ReviewWorkspaceLayoutPolicy.commandSubtitleLineLimit)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                            if let shortcut = action.shortcut {
+                                Text(shortcut)
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.secondary)
+                                    .frame(
+                                        minWidth: CGFloat(ReviewWorkspaceLayoutPolicy.commandShortcutMinimumWidth),
+                                        alignment: .trailing
+                                    )
+                            }
                         }
                     }
+                    .disabled(!action.isEnabled)
                 }
-                .disabled(!action.isEnabled)
+                .listStyle(.inset)
             }
-            .listStyle(.inset)
         }
         .padding()
         .frame(width: 520, height: 520)
@@ -52,19 +68,20 @@ struct ReviewCommandPanelView: View {
 
         return actions.filter {
             $0.title.lowercased().contains(normalizedQuery)
+                || $0.subtitle.lowercased().contains(normalizedQuery)
         }
     }
 
     private var actions: [ReviewCommandAction] {
         let availability = model.commandAvailability
         return [
-            ReviewCommandAction(title: AppL10n.string("Open PR"), subtitle: availability.canOpenPullRequest ? AppL10n.string("Open the selected pull request on GitHub.") : AppL10n.string("Select a pull request first."), systemImage: "arrow.up.right.square", shortcut: "O", isEnabled: availability.canOpenPullRequest, kind: .openPullRequest),
+            ReviewCommandAction(title: AppL10n.string("Open PR"), subtitle: availability.canOpenPullRequest ? AppL10n.string("Open the selected pull request on GitHub.") : AppL10n.string("Select a pull request first."), systemImage: "arrow.up.right.square", shortcut: "⌘O", isEnabled: availability.canOpenPullRequest, kind: .openPullRequest),
             ReviewCommandAction(title: AppL10n.string(model.aiReviewDraftActionPresentation.title), subtitle: AppL10n.string(model.aiReviewDraftActionPresentation.subtitle), systemImage: "sparkles", shortcut: "⇧⌘R", isEnabled: model.canGenerateReview, kind: .generateReview),
             ReviewCommandAction(title: AppL10n.string("Regenerate Selected File"), subtitle: AppL10n.string("Not available yet; regenerate the full review."), systemImage: "doc.badge.gearshape", shortcut: nil, isEnabled: availability.canRegenerateSelectedFile, kind: .regenerateSelectedFile),
-            ReviewCommandAction(title: AppL10n.string("Submit Review"), subtitle: model.canSubmitReview ? AppL10n.string("Submit the selected comments and review body.") : AppL10n.string("Generate a valid AI review draft before submitting."), systemImage: "paperplane", shortcut: nil, isEnabled: model.canSubmitReview, kind: .submitReview),
+            ReviewCommandAction(title: AppL10n.string("Submit Review"), subtitle: model.canSubmitReview ? AppL10n.string("Preview the review body and selected inline comments before posting.") : AppL10n.string("Generate a valid AI review draft before submitting."), systemImage: "paperplane", shortcut: "⌘↩", isEnabled: model.canSubmitReview, kind: .submitReview),
             ReviewCommandAction(title: AppL10n.string("Reveal Inline Comment"), subtitle: availability.canRevealInlineComment ? AppL10n.string("Scroll the diff to the focused comment.") : AppL10n.string("Focus an inline comment first."), systemImage: "scope", shortcut: nil, isEnabled: availability.canRevealInlineComment, kind: .revealInlineComment),
             ReviewCommandAction(title: AppL10n.string("Copy Codex Login Command"), subtitle: AppL10n.string("Copy the terminal command for Codex login."), systemImage: "doc.on.doc", shortcut: nil, isEnabled: availability.canCopyCodexLoginCommand, kind: .copyCodexLoginCommand),
-            ReviewCommandAction(title: AppL10n.string("Toggle Inspector"), subtitle: isInspectorPresented ? AppL10n.string("Hide draft and submit controls.") : AppL10n.string("Show draft and submit controls."), systemImage: "sidebar.trailing", shortcut: nil, isEnabled: availability.canToggleInspector, kind: .toggleInspector)
+            ReviewCommandAction(title: AppL10n.string("Toggle Inspector"), subtitle: isInspectorPresented ? AppL10n.string("Hide draft and submit controls.") : AppL10n.string("Show draft and submit controls."), systemImage: "sidebar.trailing", shortcut: "⌥⌘I", isEnabled: availability.canToggleInspector, kind: .toggleInspector)
         ] + ReviewInboxSection.allCases.map { section in
             ReviewCommandAction(
                 title: AppL10n.string("Filter %@", AppL10n.string(section.displayName)),
@@ -86,7 +103,8 @@ struct ReviewCommandPanelView: View {
         case .regenerateSelectedFile:
             model.statusMessage = "Selected-file regeneration is not available yet; regenerate the full review."
         case .submitReview:
-            model.requestSubmitReview()
+            onDeferredSubmit()
+            return
         case .revealInlineComment:
             model.revealFocusedInlineComment()
         case .copyCodexLoginCommand:

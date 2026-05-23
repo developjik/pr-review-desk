@@ -12,6 +12,7 @@ enum ReviewWorkspaceLayoutPolicyTests {
         try testReviewWorkspaceUsesCompactReadableColumnWidths()
         try testInspectorHasReadablePreferredColumnWidths()
         try testInspectorContentClearsWindowToolbar()
+        try testDenseWorkflowTextUsesMultiLineFallbacks()
     }
 
     private static func testInspectorIsHiddenByDefaultToProtectDiffWidth() throws {
@@ -60,5 +61,13 @@ enum ReviewWorkspaceLayoutPolicyTests {
 
     private static func testInspectorContentClearsWindowToolbar() throws {
         try expectEqual(ReviewWorkspaceLayoutPolicy.inspectorTopContentInset, 88)
+    }
+
+    private static func testDenseWorkflowTextUsesMultiLineFallbacks() throws {
+        try expectEqual(ReviewWorkspaceLayoutPolicy.commandSubtitleLineLimit, 2)
+        try expectEqual(ReviewWorkspaceLayoutPolicy.pullRequestTitleLineLimit, 2)
+        try expectEqual(ReviewWorkspaceLayoutPolicy.pullRequestMetadataLineLimit, 2)
+        try expectEqual(ReviewWorkspaceLayoutPolicy.repositoryOwnerLineLimit, 2)
+        try expectEqual(ReviewWorkspaceLayoutPolicy.commandShortcutMinimumWidth, 44)
     }
 }

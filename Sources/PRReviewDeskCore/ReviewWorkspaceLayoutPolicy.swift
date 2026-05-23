@@ -22,6 +22,11 @@ public enum ReviewWorkspaceLayoutPolicy {
     public static let inspectorIdealColumnWidth = 380.0
     public static let inspectorMaximumColumnWidth = 480.0
     public static let inspectorTopContentInset = 88.0
+    public static let commandSubtitleLineLimit = 2
+    public static let pullRequestTitleLineLimit = 2
+    public static let pullRequestMetadataLineLimit = 2
+    public static let repositoryOwnerLineLimit = 2
+    public static let commandShortcutMinimumWidth = 44.0
 
     public static func fileNavigationStyle(fileCount: Int) -> ReviewFileNavigationStyle {
         fileCount <= 1 ? .inline : .sidebar

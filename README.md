@@ -15,6 +15,7 @@ The script runs:
 ```bash
 scripts/probe-swift-testing.sh
 swift build --product PRReviewDeskApp
+scripts/ui-smoke.sh
 swift run PRReviewDeskCoreTests
 ```
 
@@ -40,6 +41,8 @@ The detail area uses a focused diff workspace. Changed files stay next to the di
 Diff review supports old/new line gutters, GitHub diff positions, inline comment anchors, viewed/unviewed state, file collapse/expand, unified/split display, whitespace markers, and keyboard navigation for files, hunks, and inline comments.
 
 The executable `PRReviewDeskCoreTests` target is the current test harness. It does not require live GitHub credentials or Codex credentials. `scripts/probe-swift-testing.sh` reports whether the selected developer directory can import `XCTest` or `Testing`; it is informational unless run with `--require`.
+
+`scripts/ui-smoke.sh` runs the app executable in `--ui-smoke` mode and checks the deterministic UI smoke manifest for the first-run setup, repository sidebar, review inbox, diff workspace, inspector, submit preview, command panel, and Settings readiness surfaces. It is a lightweight manifest gate, not a rendered UI test: it does not load stored credentials, touch GitHub, call Codex, or exercise AppKit accessibility. Rendered macOS UI coverage is tracked separately in issue #69.
 
 The package tools version is kept at Swift 6.1 so the GitHub-hosted macOS runner can execute the same gate without installing an additional toolchain. Newer local Swift toolchains can still build the package.
 
