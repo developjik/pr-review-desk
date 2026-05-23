@@ -5,6 +5,7 @@ enum ReviewInboxTests {
     static func run() throws {
         try testInboxSectionsClassifyQueuedReviews()
         try testTriageRowMetadataSummarizesFilesDraftAndSeverity()
+        try testRecentsKeepsActionablePullRequestsVisible()
         try testDiffReviewFileStateTracksViewedAndCollapsedFiles()
         try testCommandAvailabilityIncludesContextualActions()
     }
@@ -62,6 +63,40 @@ enum ReviewInboxTests {
         try expectTrue(row.repositoryIsPrivate)
         try expectEqual(row.topSeverity, .high)
         try expectEqual(row.section, .draftReady)
+    }
+
+    private static func testRecentsKeepsActionablePullRequestsVisible() throws {
+        let repository = sampleRepository(isPrivate: false)
+        let notGenerated = PullRequestTriageRow(
+            repository: repository,
+            pullRequest: samplePullRequest(number: 1, headSha: "fresh-sha")
+        )
+        let draftReady = PullRequestTriageRow(
+            repository: repository,
+            pullRequest: samplePullRequest(number: 2, headSha: "ready-sha"),
+            draft: sampleDraft(),
+            reviewedHeadSha: "ready-sha"
+        )
+        let stale = PullRequestTriageRow(
+            repository: repository,
+            pullRequest: samplePullRequest(number: 3, headSha: "new-sha"),
+            draft: sampleDraft(),
+            reviewedHeadSha: "old-sha"
+        )
+        let submitted = PullRequestTriageRow(
+            repository: repository,
+            pullRequest: samplePullRequest(number: 4, headSha: "submitted-sha"),
+            draft: sampleDraft(),
+            queueState: .submitted,
+            reviewedHeadSha: "submitted-sha"
+        )
+
+        try expectTrue(notGenerated.isVisible(in: .recents))
+        try expectTrue(draftReady.isVisible(in: .recents))
+        try expectTrue(stale.isVisible(in: .recents))
+        try expectEqual(submitted.isVisible(in: .recents), false)
+        try expectTrue(draftReady.isVisible(in: .draftReady))
+        try expectTrue(stale.isVisible(in: .stale))
     }
 
     private static func testDiffReviewFileStateTracksViewedAndCollapsedFiles() throws {

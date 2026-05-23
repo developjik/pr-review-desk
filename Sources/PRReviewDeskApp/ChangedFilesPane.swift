@@ -54,16 +54,20 @@ private struct ChangedFileRow: View {
                         .foregroundStyle(AppTheme.foreground(.success))
                 }
                 if case let .omitted(reason) = file.reviewability {
-                    Label(reason.displayName, systemImage: "exclamationmark.triangle")
+                    Label(AppL10n.string(reason.displayName), systemImage: "exclamationmark.triangle")
                         .labelStyle(.iconOnly)
                         .foregroundStyle(AppTheme.foreground(.omitted))
-                        .help(reason.displayName)
-                        .accessibilityLabel(reason.displayName)
+                        .help(AppL10n.string(reason.displayName))
+                        .accessibilityLabel(AppL10n.string(reason.displayName))
                 }
                 if inlineCommentCount.total > 0 {
                     Label(inlineCommentCount.displayText, systemImage: "text.bubble")
                         .foregroundStyle(AppTheme.foreground(inlineCommentTone))
-                        .help("\(inlineCommentCount.selected) selected of \(inlineCommentCount.total) inline comments")
+                        .help(AppL10n.string(
+                            "Selected %d of %d inline comments",
+                            inlineCommentCount.selected,
+                            inlineCommentCount.total
+                        ))
                 }
             }
             .font(.caption)
@@ -89,6 +93,12 @@ private struct ChangedFileRow: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(file.path), \(file.status), \(file.additions) additions, \(file.deletions) deletions")
+        .accessibilityLabel(AppL10n.string(
+            "%@, %@, %d additions, %d deletions",
+            file.path,
+            file.status,
+            file.additions,
+            file.deletions
+        ))
     }
 }

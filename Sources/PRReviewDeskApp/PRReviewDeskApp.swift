@@ -42,6 +42,14 @@ struct PRReviewDeskApp: App {
             Foundation.exit(0)
         }
 
+        if CommandLine.arguments.contains("--ui-smoke-layout-contract") {
+            let report = MainActor.assumeIsolated {
+                UISmokeRenderRunner.layoutContractReport()
+            }
+            print(report)
+            Foundation.exit(0)
+        }
+
         if CommandLine.arguments.contains("--ui-smoke-accessibility-contract") {
             let report = MainActor.assumeIsolated {
                 UISmokeRenderRunner.accessibilityReport()

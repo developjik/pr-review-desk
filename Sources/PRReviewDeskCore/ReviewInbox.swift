@@ -143,6 +143,17 @@ public struct PullRequestTriageRow: Equatable, Hashable, Identifiable, Sendable 
         }
     }
 
+    public func isVisible(in section: ReviewInboxSection) -> Bool {
+        switch section {
+        case .needsSetup:
+            return false
+        case .recents:
+            return draftStatus != .submitted
+        case .draftReady, .stale, .running, .submitted:
+            return self.section == section
+        }
+    }
+
     public init(
         repository: Repository,
         pullRequest: PullRequest,

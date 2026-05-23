@@ -267,6 +267,37 @@ enum UISmokeRenderRunner {
         }
     }
 
+    static func layoutContractReport() -> String {
+        do {
+            let reviewInboxBitmap = try renderedBitmap(
+                for: ReviewInboxView(model: populatedModel(), selectedSection: .recents),
+                size: .desktop
+            )
+            let reviewInboxTopY = firstNonBackgroundRow(in: reviewInboxBitmap)
+            let reviewInboxMinimumY = Int(ReviewWorkspaceLayoutPolicy.primaryColumnTopContentInset)
+            guard reviewInboxTopY >= reviewInboxMinimumY else {
+                return "layout_failed=review-inbox:top-content-y=\(reviewInboxTopY):minimum=\(reviewInboxMinimumY)"
+            }
+
+            let sidebarBitmap = try renderedBitmap(
+                for: ReviewInboxSidebarView(model: populatedModel(), selectedSection: .constant(.recents)),
+                size: .desktop
+            )
+            let sidebarTopY = firstNonBackgroundRow(in: sidebarBitmap)
+            let sidebarMinimumY = Int(ReviewWorkspaceLayoutPolicy.sidebarTopContentInset)
+            guard sidebarTopY >= sidebarMinimumY else {
+                return "layout_failed=repository-sidebar:top-content-y=\(sidebarTopY):minimum=\(sidebarMinimumY)"
+            }
+
+            return [
+                "layout=review-inbox:top-content-y=\(reviewInboxTopY):minimum=\(reviewInboxMinimumY)",
+                "layout=repository-sidebar:top-content-y=\(sidebarTopY):minimum=\(sidebarMinimumY)"
+            ].joined(separator: "\n")
+        } catch {
+            return "layout_failed=review-inbox:error=\(error)"
+        }
+    }
+
     static func accessibilityReport() -> String {
         let firstRunNoTokenControls = renderedAccessibilityControls(
             for: ReviewInboxView(model: firstRunModel(), selectedSection: .needsSetup)
@@ -359,6 +390,35 @@ enum UISmokeRenderRunner {
         }
 
         return (focusPixels, maxRowPixels)
+    }
+
+    private static func firstNonBackgroundRow(in bitmap: NSBitmapImageRep) -> Int {
+        guard let background = bitmap.colorAt(x: 0, y: 0)?.usingColorSpace(.deviceRGB) else {
+            return 0
+        }
+
+        for y in 0..<bitmap.pixelsHigh {
+            var nonBackgroundPixels = 0
+            stride(from: 0, to: bitmap.pixelsWide, by: 4).forEach { x in
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                      color.alphaComponent > 0.85 else {
+                    return
+                }
+
+                let distance = abs(color.redComponent - background.redComponent)
+                    + abs(color.greenComponent - background.greenComponent)
+                    + abs(color.blueComponent - background.blueComponent)
+                if distance > 0.12 {
+                    nonBackgroundPixels += 1
+                }
+            }
+
+            if nonBackgroundPixels >= 6 {
+                return y
+            }
+        }
+
+        return bitmap.pixelsHigh
     }
 
     private static func renderedAccessibilityControls<Content: View>(
@@ -456,8 +516,8 @@ enum UISmokeRenderRunner {
     private static func firstRunLoadedTokenModel() -> AppModel {
         let model = firstRunModel()
         model.hasToken = true
-        model.credentialKindDescription = GitHubCredentialKind.personalAccessToken.displayName
-        model.tokenValidationStatus = "GitHub credential is loaded. Validate scopes before generating reviews."
+        model.credentialKindDescription = AppL10n.string(GitHubCredentialKind.personalAccessToken.displayName)
+        model.tokenValidationStatus = AppL10n.string("GitHub credential is loaded. Validate scopes before generating reviews.")
         return model
     }
 
@@ -479,7 +539,7 @@ enum UISmokeRenderRunner {
         let pullRequest = samplePullRequest()
 
         model.hasToken = true
-        model.credentialKindDescription = GitHubCredentialKind.personalAccessToken.displayName
+        model.credentialKindDescription = AppL10n.string(GitHubCredentialKind.personalAccessToken.displayName)
         model.repositories = [repository]
         model.selectedRepository = repository
         model.pullRequests = [pullRequest]
@@ -499,7 +559,7 @@ enum UISmokeRenderRunner {
         let pullRequest = samplePullRequest()
 
         model.hasToken = true
-        model.credentialKindDescription = GitHubCredentialKind.personalAccessToken.displayName
+        model.credentialKindDescription = AppL10n.string(GitHubCredentialKind.personalAccessToken.displayName)
         model.repositories = [repository]
         model.selectedRepository = repository
         model.pullRequests = [pullRequest]

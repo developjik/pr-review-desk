@@ -63,13 +63,18 @@ private struct InlineCommentEditorRow: View {
                     HStack {
                         Text(comment.path)
                             .fontWeight(.medium)
-                        Text("pos \(comment.position)")
+                        Text(AppL10n.string("Position %d", comment.position))
                             .foregroundStyle(.secondary)
                         Text(comment.severity.localizedDisplayName)
                             .foregroundStyle(AppTheme.foreground(ReviewViewSupport.severityTone(comment.severity)))
                     }
                 }
-                .accessibilityLabel("\(comment.path) position \(comment.position) \(comment.severity.localizedDisplayName)")
+                .accessibilityLabel(AppL10n.string(
+                    "%@ position %d %@",
+                    comment.path,
+                    comment.position,
+                    comment.severity.localizedDisplayName
+                ))
 
                 Spacer()
 
@@ -96,7 +101,11 @@ private struct InlineCommentEditorRow: View {
                 RoundedRectangle(cornerRadius: 6)
                     .stroke(.quaternary)
             }
-            .accessibilityLabel("Inline comment for \(comment.path) position \(comment.position)")
+            .accessibilityLabel(AppL10n.string(
+                "Inline comment for %@ position %d",
+                comment.path,
+                comment.position
+            ))
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
