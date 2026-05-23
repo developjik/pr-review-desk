@@ -11,6 +11,7 @@ enum TestHarness {
             try ReviewCommandAvailabilityTests.run()
             try ReviewSubmissionPreviewTests.run()
             try RepositorySearchPresentationTests.run()
+            try ReviewInboxFilterPresentationTests.run()
             try UISmokeManifestTests.run()
             try ReadinessChecklistTests.run()
             try PrivateRepositoryConsentTests.run()

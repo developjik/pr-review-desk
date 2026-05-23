@@ -5,6 +5,8 @@ enum ReviewSubmissionPreviewTests {
     static func run() throws {
         try testPreviewSummarizesBodyAndSelectedInlineComments()
         try testPreviewPreservesFullSubmittedBodyAndCommentText()
+        try testPreviewIncludesSafetyStateAndBlocksUnsafeSubmission()
+        try testPreviewBlocksWhenDiffPositionsCouldNotBeValidated()
     }
 
     private static func testPreviewSummarizesBodyAndSelectedInlineComments() throws {
@@ -84,5 +86,64 @@ enum ReviewSubmissionPreviewTests {
 
         try expectEqual(preview.bodyPreview, fullBody)
         try expectEqual(preview.selectedInlineComments[0].bodyPreview, longComment)
+    }
+
+    private static func testPreviewIncludesSafetyStateAndBlocksUnsafeSubmission() throws {
+        let draft = ReviewDraft(
+            summary: "Summary",
+            risks: [],
+            inlineComments: [
+                InlineCommentDraft(
+                    id: "bad-comment",
+                    path: "Sources/App.swift",
+                    position: 99,
+                    body: "Invalid target",
+                    severity: .high,
+                    isSelected: true
+                )
+            ]
+        )
+        let safetyState = ReviewSubmissionSafetyState(
+            reviewedHeadSha: "reviewed-sha",
+            currentHeadSha: "current-sha",
+            selectedInlineCommentCount: 1,
+            invalidSelectedInlineComments: [
+                InvalidInlineComment(path: "Sources/App.swift", position: 99)
+            ]
+        )
+
+        let preview = ReviewSubmissionPreview.make(
+            event: .requestChanges,
+            body: "Please fix this before merging.",
+            draft: draft,
+            safetyState: safetyState
+        )
+
+        try expectEqual(preview.canSubmit, false)
+        try expectEqual(preview.safetyMessage, "Draft is stale. Regenerate before submitting.")
+        try expectEqual(preview.safetyState.invalidSelectedInlineComments, [
+            InvalidInlineComment(path: "Sources/App.swift", position: 99)
+        ])
+    }
+
+    private static func testPreviewBlocksWhenDiffPositionsCouldNotBeValidated() throws {
+        let draft = ReviewDraft(summary: "Summary", risks: [], inlineComments: [])
+        let safetyState = ReviewSubmissionSafetyState(
+            reviewedHeadSha: "same-sha",
+            currentHeadSha: "same-sha",
+            selectedInlineCommentCount: 0,
+            invalidSelectedInlineComments: [],
+            couldValidateDiffPositions: false
+        )
+
+        let preview = ReviewSubmissionPreview.make(
+            event: .comment,
+            body: "Review body",
+            draft: draft,
+            safetyState: safetyState
+        )
+
+        try expectEqual(preview.canSubmit, false)
+        try expectEqual(preview.safetyMessage, "Refresh safety before submitting.")
     }
 }

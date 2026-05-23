@@ -68,6 +68,10 @@ struct ReviewInboxView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
+                if let activeSearchSummary {
+                    StatusBadge(title: activeSearchSummary, systemImage: "magnifyingglass", tone: .info)
+                }
+
                 if model.canWatchSelectedRepository {
                     Button {
                         model.startWatchingSelectedRepository()
@@ -84,20 +88,35 @@ struct ReviewInboxView: View {
     }
 
     private var emptyDescription: String {
-        switch selectedSection {
-        case .draftReady:
-            return AppL10n.string("No generated drafts are waiting for review.")
-        case .stale:
-            return AppL10n.string("No stale or failed drafts need attention.")
-        case .running:
-            return AppL10n.string("No queued reviews are running.")
-        case .needsSetup:
-            return AppL10n.string("The app is ready.")
-        case .submitted:
-            return AppL10n.string("No reviews have been submitted from this queue.")
-        case .recents:
-            return AppL10n.string("Select a repository to load open pull requests.")
+        let trimmedQuery = model.pullRequestSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedQuery.isEmpty {
+            if model.selectedRepository != nil {
+                return AppL10n.string(
+                    "Search \"%@\" is hiding pull requests in this repository. Clear search to show saved drafts and open PRs again.",
+                    trimmedQuery
+                )
+            }
+
+            return AppL10n.string(
+                "Search \"%@\" is hiding pull requests in the current scope. Clear search to show saved drafts and open PRs again.",
+                trimmedQuery
+            )
         }
+
+        return AppL10n.string(ReviewInboxFilterPresentation.emptyDescription(
+            section: selectedSection,
+            query: model.pullRequestSearchText,
+            hasSelectedRepository: model.selectedRepository != nil
+        ))
+    }
+
+    private var activeSearchSummary: String? {
+        let trimmedQuery = model.pullRequestSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else {
+            return nil
+        }
+
+        return AppL10n.string("Search \"%@\" - %d visible", trimmedQuery, rows.count)
     }
 
     private func isSelected(_ row: PullRequestTriageRow) -> Bool {

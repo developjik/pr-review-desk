@@ -24,6 +24,17 @@ required=(
   "surface=settings-readiness"
   "localization=Submit Review Preview"
   "localization=No matching repositories"
+  "render=first-run-setup"
+  "render=repository-sidebar"
+  "render=review-inbox"
+  "render=diff-workspace"
+  "render=review-inspector"
+  "render=submit-preview"
+  "render=command-panel"
+  "render=settings-readiness"
+  "assert=first-run-setup:finish-setup,recommended-path"
+  "assert=submit-preview:submit-preview,preflight-state,submit-enabled"
+  "assert=command-panel:command-panel,shortcut-hints"
 )
 
 for needle in "${required[@]}"; do
