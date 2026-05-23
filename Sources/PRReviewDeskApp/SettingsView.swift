@@ -137,6 +137,16 @@ struct SettingsView: View {
                 HStack {
                     Text(AppL10n.string("Local OAuth credential"))
                     Spacer()
+                    Button {
+                        Task {
+                            await model.retryGitHubSessionRestore()
+                        }
+                    } label: {
+                        Label(AppL10n.string("Retry Restore"), systemImage: "arrow.clockwise")
+                    }
+                    .disabled(model.isWorking)
+                    .smokeAccessibilityIdentifier("settings.github.restore")
+
                     Button(role: .destructive) {
                         model.deleteStoredToken()
                     } label: {

@@ -7,9 +7,27 @@ cd "$ROOT_DIR"
 source "$ROOT_DIR/scripts/app-metadata.sh"
 
 CONFIGURATION="${CONFIGURATION:-release}"
-SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 DEFAULT_APP_OUTPUT_ROOT="$ROOT_DIR/.build/app"
 APP_OUTPUT_ROOT="${APP_OUTPUT_ROOT:-$DEFAULT_APP_OUTPUT_ROOT}"
+
+resolve_sign_identity() {
+  if [[ -n "${SIGN_IDENTITY:-}" ]]; then
+    printf '%s\n' "$SIGN_IDENTITY"
+    return
+  fi
+
+  local identity
+  identity="$(security find-identity -p codesigning -v 2>/dev/null | awk -F\" '/Apple Development|Developer ID Application/ {print $2; exit}')"
+  if [[ -n "$identity" ]]; then
+    printf '%s\n' "$identity"
+    return
+  fi
+
+  echo "No stable code signing identity found; using ad-hoc signing. Keychain may prompt again after rebuilds." >&2
+  printf '%s\n' "-"
+}
+
+SIGN_IDENTITY="$(resolve_sign_identity)"
 
 if [[ "$APP_OUTPUT_ROOT" == "$DEFAULT_APP_OUTPUT_ROOT" && "$ROOT_DIR" == *"/Mobile Documents/"* ]]; then
   REAL_APP_OUTPUT_ROOT="${TMPDIR:-/tmp}/pr-review-desk-app-output"

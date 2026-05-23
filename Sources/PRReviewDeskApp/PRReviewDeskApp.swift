@@ -136,10 +136,7 @@ struct PRReviewDeskApp: App {
                 .preferredColorScheme(appearance.colorScheme)
                 .environment(\.locale, locale)
                 .task {
-                    model.loadStoredToken()
-                    if model.hasToken {
-                        await model.refreshRepositories()
-                    }
+                    await model.restoreGitHubSessionOnLaunchIfNeeded()
                 }
                 .onChange(of: languageRawValue) { _, _ in
                     model.refreshLocalizedDefaults()

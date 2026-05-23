@@ -18,6 +18,7 @@
 "Cancel background queue" = "Cancel background queue";
 "Run queued draft generation" = "Run queued draft generation";
 "Run `codex login` in Terminal and sign in with ChatGPT, then check Codex readiness." = "Run `codex login` in Terminal and sign in with ChatGPT, then check Codex readiness.";
+"Retry Restore" = "Retry Restore";
 "No watched pull requests." = "No watched pull requests.";
 "Remove from queue" = "Remove from queue";
 "No Pull Request Selected" = "No Pull Request Selected";
@@ -312,6 +313,7 @@
 "Copied codex login. Run it in Terminal, sign in with ChatGPT, then check Codex readiness." = "Copied codex login. Run it in Terminal, sign in with ChatGPT, then check Codex readiness.";
 "Could not delete token: %@" = "Could not delete token: %@";
 "Could not load token: %@" = "Could not load token: %@";
+"Could not restore saved GitHub session." = "Could not restore saved GitHub session.";
 "Deselect invalid comments, refresh safety, or regenerate the draft." = "Deselect invalid comments, refresh safety, or regenerate the draft.";
 "Discarded review draft." = "Discarded review draft.";
 "Draft ready for %@#%d. Review and submit manually." = "Draft ready for %@#%d. Review and submit manually.";
@@ -335,6 +337,7 @@
 "GitHub OAuth client ID is not configured." = "GitHub OAuth client ID is not configured.";
 "GitHub OAuth credential deleted." = "GitHub OAuth credential deleted.";
 "GitHub OAuth credential loaded from Keychain." = "GitHub OAuth credential loaded from Keychain.";
+"GitHub session restored. Validate access before generating reviews." = "GitHub session restored. Validate access before generating AI review drafts.";
 "GitHub sign-in" = "GitHub sign-in";
 "GitHub sign-in cancelled." = "GitHub sign-in cancelled.";
 "GitHub sign-in code expired. Start again." = "GitHub sign-in code expired. Start again.";
@@ -392,6 +395,7 @@
 "Refreshing open pull requests..." = "Refreshing open pull requests...";
 "Refreshing pull request..." = "Refreshing pull request...";
 "Refreshing submit safety..." = "Refreshing submit safety...";
+"Restore GitHub session" = "Restore GitHub session";
 "Restored saved review draft." = "Restored saved review draft.";
 "Restored stale review draft from %@; regenerate before submitting." = "Restored stale review draft from %@; regenerate before submitting.";
 "Revealed %@ at diff position %d." = "Revealed %@ at diff position %d.";
@@ -404,6 +408,7 @@
 "Sign in with GitHub first." = "Sign in with GitHub first.";
 "Sign in with GitHub to load repositories." = "Sign in with GitHub to load repositories.";
 "Sign in to Codex with ChatGPT before generating an AI review draft." = "Sign in to Codex with ChatGPT before generating an AI review draft.";
+"Signed in as @%@. Loading repositories..." = "Signed in as @%@. Loading repositories...";
 "Start generation again when ready." = "Start generation again when ready.";
 "Starting GitHub sign-in..." = "Starting GitHub sign-in...";
 "Submit safety refreshed. %@" = "Submit safety refreshed. %@";
@@ -413,6 +418,7 @@
 "Valid for @%@. Scopes: %@." = "Valid for @%@. Scopes: %@.";
 "Valid for @%@. Scopes: %@. %@" = "Valid for @%@. Scopes: %@. %@";
 "Validate the token to confirm login and scopes." = "Validate the token to confirm login and scopes.";
+"Unlock the saved Keychain item, retry restore, or sign in with GitHub again." = "Unlock the saved Keychain item, retry restore, or sign in with GitHub again.";
 "Unsupported saved GitHub credential removed. Sign in with GitHub." = "Unsupported saved GitHub credential removed. Sign in with GitHub.";
 "Validating GitHub OAuth credential..." = "Validating GitHub OAuth credential...";
 "Watch pull request" = "Watch pull request";

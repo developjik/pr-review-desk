@@ -356,13 +356,46 @@ public enum KeychainTokenStoreError: Error, Equatable, CustomStringConvertible, 
     }
 }
 
-public struct KeychainTokenStore: TokenStore, Sendable {
+protocol KeychainItemAccessing {
+    func copyMatching(_ query: [String: Any], result: UnsafeMutablePointer<AnyObject?>?) -> OSStatus
+    func add(_ item: [String: Any]) -> OSStatus
+    func update(query: [String: Any], attributes: [String: Any]) -> OSStatus
+    func delete(_ query: [String: Any]) -> OSStatus
+}
+
+private struct SecurityKeychainItemAccessor: KeychainItemAccessing {
+    func copyMatching(_ query: [String: Any], result: UnsafeMutablePointer<AnyObject?>?) -> OSStatus {
+        SecItemCopyMatching(query as CFDictionary, result)
+    }
+
+    func add(_ item: [String: Any]) -> OSStatus {
+        SecItemAdd(item as CFDictionary, nil)
+    }
+
+    func update(query: [String: Any], attributes: [String: Any]) -> OSStatus {
+        SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+    }
+
+    func delete(_ query: [String: Any]) -> OSStatus {
+        SecItemDelete(query as CFDictionary)
+    }
+}
+
+public struct KeychainTokenStore: TokenStore, @unchecked Sendable {
     private let service: String
     private let account: String
+    private let keychain: any KeychainItemAccessing
 
     public init(service: String = "PRReviewDesk", account: String = "github-token") {
         self.service = service
         self.account = account
+        self.keychain = SecurityKeychainItemAccessor()
+    }
+
+    init(service: String, account: String, keychain: any KeychainItemAccessing) {
+        self.service = service
+        self.account = account
+        self.keychain = keychain
     }
 
     public func loadToken() throws -> String? {
@@ -371,7 +404,7 @@ public struct KeychainTokenStore: TokenStore, Sendable {
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
         var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        let status = keychain.copyMatching(query, result: &result)
 
         if status == errSecItemNotFound {
             return nil
@@ -392,20 +425,29 @@ public struct KeychainTokenStore: TokenStore, Sendable {
     }
 
     public func saveToken(_ token: String) throws {
-        try deleteToken()
-
         var item = baseQuery()
         item[kSecValueData as String] = Data(token.utf8)
         item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
 
-        let status = SecItemAdd(item as CFDictionary, nil)
+        let status = keychain.add(item)
+        if status == errSecDuplicateItem {
+            let updateStatus = keychain.update(
+                query: baseQuery(),
+                attributes: [kSecValueData as String: Data(token.utf8)]
+            )
+            guard updateStatus == errSecSuccess else {
+                throw KeychainTokenStoreError.unexpectedStatus(updateStatus)
+            }
+            return
+        }
+
         guard status == errSecSuccess else {
             throw KeychainTokenStoreError.unexpectedStatus(status)
         }
     }
 
     public func deleteToken() throws {
-        let status = SecItemDelete(baseQuery() as CFDictionary)
+        let status = keychain.delete(baseQuery())
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainTokenStoreError.unexpectedStatus(status)
         }

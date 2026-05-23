@@ -6,6 +6,7 @@ enum TestHarness {
         do {
             try ModelsTests.run()
             try ReviewInboxTests.run()
+            try OneShotGateTests.run()
             try AIReviewDraftActionPresentationTests.run()
             try ReviewWorkspaceLayoutPolicyTests.run()
             try ReviewCommandAvailabilityTests.run()

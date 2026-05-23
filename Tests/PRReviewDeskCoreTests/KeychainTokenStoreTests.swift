@@ -1,5 +1,5 @@
 import Foundation
-import PRReviewDeskCore
+@testable import PRReviewDeskCore
 
 enum KeychainTokenStoreTests {
     static func run() throws {
@@ -12,6 +12,7 @@ enum KeychainTokenStoreTests {
         try testCredentialKindDisplayNamesDoNotExposeTokenValues()
         try testVersionedCredentialStoreReplacesOAuthCredentialWithPersonalAccessToken()
         try testVersionedCredentialStoreDeletesOAuthCredentialEnvelope()
+        try testKeychainStoreUpdatesExistingItemWithoutDeletingIt()
         try testKeychainStoreCanBeConstructedWithoutTouchingSecrets()
     }
 
@@ -145,8 +146,72 @@ enum KeychainTokenStoreTests {
         try expectEqual(try store.loadCredential(), nil)
     }
 
+    private static func testKeychainStoreUpdatesExistingItemWithoutDeletingIt() throws {
+        let keychain = FakeKeychainItemAccessor(addStatuses: [errSecDuplicateItem], updateStatus: errSecSuccess)
+        let store = KeychainTokenStore(service: "PRReviewDeskTests", account: "github", keychain: keychain)
+
+        try store.saveToken("updated-token")
+
+        try expectEqual(keychain.addCallCount, 1)
+        try expectEqual(keychain.updateCallCount, 1)
+        try expectEqual(keychain.deleteCallCount, 0)
+        try expectEqual(keychain.storedToken, "updated-token")
+    }
+
     private static func testKeychainStoreCanBeConstructedWithoutTouchingSecrets() throws {
         let store: TokenStore = KeychainTokenStore(service: "PRReviewDeskTests", account: "github")
         _ = store
+    }
+}
+
+private final class FakeKeychainItemAccessor: KeychainItemAccessing, @unchecked Sendable {
+    private var addStatuses: [OSStatus]
+    private let updateStatus: OSStatus
+    private(set) var addCallCount = 0
+    private(set) var updateCallCount = 0
+    private(set) var deleteCallCount = 0
+    private(set) var storedData: Data?
+
+    var storedToken: String? {
+        storedData.flatMap { String(data: $0, encoding: .utf8) }
+    }
+
+    init(addStatuses: [OSStatus] = [errSecSuccess], updateStatus: OSStatus = errSecSuccess) {
+        self.addStatuses = addStatuses
+        self.updateStatus = updateStatus
+    }
+
+    func copyMatching(_ query: [String: Any], result: UnsafeMutablePointer<AnyObject?>?) -> OSStatus {
+        guard let storedData else {
+            return errSecItemNotFound
+        }
+
+        result?.pointee = storedData as AnyObject
+        return errSecSuccess
+    }
+
+    func add(_ item: [String: Any]) -> OSStatus {
+        addCallCount += 1
+        let status = addStatuses.isEmpty ? errSecSuccess : addStatuses.removeFirst()
+        if status == errSecSuccess {
+            storedData = item[kSecValueData as String] as? Data
+        }
+        return status
+    }
+
+    func update(query: [String: Any], attributes: [String: Any]) -> OSStatus {
+        updateCallCount += 1
+        guard updateStatus == errSecSuccess else {
+            return updateStatus
+        }
+
+        storedData = attributes[kSecValueData as String] as? Data
+        return errSecSuccess
+    }
+
+    func delete(_ query: [String: Any]) -> OSStatus {
+        deleteCallCount += 1
+        storedData = nil
+        return errSecSuccess
     }
 }
