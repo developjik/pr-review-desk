@@ -299,13 +299,17 @@ enum UISmokeRenderRunner {
         let settingsLoadedTokenControls = renderedAccessibilityControls(
             for: SettingsView(model: settingsLoadedTokenModel())
         )
+        let reviewInboxControls = renderedAccessibilityControls(
+            for: ReviewInboxView(model: selectedRecentsModel(), selectedSection: .recents)
+        )
 
         return [
             accessibilityLine(surface: "first-run-setup.no-token", controls: firstRunNoTokenControls),
             accessibilityLine(surface: "first-run-setup.loaded-token", controls: firstRunLoadedTokenControls),
             accessibilityLine(surface: "submit-preview", controls: submitPreviewControls),
             accessibilityLine(surface: "command-panel", controls: commandPanelControls),
-            accessibilityLine(surface: "settings.loaded-token", controls: settingsLoadedTokenControls)
+            accessibilityLine(surface: "settings.loaded-token", controls: settingsLoadedTokenControls),
+            accessibilityLine(surface: "review-inbox", controls: reviewInboxControls)
         ].joined(separator: "\n")
     }
 
@@ -485,6 +489,21 @@ enum UISmokeRenderRunner {
         model.draft = sampleDraft()
         model.reviewBody = "Looks good overall.\n\nPlease address the inline comment before merging."
         model.preflightHeadSha = pullRequest.headSha
+        model.isPrivacyDisclosureAcknowledged = true
+        return model
+    }
+
+    private static func selectedRecentsModel() -> AppModel {
+        let model = firstRunModel()
+        let repository = sampleRepository()
+        let pullRequest = samplePullRequest()
+
+        model.hasToken = true
+        model.credentialKindDescription = GitHubCredentialKind.personalAccessToken.displayName
+        model.repositories = [repository]
+        model.selectedRepository = repository
+        model.pullRequests = [pullRequest]
+        model.selectedPullRequest = pullRequest
         model.isPrivacyDisclosureAcknowledged = true
         return model
     }

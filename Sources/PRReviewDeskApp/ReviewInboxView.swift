@@ -309,6 +309,9 @@ private struct PullRequestTriageRowView: View {
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Pull request #\(row.number), \(row.title), \(row.draftStatus.displayName)")
+        .accessibilityValue(AppL10n.string(isSelected ? "Selected" : "Not selected"))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .smokeAccessibilityIdentifier("review-inbox.pull-request.\(row.number)", state: isSelected ? "selected" : "unselected")
     }
 
     private var statusIcon: String {
