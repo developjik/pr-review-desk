@@ -22,10 +22,12 @@ enum FirstRunSetupPresentationTests {
             "Privacy acknowledgement"
         ])
         try expectEqual(steps.map(\.actionTitle), [
-            "Save PAT",
+            "Sign in with GitHub",
             "Check Codex",
             "Acknowledge privacy"
         ])
+        try expectTrue(!steps[0].detail.localizedCaseInsensitiveContains("personal access token"))
+        try expectTrue(!steps[0].detail.localizedCaseInsensitiveContains("PAT"))
         try expectEqual(steps.map(\.state), [.needsAction, .needsAction, .needsAction])
     }
 

@@ -26,7 +26,7 @@ public enum FirstRunSetupPresentation {
                 id: "github",
                 title: "GitHub access",
                 detail: gitHubDetail(hasCredential: hasGitHubCredential, isReady: isGitHubReady),
-                actionTitle: hasGitHubCredential ? "Validate GitHub" : "Save PAT",
+                actionTitle: hasGitHubCredential ? "Validate GitHub" : "Sign in with GitHub",
                 systemImage: "person.crop.circle.badge.checkmark",
                 state: isGitHubReady ? .complete : .needsAction
             ),
@@ -62,6 +62,6 @@ public enum FirstRunSetupPresentation {
             return "GitHub credential is loaded. Validate scopes before generating reviews."
         }
 
-        return "Paste a personal access token, or use advanced GitHub OAuth if you have an OAuth App client ID."
+        return "Sign in with GitHub OAuth to authorize repository review access."
     }
 }

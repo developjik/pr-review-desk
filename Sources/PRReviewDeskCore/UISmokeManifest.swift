@@ -20,8 +20,7 @@ public struct UISmokeManifest: Equatable, Hashable, Sendable {
         requiredLocalizationKeys: [
             "Finish setup",
             "Guided setup path",
-            "Save PAT",
-            "Advanced GitHub OAuth",
+            "Sign in with GitHub",
             "Technical readiness details",
             "Search repositories",
             "No matching repositories",
@@ -39,8 +38,7 @@ public struct UISmokeManifest: Equatable, Hashable, Sendable {
             "Last checked at %@ UTC.",
             "Search actions",
             "Readiness",
-            "Replace personal access token",
-            "Enter personal access token",
+            "Replace with GitHub OAuth",
             "Cancel Review Generation"
         ]
     )

@@ -13,8 +13,9 @@ enum UISmokeManifestTests {
         try expectEqual(Set(manifest.surfaces), Set(UISmokeSurface.allCases))
         try expectTrue(manifest.requiredLocalizationKeys.contains("Finish setup"))
         try expectTrue(manifest.requiredLocalizationKeys.contains("Guided setup path"))
-        try expectTrue(manifest.requiredLocalizationKeys.contains("Save PAT"))
-        try expectTrue(manifest.requiredLocalizationKeys.contains("Advanced GitHub OAuth"))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("Sign in with GitHub"))
+        try expectTrue(!manifest.requiredLocalizationKeys.contains("Save PAT"))
+        try expectTrue(!manifest.requiredLocalizationKeys.contains("Advanced GitHub OAuth"))
         try expectTrue(manifest.requiredLocalizationKeys.contains("Technical readiness details"))
         try expectTrue(manifest.requiredLocalizationKeys.contains("Submit Review Preview"))
         try expectTrue(manifest.requiredLocalizationKeys.contains("Refresh Safety"))
@@ -26,8 +27,13 @@ enum UISmokeManifestTests {
         try expectTrue(manifest.requiredLocalizationKeys.contains("Watch all"))
         try expectTrue(manifest.requiredLocalizationKeys.contains("Awaiting selection"))
         try expectTrue(manifest.requiredLocalizationKeys.contains("Regenerate"))
-        try expectTrue(manifest.requiredLocalizationKeys.contains("Replace personal access token"))
+        try expectTrue(!manifest.requiredLocalizationKeys.contains("Replace personal access token"))
+        try expectTrue(!manifest.requiredLocalizationKeys.contains("Enter personal access token"))
         try expectTrue(manifest.requiredLocalizationKeys.contains("Cancel Review Generation"))
+        try expectTrue(manifest.requiredLocalizationKeys.allSatisfy {
+            !$0.contains("PAT")
+                && !$0.localizedCaseInsensitiveContains("personal access token")
+        })
         try expectEqual(Set(manifest.requiredLocalizationKeys).count, manifest.requiredLocalizationKeys.count)
     }
 

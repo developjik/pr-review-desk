@@ -34,6 +34,8 @@ enum ReadinessChecklistTests {
         let itemsByID = Dictionary(uniqueKeysWithValues: checklist.items.map { ($0.id, $0) })
         try expectEqual(itemsByID[.githubCredential]?.state, .needsAction)
         try expectEqual(itemsByID[.githubCredential]?.action, .loadGitHubCredential)
+        try expectEqual(itemsByID[.githubCredential]?.detail, "Sign in with GitHub OAuth.")
+        try expectEqual(itemsByID[.githubCredential]?.actionTitle, "Sign in")
         try expectEqual(itemsByID[.githubTokenValidation]?.state, .unknown)
         try expectEqual(itemsByID[.githubTokenValidation]?.action, .validateGitHubToken)
         try expectEqual(itemsByID[.codexCLI]?.state, .needsAction)

@@ -53,13 +53,13 @@ public enum GitHubRepositoryAccessPolicy {
         if repository.isPrivate {
             return .denied(
                 reason: "Private repositories require the repo OAuth scope.",
-                recoverySuggestion: "Re-authorize GitHub with the repo scope or use a PAT that can read and review private pull requests."
+                recoverySuggestion: "Re-authorize GitHub OAuth with the repo scope to read and review private pull requests."
             )
         }
 
         return .denied(
             reason: "Public repository review requires public_repo or repo OAuth scope.",
-            recoverySuggestion: "Re-authorize GitHub with public_repo or repo scope, or use a PAT that can read and review public pull requests."
+            recoverySuggestion: "Re-authorize GitHub OAuth with public_repo or repo scope to read and review public pull requests."
         )
     }
 }

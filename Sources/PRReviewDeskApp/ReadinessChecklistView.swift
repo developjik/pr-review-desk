@@ -77,10 +77,7 @@ struct ReadinessChecklistView: View {
     private func performAction(_ action: ReadinessChecklistAction) {
         switch action {
         case .loadGitHubCredential:
-            model.loadStoredToken()
-            Task {
-                await model.refreshRepositories()
-            }
+            model.startOAuthDeviceSignIn()
         case .validateGitHubToken:
             Task {
                 await model.validateCurrentToken()
@@ -151,7 +148,7 @@ struct ReadinessChecklistView: View {
     private func actionIcon(for action: ReadinessChecklistAction) -> String {
         switch action {
         case .loadGitHubCredential:
-            return "lock.open"
+            return "person.crop.circle.badge.checkmark"
         case .validateGitHubToken:
             return "checkmark.seal"
         case .checkCodexReadiness:

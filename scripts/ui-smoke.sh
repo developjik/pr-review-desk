@@ -66,11 +66,11 @@ required=(
   "visual=command-panel:selected-row=select-section-stale"
   "layout=review-inbox:top-content-y="
   "layout=repository-sidebar:top-content-y="
-  "accessibility=first-run-setup.no-token:rendered-controls=first-run.codex.check,first-run.github.load-keychain,first-run.github.save-pat,first-run.privacy.acknowledge"
+  "accessibility=first-run-setup.no-token:rendered-controls=first-run.codex.check,first-run.github.oauth,first-run.privacy.acknowledge"
   "accessibility=first-run-setup.loaded-token:rendered-controls=first-run.codex.check,first-run.github.reload,first-run.github.validate,first-run.privacy.acknowledge"
   "accessibility=submit-preview:rendered-controls=submit-preview.refresh-safety[enabled],submit-preview.regenerate[enabled],submit-preview.submit[disabled]"
   "accessibility=command-panel:rendered-controls=command-panel.action.select-section-stale[selected],command-panel.search"
-  "accessibility=settings.loaded-token:rendered-controls=settings.github.delete,settings.github.load,settings.github.show-pat-entry[replace],settings.github.validate"
+  "accessibility=settings.loaded-token:rendered-controls=settings.github.delete,settings.github.oauth,settings.github.validate"
   "accessibility=review-inbox:rendered-controls=review-inbox.pull-request.74[selected]"
 )
 

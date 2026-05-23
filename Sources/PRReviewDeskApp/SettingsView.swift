@@ -4,7 +4,6 @@ struct SettingsView: View {
     @ObservedObject var model: AppModel
     @AppStorage("appearance") private var appearanceRawValue = AppAppearance.system.rawValue
     @AppStorage(AppLanguage.storageKey) private var languageRawValue = AppLanguage.system.rawValue
-    @State private var isPersonalAccessTokenEditorPresented = false
 
     private var appearanceBinding: Binding<AppAppearance> {
         Binding(
@@ -45,7 +44,7 @@ struct SettingsView: View {
 
             Section(AppL10n.string("GitHub")) {
                 HStack {
-                    Text(AppL10n.string("Token"))
+                    Text(AppL10n.string("OAuth credential"))
                     Spacer()
                     Text(model.hasToken ? AppL10n.string("Loaded") : AppL10n.string("Not loaded"))
                         .foregroundStyle(model.hasToken ? AppTheme.foreground(.success) : .secondary)
@@ -72,72 +71,79 @@ struct SettingsView: View {
                     grantedScopesDisclosure
                 }
 
-                personalAccessTokenControls
+                Text(AppL10n.string("Sign in with GitHub OAuth to authorize repository review access."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                DisclosureGroup(AppL10n.string("Advanced GitHub OAuth")) {
-                    TextField(AppL10n.string("OAuth App client ID"), text: $model.oauthClientID)
-                        .textFieldStyle(.roundedBorder)
+                HStack {
+                    Button {
+                        model.startOAuthDeviceSignIn()
+                    } label: {
+                        Label(
+                            model.hasToken ? AppL10n.string("Replace with GitHub OAuth") : AppL10n.string("Sign in with GitHub"),
+                            systemImage: "person.crop.circle.badge.checkmark"
+                        )
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.isOAuthSignInPending)
+                    .smokeAccessibilityIdentifier("settings.github.oauth")
 
-                    Text(AppL10n.string("Use OAuth only when you already have a GitHub OAuth App client ID."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    HStack {
+                    if model.isOAuthSignInPending {
                         Button {
-                            model.startOAuthDeviceSignIn()
+                            model.cancelOAuthDeviceSignIn()
                         } label: {
-                            Label(
-                                model.hasToken ? AppL10n.string("Replace with GitHub OAuth") : AppL10n.string("Sign in with GitHub"),
-                                systemImage: "person.crop.circle.badge.checkmark"
-                            )
-                        }
-                        .disabled(model.isOAuthSignInPending || model.oauthClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                        if model.isOAuthSignInPending {
-                            Button {
-                                model.cancelOAuthDeviceSignIn()
-                            } label: {
-                                Label(AppL10n.string("Cancel"), systemImage: "xmark.circle")
-                            }
-                        }
-
-                        if let authorization = model.oauthAuthorization {
-                            Button {
-                                model.copyOAuthUserCode()
-                            } label: {
-                                Label(AppL10n.string("Copy Code"), systemImage: "doc.on.doc")
-                            }
-
-                            Link(AppL10n.string("Open GitHub"), destination: authorization.verificationURI)
+                            Label(AppL10n.string("Cancel"), systemImage: "xmark.circle")
                         }
                     }
 
                     if let authorization = model.oauthAuthorization {
-                        HStack {
-                            Text(AppL10n.string("Device code"))
-                            Spacer()
-                            Text(authorization.userCode)
-                                .font(.system(.body, design: .monospaced))
-                                .textSelection(.enabled)
+                        Button {
+                            model.copyOAuthUserCode()
+                        } label: {
+                            Label(AppL10n.string("Copy Code"), systemImage: "doc.on.doc")
                         }
+
+                        Link(AppL10n.string("Open GitHub"), destination: authorization.verificationURI)
                     }
+                }
 
-                    Text(model.oauthStatus)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
+                if let authorization = model.oauthAuthorization {
                     HStack {
-                        Text(AppL10n.string("Revoke OAuth access"))
+                        Text(AppL10n.string("Device code"))
                         Spacer()
-                        Link(AppL10n.string("Manage on GitHub"), destination: URL(string: "https://github.com/settings/applications")!)
+                        Text(authorization.userCode)
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
                     }
+                }
 
-                    Text(AppL10n.string("OAuth authorization must be revoked on GitHub. Deleting here only removes the local credential."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                Text(model.oauthStatus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack {
+                    Text(AppL10n.string("Revoke OAuth access"))
+                    Spacer()
+                    Link(AppL10n.string("Manage on GitHub"), destination: URL(string: "https://github.com/settings/applications")!)
+                }
+
+                Text(AppL10n.string("OAuth authorization must be revoked on GitHub. Deleting here only removes the local credential."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack {
+                    Text(AppL10n.string("Local OAuth credential"))
+                    Spacer()
+                    Button(role: .destructive) {
+                        model.deleteStoredToken()
+                    } label: {
+                        Label(AppL10n.string("Delete Local Credential"), systemImage: "trash")
+                    }
+                    .disabled(model.isWorking || !model.hasToken)
+                    .smokeAccessibilityIdentifier("settings.github.delete")
                 }
 
                 HStack {
@@ -215,94 +221,6 @@ struct SettingsView: View {
                 }
             }
             .padding(.top, 4)
-        }
-    }
-
-    @ViewBuilder
-    private var personalAccessTokenControls: some View {
-        if isPersonalAccessTokenEditorPresented {
-            Text(AppL10n.string("Paste a GitHub token with repository access, save it locally, then validate scopes."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            SecureField(AppL10n.string("Personal access token"), text: $model.tokenInput)
-                .textFieldStyle(.roundedBorder)
-
-            HStack {
-                Button {
-                    Task {
-                        await model.saveTokenAndRefresh()
-                    }
-                } label: {
-                    Label(AppL10n.string("Save or Replace with PAT"), systemImage: "key")
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(model.isWorking || model.tokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .smokeAccessibilityIdentifier("settings.github.save-pat")
-
-                Button {
-                    model.loadStoredToken()
-                } label: {
-                    Label(AppL10n.string("Load"), systemImage: "lock.open")
-                }
-                .disabled(model.isWorking)
-                .smokeAccessibilityIdentifier("settings.github.load")
-
-                Button {
-                    model.tokenInput = ""
-                    isPersonalAccessTokenEditorPresented = false
-                } label: {
-                    Label(AppL10n.string("Cancel PAT entry"), systemImage: "xmark.circle")
-                }
-                .disabled(model.isWorking)
-                .smokeAccessibilityIdentifier("settings.github.cancel-pat-entry")
-
-                Button(role: .destructive) {
-                    model.deleteStoredToken()
-                } label: {
-                    Label(AppL10n.string("Delete Local Credential"), systemImage: "trash")
-                }
-                .disabled(model.isWorking || !model.hasToken)
-                .smokeAccessibilityIdentifier("settings.github.delete")
-            }
-        } else {
-            Text(AppL10n.string("Personal access token entry is hidden until you choose to add or replace it."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack {
-                Button {
-                    isPersonalAccessTokenEditorPresented = true
-                } label: {
-                    Label(
-                        model.hasToken ? AppL10n.string("Replace personal access token") : AppL10n.string("Enter personal access token"),
-                        systemImage: "key"
-                    )
-                }
-                .disabled(model.isWorking)
-                .smokeAccessibilityIdentifier(
-                    "settings.github.show-pat-entry",
-                    state: model.hasToken ? "replace" : "enter"
-                )
-
-                Button {
-                    model.loadStoredToken()
-                } label: {
-                    Label(AppL10n.string("Load"), systemImage: "lock.open")
-                }
-                .disabled(model.isWorking)
-                .smokeAccessibilityIdentifier("settings.github.load")
-
-                Button(role: .destructive) {
-                    model.deleteStoredToken()
-                } label: {
-                    Label(AppL10n.string("Delete Local Credential"), systemImage: "trash")
-                }
-                .disabled(model.isWorking || !model.hasToken)
-                .smokeAccessibilityIdentifier("settings.github.delete")
-            }
         }
     }
 

@@ -508,96 +508,51 @@ private struct GitHubCredentialSetupControls: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                Text(AppL10n.string("Paste a GitHub token with repository access, save it locally, then validate scopes."))
+                Text(AppL10n.string("Sign in with GitHub OAuth to authorize repository review access."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                SecureField(AppL10n.string("Personal access token"), text: $model.tokenInput)
-                    .textFieldStyle(.roundedBorder)
-
                 HStack(spacing: 8) {
                     Button {
-                        Task {
-                            await model.saveTokenAndRefresh()
-                        }
+                        model.startOAuthDeviceSignIn()
                     } label: {
-                        Label(AppL10n.string("Save PAT"), systemImage: "key")
+                        Label(AppL10n.string("Sign in with GitHub"), systemImage: "person.crop.circle.badge.checkmark")
                     }
-                    .disabled(model.isWorking || model.tokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .smokeAccessibilityIdentifier("first-run.github.save-pat")
+                    .disabled(model.isOAuthSignInPending)
+                    .smokeAccessibilityIdentifier("first-run.github.oauth")
 
-                    Button {
-                        model.loadStoredToken()
-                        Task {
-                            await model.refreshRepositories()
-                        }
-                    } label: {
-                        Label(AppL10n.string("Load from Keychain"), systemImage: "lock.open")
-                    }
-                    .disabled(model.isWorking)
-                    .smokeAccessibilityIdentifier("first-run.github.load-keychain")
-                }
-                .controlSize(.small)
-            }
-
-            DisclosureGroup(AppL10n.string("Advanced GitHub OAuth")) {
-                VStack(alignment: .leading, spacing: 8) {
-                    TextField(AppL10n.string("OAuth App client ID"), text: $model.oauthClientID)
-                        .textFieldStyle(.roundedBorder)
-
-                    Text(AppL10n.string("Use OAuth only when you already have a GitHub OAuth App client ID."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    HStack(spacing: 8) {
+                    if model.isOAuthSignInPending {
                         Button {
-                            model.startOAuthDeviceSignIn()
+                            model.cancelOAuthDeviceSignIn()
                         } label: {
-                            Label(
-                                model.hasToken ? AppL10n.string("Replace with GitHub OAuth") : AppL10n.string("Sign in with GitHub"),
-                                systemImage: "person.crop.circle.badge.checkmark"
-                            )
-                        }
-                        .disabled(model.isOAuthSignInPending || model.oauthClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .smokeAccessibilityIdentifier("first-run.github.oauth")
-
-                        if model.isOAuthSignInPending {
-                            Button {
-                                model.cancelOAuthDeviceSignIn()
-                            } label: {
-                                Label(AppL10n.string("Cancel"), systemImage: "xmark.circle")
-                            }
+                            Label(AppL10n.string("Cancel"), systemImage: "xmark.circle")
                         }
                     }
-                    .controlSize(.small)
 
                     if let authorization = model.oauthAuthorization {
-                        HStack(spacing: 8) {
-                            Button {
-                                model.copyOAuthUserCode()
-                            } label: {
-                                Label(AppL10n.string("Copy Code"), systemImage: "doc.on.doc")
-                            }
-
-                            Link(AppL10n.string("Open GitHub"), destination: authorization.verificationURI)
+                        Button {
+                            model.copyOAuthUserCode()
+                        } label: {
+                            Label(AppL10n.string("Copy Code"), systemImage: "doc.on.doc")
                         }
-                        .controlSize(.small)
 
-                        Text(AppL10n.string("Device code"))
-                            + Text(" \(authorization.userCode)")
-                            .font(.system(.caption, design: .monospaced))
+                        Link(AppL10n.string("Open GitHub"), destination: authorization.verificationURI)
                     }
-
-                    Text(AppL10n.string(model.oauthStatus))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.top, 4)
+                .controlSize(.small)
+
+                if let authorization = model.oauthAuthorization {
+                    Text(AppL10n.string("Device code"))
+                        + Text(" \(authorization.userCode)")
+                        .font(.system(.caption, design: .monospaced))
+                }
+
+                Text(AppL10n.string(model.oauthStatus))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .font(.caption)
         }
     }
 }

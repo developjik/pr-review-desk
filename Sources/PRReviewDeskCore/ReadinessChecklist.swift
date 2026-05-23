@@ -87,10 +87,10 @@ public struct ReadinessChecklist: Equatable, Hashable, Sendable {
             ReadinessChecklistItem(
                 id: .githubCredential,
                 title: "GitHub credential",
-                detail: hasGitHubCredential ? "Token loaded from Keychain." : "Save or load a GitHub token.",
+                detail: hasGitHubCredential ? "OAuth credential loaded from Keychain." : "Sign in with GitHub OAuth.",
                 state: hasGitHubCredential ? .ready : .needsAction,
                 action: .loadGitHubCredential,
-                actionTitle: "Load"
+                actionTitle: hasGitHubCredential ? "Reload" : "Sign in"
             ),
             ReadinessChecklistItem(
                 id: .githubTokenValidation,

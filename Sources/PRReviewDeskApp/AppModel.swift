@@ -43,8 +43,6 @@ private enum PrivateRepositoryConsentContinuation {
 
 @MainActor
 final class AppModel: ObservableObject {
-    @Published var tokenInput = ""
-    @Published var oauthClientID = ""
     @Published var oauthStatus = AppL10n.string("Not started.")
     @Published var oauthAuthorization: OAuthDeviceAuthorization?
     @Published var isOAuthSignInPending = false
@@ -75,7 +73,7 @@ final class AppModel: ObservableObject {
             persistCurrentDraftIfPossible()
         }
     }
-    @Published var statusMessage = AppL10n.string("Enter a GitHub token or load one from Keychain.")
+    @Published var statusMessage = AppL10n.string("Sign in with GitHub to load repositories.")
     @Published var isWorking = false
     @Published var canCancelCurrentOperation = false
     @Published var preflightHeadSha: String?
@@ -99,6 +97,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var privateRepositoryConsentAcknowledgementCount = 0
     @Published private(set) var generatedDraftPresentationRevision = 0
 
+    private static let defaultGitHubOAuthClientID = "Ov23lil3NJWtY4l5QveY"
     private static let privacyDisclosureAcknowledgedKey = "privacyDisclosureAcknowledged"
     private static let privateRepositoryConsentAcknowledgementsKey = "privateRepositoryConsentAcknowledgements"
     private let credentialStore: CredentialStore
@@ -106,6 +105,7 @@ final class AppModel: ObservableObject {
     private let storedCredentialLoader: (any StoredGitHubCredentialLoading)?
     private let credentialMetadataStore: (any OAuthCredentialStoring)?
     private let oauthDeviceFlowClient: GitHubOAuthDeviceFlowClient
+    private let gitHubOAuthClientID: String
     private let codexAgent: CodexReviewAgent
     private let reviewDraftStore: any ReviewDraftStore
     private let userDefaults: UserDefaults
@@ -338,6 +338,7 @@ final class AppModel: ObservableObject {
         credentialStore: (any CredentialStore)? = nil,
         oauthCredentialStore: (any OAuthCredentialStoring)? = nil,
         oauthDeviceFlowClient: GitHubOAuthDeviceFlowClient = GitHubOAuthDeviceFlowClient(),
+        gitHubOAuthClientID: String = AppModel.defaultGitHubOAuthClientID,
         codexAgent: CodexReviewAgent = CodexReviewAgent(),
         reviewDraftStore: any ReviewDraftStore = FileReviewDraftStore.appDefault(),
         userDefaults: UserDefaults = .standard
@@ -353,6 +354,7 @@ final class AppModel: ObservableObject {
             ?? (resolvedOAuthCredentialStore as? any StoredGitHubCredentialLoading)
         self.credentialMetadataStore = resolvedCredentialStore as? any OAuthCredentialStoring
         self.oauthDeviceFlowClient = oauthDeviceFlowClient
+        self.gitHubOAuthClientID = gitHubOAuthClientID
         self.codexAgent = codexAgent
         self.reviewDraftStore = reviewDraftStore
         self.userDefaults = userDefaults
@@ -366,20 +368,25 @@ final class AppModel: ObservableObject {
     func loadStoredToken() {
         do {
             guard let credential = try credentialStore.loadCredential(), !credential.accessToken.isEmpty else {
-                activeGitHubCredential = nil
-                validatedGitHubLogin = nil
-                hasToken = false
-                grantedGitHubScopes = []
-                credentialKindDescription = AppL10n.string("None")
-                tokenValidationStatus = AppL10n.string("No token saved.")
-                tokenValidationReadinessStatus = .unknown
+                clearGitHubCredentialState(
+                    tokenValidationStatus: AppL10n.string("No OAuth credential saved.")
+                )
                 return
             }
+
+            guard case .oauthUserToken = credential else {
+                try credentialStore.deleteCredential()
+                clearGitHubCredentialState(
+                    tokenValidationStatus: AppL10n.string("No OAuth credential saved."),
+                    statusMessage: AppL10n.string("Unsupported saved GitHub credential removed. Sign in with GitHub.")
+                )
+                return
+            }
+
             configureGitHubClient(credential: credential)
-            tokenInput = ""
             applyStoredCredentialMetadata(fallbackCredential: credential)
             hasToken = true
-            statusMessage = AppL10n.string("GitHub token loaded from Keychain.")
+            statusMessage = AppL10n.string("GitHub OAuth credential loaded from Keychain.")
         } catch {
             statusMessage = AppL10n.string("Could not load token: %@", String(describing: error))
         }
@@ -391,7 +398,7 @@ final class AppModel: ObservableObject {
         } else {
             credentialKindDescription = relocalizedDefault(credentialKindDescription, key: "None")
         }
-        statusMessage = relocalizedDefault(statusMessage, key: "Enter a GitHub token or load one from Keychain.")
+        statusMessage = relocalizedDefault(statusMessage, key: "Sign in with GitHub to load repositories.")
         if let validatedGitHubLogin, tokenValidationReadinessStatus == .ready {
             tokenValidationStatus = AppL10n.string(
                 "Valid for @%@. Scopes: %@.",
@@ -406,49 +413,13 @@ final class AppModel: ObservableObject {
         oauthStatus = relocalizedDefault(oauthStatus, key: "Not started.")
     }
 
-    func saveTokenAndRefresh() async {
-        let trimmed = tokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            statusMessage = AppL10n.string("GitHub token is empty.")
-            return
-        }
-
-        do {
-            let credential = GitHubCredential.personalAccessToken(trimmed)
-            try credentialStore.saveCredential(credential)
-            configureGitHubClient(credential: credential)
-            tokenInput = ""
-            grantedGitHubScopes = []
-            credentialKindDescription = AppL10n.string(GitHubCredentialKind.personalAccessToken.displayName)
-            tokenValidationStatus = AppL10n.string("Not validated.")
-            tokenValidationReadinessStatus = .unknown
-            hasToken = true
-            statusMessage = AppL10n.string("GitHub token saved.")
-            await refreshRepositories()
-        } catch {
-            statusMessage = AppL10n.string("Could not save token: %@", String(describing: error))
-        }
-    }
-
     func deleteStoredToken() {
         do {
             try credentialStore.deleteCredential()
-            githubClient = nil
-            activeGitHubCredential = nil
-            validatedGitHubLogin = nil
-            hasToken = false
-            repositories = []
-            pullRequests = []
-            selectedRepository = nil
-            selectedPullRequest = nil
-            changedFiles = []
-            draft = nil
-            reviewBody = ""
-            grantedGitHubScopes = []
-            credentialKindDescription = AppL10n.string("None")
-            tokenValidationStatus = AppL10n.string("No token saved.")
-            tokenValidationReadinessStatus = .unknown
-            statusMessage = AppL10n.string("GitHub token deleted.")
+            clearGitHubCredentialState(
+                tokenValidationStatus: AppL10n.string("No OAuth credential saved."),
+                statusMessage: AppL10n.string("GitHub OAuth credential deleted.")
+            )
         } catch {
             statusMessage = AppL10n.string("Could not delete token: %@", String(describing: error))
         }
@@ -459,9 +430,9 @@ final class AppModel: ObservableObject {
             return
         }
 
-        let clientID = oauthClientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clientID = gitHubOAuthClientID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clientID.isEmpty else {
-            oauthStatus = AppL10n.string("Enter an OAuth App client ID first.")
+            oauthStatus = AppL10n.string("GitHub OAuth client ID is not configured.")
             return
         }
 
@@ -492,12 +463,12 @@ final class AppModel: ObservableObject {
 
     func validateCurrentToken() async {
         guard let githubClient else {
-            tokenValidationStatus = AppL10n.string("Load or save a GitHub token first.")
+            tokenValidationStatus = AppL10n.string("Sign in with GitHub first.")
             tokenValidationReadinessStatus = .needsAction
             return
         }
 
-        await runWorking(AppL10n.string("Validating GitHub token...")) {
+        await runWorking(AppL10n.string("Validating GitHub OAuth credential...")) {
             let validation = try await githubClient.validateToken()
             grantedGitHubScopes = validation.scopes
             validatedGitHubLogin = validation.login
@@ -575,7 +546,7 @@ final class AppModel: ObservableObject {
 
     func refreshRepositories() async {
         guard let githubClient else {
-            statusMessage = AppL10n.string("Add a GitHub token first.")
+            statusMessage = AppL10n.string("Sign in with GitHub first.")
             return
         }
 
@@ -1256,6 +1227,30 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func clearGitHubCredentialState(
+        tokenValidationStatus: String,
+        statusMessage: String? = nil
+    ) {
+        githubClient = nil
+        activeGitHubCredential = nil
+        validatedGitHubLogin = nil
+        hasToken = false
+        repositories = []
+        pullRequests = []
+        selectedRepository = nil
+        selectedPullRequest = nil
+        changedFiles = []
+        draft = nil
+        reviewBody = ""
+        grantedGitHubScopes = []
+        credentialKindDescription = AppL10n.string("None")
+        self.tokenValidationStatus = tokenValidationStatus
+        tokenValidationReadinessStatus = .unknown
+        if let statusMessage {
+            self.statusMessage = statusMessage
+        }
+    }
+
     private func configureGitHubClient(credential: GitHubCredential) {
         activeGitHubCredential = credential
         githubClient = GitHubClient(
@@ -1289,7 +1284,6 @@ final class AppModel: ObservableObject {
             switch completion {
             case let .success(token):
                 configureGitHubClient(credential: .oauthUserToken(token.accessToken))
-                tokenInput = ""
                 grantedGitHubScopes = token.scopes
                 validatedGitHubLogin = nil
                 credentialKindDescription = AppL10n.string(GitHubCredentialKind.oauthUserToken.displayName)
@@ -1369,7 +1363,7 @@ final class AppModel: ObservableObject {
 
     private func processBackgroundReviewQueue() async {
         guard let githubClient else {
-            statusMessage = AppL10n.string("Add a GitHub token first.")
+            statusMessage = AppL10n.string("Sign in with GitHub first.")
             return
         }
 
@@ -1629,7 +1623,7 @@ final class AppModel: ObservableObject {
 
     private var tokenValidationReadiness: ReadinessProbeState {
         guard hasToken else {
-            return .unknown(AppL10n.string("Load or save a GitHub token before validating scopes."))
+            return .unknown(AppL10n.string("Sign in with GitHub before validating scopes."))
         }
 
         if let message = selectedRepositoryAccessMessage {
