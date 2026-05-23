@@ -17,6 +17,7 @@
 "Background Queue" = "Background Queue";
 "Cancel background queue" = "Cancel background queue";
 "Run queued draft generation" = "Run queued draft generation";
+"Run `codex login` in Terminal and sign in with ChatGPT, then check Codex readiness." = "Run `codex login` in Terminal and sign in with ChatGPT, then check Codex readiness.";
 "No watched pull requests." = "No watched pull requests.";
 "Remove from queue" = "Remove from queue";
 "No Pull Request Selected" = "No Pull Request Selected";
@@ -73,6 +74,7 @@
 "GitHub scopes" = "GitHub scopes";
 "Codex CLI" = "Codex CLI";
 "Codex login" = "Codex login";
+"ChatGPT Codex login" = "ChatGPT Codex login";
 "Privacy disclosure" = "Privacy disclosure";
 "OAuth credential loaded from Keychain." = "OAuth credential loaded from Keychain.";
 "Sign in with GitHub OAuth." = "Sign in with GitHub OAuth.";
@@ -104,6 +106,8 @@
 "OAuth authorization must be revoked on GitHub. Deleting here only removes the local credential." = "OAuth authorization must be revoked on GitHub. Deleting here only removes the local credential.";
 "Validate" = "Validate";
 "Codex" = "Codex";
+"Codex for ChatGPT" = "Codex for ChatGPT";
+"PR Review Desk uses your local Codex CLI session. Sign in with ChatGPT to generate review drafts." = "PR Review Desk uses your local Codex CLI session. Sign in with ChatGPT to generate AI review drafts.";
 "Check" = "Check";
 "Privacy" = "Privacy";
 "When you generate a review, PR metadata and reviewable patch content may be sent to Codex and OpenAI. Omitted files without GitHub patch content are not sent to Codex by this app." = "When you generate an AI review draft, PR metadata and reviewable patch content may be sent to Codex and OpenAI. Omitted files without GitHub patch content are not sent to Codex by this app.";
@@ -147,6 +151,7 @@
 "Failed" = "Failed";
 "Finish setup" = "Finish setup";
 "Connect GitHub, confirm Codex readiness, and acknowledge privacy before generating reviews." = "Connect GitHub, confirm Codex readiness, and acknowledge privacy before generating AI review drafts.";
+"Connect GitHub, confirm Codex CLI and ChatGPT login, and acknowledge privacy before generating reviews." = "Connect GitHub, confirm Codex CLI and ChatGPT login, and acknowledge privacy before generating AI review drafts.";
 "Guided setup path" = "Guided setup path";
 "GitHub access" = "GitHub access";
 "GitHub credential and scopes are ready." = "GitHub credential and scopes are ready.";
@@ -159,6 +164,10 @@
 "Codex readiness" = "Codex readiness";
 "Codex CLI and login are ready." = "Codex CLI and login are ready.";
 "Check that Codex CLI is installed and logged in before generating reviews." = "Check that Codex CLI is installed and logged in before generating AI review drafts.";
+"Codex CLI is available on PATH." = "Codex CLI is available on PATH.";
+"Check that Codex CLI is installed and available on PATH." = "Check that Codex CLI is installed and available on PATH.";
+"Codex is signed in with ChatGPT." = "Codex is signed in with ChatGPT.";
+"Run `codex login` and sign in with ChatGPT before generating reviews." = "Run `codex login` and sign in with ChatGPT before generating AI review drafts.";
 "Check Codex" = "Check Codex";
 "Privacy acknowledgement" = "Privacy acknowledgement";
 "Privacy disclosure is acknowledged." = "Privacy disclosure is acknowledged.";
@@ -283,6 +292,7 @@
 "Cancelling background review queue..." = "Cancelling background review queue...";
 "Cancelling current operation..." = "Cancelling current operation...";
 "Check Codex login status. If needed, run `codex login` in Terminal." = "Check Codex login status. If needed, run `codex login` in Terminal.";
+"Check ChatGPT Codex login status. If needed, run `codex login` in Terminal." = "Check ChatGPT Codex login status. If needed, run `codex login` in Terminal.";
 "Check GitHub access, token scopes, and the repository state, then retry." = "Check GitHub access, token scopes, and the repository state, then retry.";
 "Check the OAuth App client ID and network access, then start sign-in again." = "Check the OAuth App client ID and network access, then start sign-in again.";
 "Check the details, adjust the input if needed, then retry." = "Check the details, adjust the input if needed, then retry.";
@@ -290,10 +300,16 @@
 "Checking Codex CLI..." = "Checking Codex CLI...";
 "Cleared remembered private repository consent." = "Cleared remembered private repository consent.";
 "Codex CLI found. Codex login needs action." = "Codex CLI found. Codex login needs action.";
+"Codex CLI found. ChatGPT Codex login needs action." = "Codex CLI found. ChatGPT Codex login needs action.";
 "Codex CLI not found on PATH." = "Codex CLI not found on PATH.";
 "Codex CLI ready." = "Codex CLI ready.";
+"Codex CLI ready for ChatGPT." = "Codex CLI ready for ChatGPT.";
+"Codex access-token login is not supported. Sign in to Codex with ChatGPT." = "Codex access-token login is not supported. Sign in to Codex with ChatGPT.";
+"Codex login method could not be verified. Sign in to Codex with ChatGPT." = "Codex login method could not be verified. Sign in to Codex with ChatGPT.";
+"Codex login must use ChatGPT." = "Codex login must use ChatGPT.";
 "Copied GitHub device code." = "Copied GitHub device code.";
 "Copied codex login. Run it in Terminal, then check Codex readiness." = "Copied codex login. Run it in Terminal, then check Codex readiness.";
+"Copied codex login. Run it in Terminal, sign in with ChatGPT, then check Codex readiness." = "Copied codex login. Run it in Terminal, sign in with ChatGPT, then check Codex readiness.";
 "Could not delete token: %@" = "Could not delete token: %@";
 "Could not load token: %@" = "Could not load token: %@";
 "Deselect invalid comments, refresh safety, or regenerate the draft." = "Deselect invalid comments, refresh safety, or regenerate the draft.";
@@ -325,7 +341,9 @@
 "GitHub sign-in failed: %@" = "GitHub sign-in failed: %@";
 "GitHub sign-in was denied." = "GitHub sign-in was denied.";
 "Install or expose Codex CLI before checking login." = "Install or expose Codex CLI before checking login.";
+"Install or expose Codex CLI before checking ChatGPT login." = "Install or expose Codex CLI before checking ChatGPT login.";
 "Install or expose the Codex CLI on PATH, then retry generation." = "Install or expose the Codex CLI on PATH, then retry generation.";
+"Logged in using ChatGPT" = "Logged in using ChatGPT";
 "Loaded %d changed files. %@" = "Loaded %d changed files. %@";
 "Loaded %d open pull requests." = "Loaded %d open pull requests.";
 "Loaded %d repositories." = "Loaded %d repositories.";
@@ -348,6 +366,8 @@
 "Not found on PATH." = "Not found on PATH.";
 "Not logged in. %@" = "Not logged in. %@";
 "Not logged in. Run `codex login` in Terminal." = "Not logged in. Run `codex login` in Terminal.";
+"Not logged in. Run `codex login` and sign in with ChatGPT." = "Not logged in. Run `codex login` and sign in with ChatGPT.";
+"OpenAI API-key login is not supported. Sign in to Codex with ChatGPT." = "OpenAI API-key login is not supported. Sign in to Codex with ChatGPT.";
 "Not started." = "Not started.";
 "Not validated." = "Not validated.";
 "No OAuth credential saved." = "No OAuth credential saved.";
@@ -383,6 +403,7 @@
 "Sign in with GitHub before validating scopes." = "Sign in with GitHub before validating scopes.";
 "Sign in with GitHub first." = "Sign in with GitHub first.";
 "Sign in with GitHub to load repositories." = "Sign in with GitHub to load repositories.";
+"Sign in to Codex with ChatGPT before generating an AI review draft." = "Sign in to Codex with ChatGPT before generating an AI review draft.";
 "Start generation again when ready." = "Start generation again when ready.";
 "Starting GitHub sign-in..." = "Starting GitHub sign-in...";
 "Submit safety refreshed. %@" = "Submit safety refreshed. %@";

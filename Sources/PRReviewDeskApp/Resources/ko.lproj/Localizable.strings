@@ -17,6 +17,7 @@
 "Background Queue" = "백그라운드 대기열";
 "Cancel background queue" = "백그라운드 대기열 취소";
 "Run queued draft generation" = "대기 중인 초안 생성 실행";
+"Run `codex login` in Terminal and sign in with ChatGPT, then check Codex readiness." = "터미널에서 `codex login`을 실행하고 ChatGPT로 로그인한 뒤 Codex 준비 상태를 확인하세요.";
 "No watched pull requests." = "감시 중인 pull request가 없습니다.";
 "Remove from queue" = "대기열에서 제거";
 "No Pull Request Selected" = "선택된 Pull Request 없음";
@@ -73,6 +74,7 @@
 "GitHub scopes" = "GitHub 권한 범위";
 "Codex CLI" = "Codex CLI";
 "Codex login" = "Codex 로그인";
+"ChatGPT Codex login" = "ChatGPT Codex 로그인";
 "Privacy disclosure" = "개인정보 고지";
 "OAuth credential loaded from Keychain." = "키체인에서 OAuth 자격 증명을 불러왔습니다.";
 "Sign in with GitHub OAuth." = "GitHub OAuth로 로그인하세요.";
@@ -104,6 +106,8 @@
 "OAuth authorization must be revoked on GitHub. Deleting here only removes the local credential." = "OAuth 권한은 GitHub에서 해제해야 합니다. 여기서 삭제하면 로컬 자격 증명만 제거됩니다.";
 "Validate" = "검증";
 "Codex" = "Codex";
+"Codex for ChatGPT" = "ChatGPT용 Codex";
+"PR Review Desk uses your local Codex CLI session. Sign in with ChatGPT to generate review drafts." = "PR Review Desk는 로컬 Codex CLI 세션을 사용합니다. AI 리뷰 초안을 생성하려면 ChatGPT로 로그인하세요.";
 "Check" = "확인";
 "Privacy" = "개인정보";
 "When you generate a review, PR metadata and reviewable patch content may be sent to Codex and OpenAI. Omitted files without GitHub patch content are not sent to Codex by this app." = "AI 리뷰 초안을 생성하면 PR 메타데이터와 검토 가능한 패치 내용이 Codex와 OpenAI로 전송될 수 있습니다. GitHub 패치 내용이 없는 생략 파일은 이 앱에서 Codex로 보내지 않습니다.";
@@ -147,6 +151,7 @@
 "Failed" = "실패";
 "Finish setup" = "설정 완료";
 "Connect GitHub, confirm Codex readiness, and acknowledge privacy before generating reviews." = "AI 리뷰 초안을 생성하기 전에 GitHub를 연결하고 Codex 준비 상태와 개인정보 고지를 확인하세요.";
+"Connect GitHub, confirm Codex CLI and ChatGPT login, and acknowledge privacy before generating reviews." = "AI 리뷰 초안을 생성하기 전에 GitHub를 연결하고 Codex CLI, ChatGPT 로그인, 개인정보 고지를 확인하세요.";
 "Guided setup path" = "안내 설정 경로";
 "GitHub access" = "GitHub 접근";
 "GitHub credential and scopes are ready." = "GitHub 자격 증명과 권한 범위가 준비되었습니다.";
@@ -159,6 +164,10 @@
 "Codex readiness" = "Codex 준비 상태";
 "Codex CLI and login are ready." = "Codex CLI와 로그인이 준비되었습니다.";
 "Check that Codex CLI is installed and logged in before generating reviews." = "AI 리뷰 초안을 생성하기 전에 Codex CLI가 설치되어 있고 로그인되어 있는지 확인하세요.";
+"Codex CLI is available on PATH." = "Codex CLI를 PATH에서 사용할 수 있습니다.";
+"Check that Codex CLI is installed and available on PATH." = "Codex CLI가 설치되어 있고 PATH에서 사용 가능한지 확인하세요.";
+"Codex is signed in with ChatGPT." = "Codex가 ChatGPT로 로그인되어 있습니다.";
+"Run `codex login` and sign in with ChatGPT before generating reviews." = "AI 리뷰 초안을 생성하기 전에 `codex login`을 실행하고 ChatGPT로 로그인하세요.";
 "Check Codex" = "Codex 확인";
 "Privacy acknowledgement" = "개인정보 확인";
 "Privacy disclosure is acknowledged." = "개인정보 고지를 확인했습니다.";
@@ -286,14 +295,21 @@
 "Check GitHub access, token scopes, and the repository state, then retry." = "GitHub 접근 권한, 토큰 범위, 저장소 상태를 확인한 뒤 다시 시도하세요.";
 "Check the OAuth App client ID and network access, then start sign-in again." = "OAuth 앱 클라이언트 ID와 네트워크 접근을 확인한 뒤 로그인을 다시 시작하세요.";
 "Check the details, adjust the input if needed, then retry." = "세부 정보를 확인하고 필요하면 입력을 수정한 뒤 다시 시도하세요.";
+"Check ChatGPT Codex login status. If needed, run `codex login` in Terminal." = "ChatGPT Codex 로그인 상태를 확인하세요. 필요하면 터미널에서 `codex login`을 실행하세요.";
 "Check whether the Codex CLI is available on PATH." = "Codex CLI가 PATH에서 사용 가능한지 확인하세요.";
 "Checking Codex CLI..." = "Codex CLI 확인 중...";
 "Cleared remembered private repository consent." = "저장된 비공개 저장소 동의를 지웠습니다.";
 "Codex CLI found. Codex login needs action." = "Codex CLI를 찾았습니다. Codex 로그인이 필요합니다.";
+"Codex CLI found. ChatGPT Codex login needs action." = "Codex CLI를 찾았습니다. ChatGPT Codex 로그인이 필요합니다.";
 "Codex CLI not found on PATH." = "PATH에서 Codex CLI를 찾을 수 없습니다.";
 "Codex CLI ready." = "Codex CLI가 준비되었습니다.";
+"Codex CLI ready for ChatGPT." = "Codex CLI가 ChatGPT 사용 준비를 마쳤습니다.";
+"Codex access-token login is not supported. Sign in to Codex with ChatGPT." = "Codex 액세스 토큰 로그인은 지원하지 않습니다. ChatGPT로 Codex에 로그인하세요.";
+"Codex login method could not be verified. Sign in to Codex with ChatGPT." = "Codex 로그인 방식을 확인할 수 없습니다. ChatGPT로 Codex에 로그인하세요.";
+"Codex login must use ChatGPT." = "Codex 로그인은 ChatGPT를 사용해야 합니다.";
 "Copied GitHub device code." = "GitHub 디바이스 코드를 복사했습니다.";
 "Copied codex login. Run it in Terminal, then check Codex readiness." = "codex login 명령을 복사했습니다. 터미널에서 실행한 뒤 Codex 준비 상태를 확인하세요.";
+"Copied codex login. Run it in Terminal, sign in with ChatGPT, then check Codex readiness." = "codex login 명령을 복사했습니다. 터미널에서 실행하고 ChatGPT로 로그인한 뒤 Codex 준비 상태를 확인하세요.";
 "Could not delete token: %@" = "토큰을 삭제할 수 없습니다: %@";
 "Could not load token: %@" = "토큰을 불러올 수 없습니다: %@";
 "Deselect invalid comments, refresh safety, or regenerate the draft." = "유효하지 않은 코멘트 선택을 해제하거나 안전 상태를 새로 고치거나 초안을 다시 생성하세요.";
@@ -325,7 +341,9 @@
 "GitHub sign-in failed: %@" = "GitHub 로그인 실패: %@";
 "GitHub sign-in was denied." = "GitHub 로그인이 거부되었습니다.";
 "Install or expose Codex CLI before checking login." = "로그인을 확인하기 전에 Codex CLI를 설치하거나 PATH에 노출하세요.";
+"Install or expose Codex CLI before checking ChatGPT login." = "ChatGPT 로그인을 확인하기 전에 Codex CLI를 설치하거나 PATH에 노출하세요.";
 "Install or expose the Codex CLI on PATH, then retry generation." = "Codex CLI를 설치하거나 PATH에 노출한 뒤 생성을 다시 시도하세요.";
+"Logged in using ChatGPT" = "ChatGPT로 로그인됨";
 "Loaded %d changed files. %@" = "변경 파일 %d개를 불러왔습니다. %@";
 "Loaded %d open pull requests." = "열린 pull request %d개를 불러왔습니다.";
 "Loaded %d repositories." = "저장소 %d개를 불러왔습니다.";
@@ -348,6 +366,8 @@
 "Not found on PATH." = "PATH에서 찾을 수 없음.";
 "Not logged in. %@" = "로그인되지 않음. %@";
 "Not logged in. Run `codex login` in Terminal." = "로그인되지 않았습니다. 터미널에서 `codex login`을 실행하세요.";
+"Not logged in. Run `codex login` and sign in with ChatGPT." = "로그인되지 않았습니다. `codex login`을 실행하고 ChatGPT로 로그인하세요.";
+"OpenAI API-key login is not supported. Sign in to Codex with ChatGPT." = "OpenAI API 키 로그인은 지원하지 않습니다. ChatGPT로 Codex에 로그인하세요.";
 "Not started." = "시작 안 함.";
 "Not validated." = "검증 안 됨.";
 "No OAuth credential saved." = "저장된 OAuth 자격 증명이 없습니다.";
@@ -383,6 +403,7 @@
 "Sign in with GitHub before validating scopes." = "범위를 검증하기 전에 GitHub로 로그인하세요.";
 "Sign in with GitHub first." = "먼저 GitHub로 로그인하세요.";
 "Sign in with GitHub to load repositories." = "저장소를 불러오려면 GitHub로 로그인하세요.";
+"Sign in to Codex with ChatGPT before generating an AI review draft." = "AI 리뷰 초안을 생성하기 전에 ChatGPT로 Codex에 로그인하세요.";
 "Start generation again when ready." = "준비되면 생성을 다시 시작하세요.";
 "Starting GitHub sign-in..." = "GitHub 로그인 시작 중...";
 "Submit safety refreshed. %@" = "제출 안전 상태를 새로 고쳤습니다. %@";

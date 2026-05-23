@@ -107,6 +107,7 @@ final class AppModel: ObservableObject {
     private let oauthDeviceFlowClient: GitHubOAuthDeviceFlowClient
     private let gitHubOAuthClientID: String
     private let codexAgent: CodexReviewAgent
+    private let codexAuthenticationChecker: any CodexAuthenticationChecking
     private let reviewDraftStore: any ReviewDraftStore
     private let userDefaults: UserDefaults
     private var githubClient: GitHubClient?
@@ -340,6 +341,7 @@ final class AppModel: ObservableObject {
         oauthDeviceFlowClient: GitHubOAuthDeviceFlowClient = GitHubOAuthDeviceFlowClient(),
         gitHubOAuthClientID: String = AppModel.defaultGitHubOAuthClientID,
         codexAgent: CodexReviewAgent = CodexReviewAgent(),
+        codexAuthenticationChecker: any CodexAuthenticationChecking = CodexCLIAuthenticationChecker(),
         reviewDraftStore: any ReviewDraftStore = FileReviewDraftStore.appDefault(),
         userDefaults: UserDefaults = .standard
     ) {
@@ -356,6 +358,7 @@ final class AppModel: ObservableObject {
         self.oauthDeviceFlowClient = oauthDeviceFlowClient
         self.gitHubOAuthClientID = gitHubOAuthClientID
         self.codexAgent = codexAgent
+        self.codexAuthenticationChecker = codexAuthenticationChecker
         self.reviewDraftStore = reviewDraftStore
         self.userDefaults = userDefaults
         self.isPrivacyDisclosureAcknowledged = userDefaults.bool(forKey: Self.privacyDisclosureAcknowledgedKey)
@@ -499,48 +502,8 @@ final class AppModel: ObservableObject {
 
     func refreshCodexCLIStatus() async {
         await runWorking(AppL10n.string("Checking Codex CLI...")) {
-            let runner = ProcessCommandRunner()
-            let result = try await runner.run(
-                executable: "which",
-                arguments: ["codex"],
-                standardInput: "",
-                workingDirectory: nil,
-                timeout: 2
-            )
-
-            if result.exitCode == 0 {
-                codexCLIStatus = AppL10n.string(
-                    "Found at %@.",
-                    result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
-                )
-                codexCLIReadinessStatus = .ready
-                let loginResult = try await runner.run(
-                    executable: "codex",
-                    arguments: ["login", "status"],
-                    standardInput: "",
-                    workingDirectory: nil,
-                    timeout: 5
-                )
-
-                if loginResult.exitCode == 0 {
-                    codexLoginStatus = loginResult.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
-                    codexLoginReadinessStatus = .ready
-                    statusMessage = AppL10n.string("Codex CLI ready.")
-                } else {
-                    let details = SensitiveTextRedactor.redact(loginResult.standardError)
-                    codexLoginStatus = details.isEmpty
-                        ? AppL10n.string("Not logged in. Run `codex login` in Terminal.")
-                        : AppL10n.string("Not logged in. %@", details)
-                    codexLoginReadinessStatus = .needsAction
-                    statusMessage = AppL10n.string("Codex CLI found. Codex login needs action.")
-                }
-            } else {
-                codexCLIStatus = AppL10n.string("Not found on PATH.")
-                codexLoginStatus = AppL10n.string("Install or expose Codex CLI before checking login.")
-                codexCLIReadinessStatus = .needsAction
-                codexLoginReadinessStatus = .needsAction
-                statusMessage = AppL10n.string("Codex CLI not found on PATH.")
-            }
+            let state = try await codexAuthenticationChecker.status()
+            applyCodexAuthenticationState(state, announceStatus: true)
         }
     }
 
@@ -831,6 +794,10 @@ final class AppModel: ObservableObject {
         }
 
         await runWorking(AppL10n.string("Generating Codex review draft..."), isCancellable: true) {
+            guard try await requireCodexChatGPTLogin(operation: AppL10n.string("Generate review")) else {
+                return
+            }
+
             let pullRequestForReview: PullRequest
             if let githubClient {
                 pullRequestForReview = try await githubClient.pullRequestDetails(
@@ -1116,7 +1083,7 @@ final class AppModel: ObservableObject {
     func copyCodexLoginCommand() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString("codex login", forType: .string)
-        statusMessage = AppL10n.string("Copied codex login. Run it in Terminal, then check Codex readiness.")
+        statusMessage = AppL10n.string("Copied codex login. Run it in Terminal, sign in with ChatGPT, then check Codex readiness.")
     }
 
     func openSelectedPullRequestInBrowser() {
@@ -1404,15 +1371,30 @@ final class AppModel: ObservableObject {
                 return
             }
 
-            backgroundReviewQueue.markGenerating(id: item.id)
-            statusMessage = AppL10n.string(
-                "Generating draft-only review for %@#%d...",
-                item.repository.fullName,
-                item.pullRequest.number
-            )
-
             do {
                 try Task.checkCancellation()
+                let codexAuthState = try await codexAuthenticationChecker.status()
+                applyCodexAuthenticationState(codexAuthState, announceStatus: false)
+                guard codexAuthState.isReadyForChatGPTSubscription else {
+                    let summary = codexAuthenticationBlockedSummary(for: codexAuthState)
+                    let recoverySuggestion = codexAuthenticationRecoverySuggestion(for: codexAuthState)
+                    backgroundReviewQueue.markFailed(id: item.id, message: summary)
+                    recoverableError = RecoverableErrorDetails(
+                        operation: AppL10n.string("Background review for #%d", item.pullRequest.number),
+                        summary: summary,
+                        details: "\(summary)\n\(recoverySuggestion)",
+                        recoverySuggestion: recoverySuggestion
+                    )
+                    statusMessage = AppL10n.string("Background review blocked for #%d.", item.pullRequest.number)
+                    continue
+                }
+
+                backgroundReviewQueue.markGenerating(id: item.id)
+                statusMessage = AppL10n.string(
+                    "Generating draft-only review for %@#%d...",
+                    item.repository.fullName,
+                    item.pullRequest.number
+                )
                 let currentPullRequest = try await githubClient.pullRequestDetails(
                     repository: item.repository,
                     number: item.pullRequest.number
@@ -1658,7 +1640,99 @@ final class AppModel: ObservableObject {
         case .needsAction:
             return .needsAction(codexLoginStatus)
         case .unknown:
-            return .unknown(AppL10n.string("Check Codex login status. If needed, run `codex login` in Terminal."))
+            return .unknown(AppL10n.string("Check ChatGPT Codex login status. If needed, run `codex login` in Terminal."))
+        }
+    }
+
+    private func applyCodexAuthenticationState(_ state: CodexAuthenticationState, announceStatus: Bool) {
+        switch state {
+        case let .unknown(message):
+            codexCLIStatus = AppL10n.string(message)
+            codexLoginStatus = AppL10n.string("Check ChatGPT Codex login status. If needed, run `codex login` in Terminal.")
+            codexCLIReadinessStatus = .unknown
+            codexLoginReadinessStatus = .unknown
+            if announceStatus {
+                statusMessage = AppL10n.string(message)
+            }
+        case let .missingCLI(message):
+            codexCLIStatus = AppL10n.string(message)
+            codexLoginStatus = AppL10n.string("Install or expose Codex CLI before checking ChatGPT login.")
+            codexCLIReadinessStatus = .needsAction
+            codexLoginReadinessStatus = .needsAction
+            if announceStatus {
+                statusMessage = AppL10n.string("Codex CLI not found on PATH.")
+            }
+        case let .notLoggedIn(executablePath, message):
+            codexCLIStatus = AppL10n.string("Found at %@.", executablePath)
+            codexLoginStatus = AppL10n.string(message)
+            codexCLIReadinessStatus = .ready
+            codexLoginReadinessStatus = .needsAction
+            if announceStatus {
+                statusMessage = AppL10n.string("Codex CLI found. ChatGPT Codex login needs action.")
+            }
+        case let .unsupportedLogin(executablePath, _, message):
+            codexCLIStatus = AppL10n.string("Found at %@.", executablePath)
+            codexLoginStatus = AppL10n.string(message)
+            codexCLIReadinessStatus = .ready
+            codexLoginReadinessStatus = .needsAction
+            if announceStatus {
+                statusMessage = AppL10n.string("Codex login must use ChatGPT.")
+            }
+        case let .ready(executablePath, _, message):
+            codexCLIStatus = AppL10n.string("Found at %@.", executablePath)
+            codexLoginStatus = AppL10n.string(message)
+            codexCLIReadinessStatus = .ready
+            codexLoginReadinessStatus = .ready
+            if announceStatus {
+                statusMessage = AppL10n.string("Codex CLI ready for ChatGPT.")
+            }
+        }
+    }
+
+    private func requireCodexChatGPTLogin(operation: String) async throws -> Bool {
+        let state = try await codexAuthenticationChecker.status()
+        applyCodexAuthenticationState(state, announceStatus: false)
+
+        guard state.isReadyForChatGPTSubscription else {
+            let summary = codexAuthenticationBlockedSummary(for: state)
+            let recoverySuggestion = codexAuthenticationRecoverySuggestion(for: state)
+            recoverableError = RecoverableErrorDetails(
+                operation: operation,
+                summary: summary,
+                details: "\(summary)\n\(recoverySuggestion)",
+                recoverySuggestion: recoverySuggestion
+            )
+            statusMessage = summary
+            return false
+        }
+
+        return true
+    }
+
+    private func codexAuthenticationBlockedSummary(for state: CodexAuthenticationState) -> String {
+        switch state {
+        case .missingCLI:
+            return AppL10n.string("Codex CLI not found on PATH.")
+        case .notLoggedIn:
+            return AppL10n.string("Sign in to Codex with ChatGPT before generating an AI review draft.")
+        case .unsupportedLogin:
+            return AppL10n.string("Codex login must use ChatGPT.")
+        case .unknown:
+            return AppL10n.string("Codex login method could not be verified. Sign in to Codex with ChatGPT.")
+        case .ready:
+            return AppL10n.string("Codex CLI ready for ChatGPT.")
+        }
+    }
+
+    private func codexAuthenticationRecoverySuggestion(for state: CodexAuthenticationState) -> String {
+        switch state {
+        case .missingCLI:
+            return AppL10n.string("Install or expose the Codex CLI on PATH, then retry generation.")
+        case .notLoggedIn,
+             .unsupportedLogin,
+             .unknown,
+             .ready:
+            return AppL10n.string("Run `codex login` in Terminal and sign in with ChatGPT, then check Codex readiness.")
         }
     }
 

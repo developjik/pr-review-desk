@@ -110,7 +110,7 @@ public struct ReadinessChecklist: Equatable, Hashable, Sendable {
             ),
             ReadinessChecklistItem(
                 id: .codexLogin,
-                title: "Codex login",
+                title: "ChatGPT Codex login",
                 detail: codexLogin.detail,
                 state: codexLogin.itemState,
                 action: .copyCodexLoginCommand,

@@ -367,7 +367,7 @@ private struct FirstRunSetupView: View {
                     .font(.title3)
                     .fontWeight(.semibold)
 
-                Text(AppL10n.string("Connect GitHub, confirm Codex readiness, and acknowledge privacy before generating reviews."))
+                Text(AppL10n.string("Connect GitHub, confirm Codex CLI and ChatGPT login, and acknowledge privacy before generating reviews."))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -391,14 +391,18 @@ private struct FirstRunSetupView: View {
         let gitHubReady = checklist.items
             .filter { $0.id == .githubCredential || $0.id == .githubTokenValidation }
             .allSatisfy { $0.state == .ready }
-        let codexReady = checklist.items
-            .filter { $0.id == .codexCLI || $0.id == .codexLogin }
-            .allSatisfy { $0.state == .ready }
+        let codexCLIReady = checklist.items
+            .first { $0.id == .codexCLI }?
+            .state == .ready
+        let codexLoginReady = checklist.items
+            .first { $0.id == .codexLogin }?
+            .state == .ready
 
         return FirstRunSetupPresentation.steps(
             hasGitHubCredential: model.hasToken,
             isGitHubReady: gitHubReady,
-            isCodexReady: codexReady,
+            isCodexCLIReady: codexCLIReady,
+            isCodexChatGPTLoginReady: codexLoginReady,
             isPrivacyAcknowledged: model.isPrivacyDisclosureAcknowledged
         )
     }
@@ -457,6 +461,15 @@ private struct FirstRunSetupView: View {
                 .controlSize(.small)
                 .disabled(model.isWorking)
                 .smokeAccessibilityIdentifier("first-run.codex.check")
+            case "codexLogin":
+                Button {
+                    model.copyCodexLoginCommand()
+                } label: {
+                    Label(AppL10n.string(step.actionTitle), systemImage: "doc.on.doc")
+                }
+                .controlSize(.small)
+                .disabled(model.isWorking)
+                .smokeAccessibilityIdentifier("first-run.codex-login.copy")
             case "privacy":
                 Button {
                     model.acknowledgePrivacyDisclosure()
