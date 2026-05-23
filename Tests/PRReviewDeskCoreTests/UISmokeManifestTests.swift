@@ -22,7 +22,12 @@ enum UISmokeManifestTests {
         try expectTrue(manifest.requiredLocalizationKeys.contains("Last checked at %@ UTC."))
         try expectTrue(manifest.requiredLocalizationKeys.contains("No matching repositories"))
         try expectTrue(manifest.requiredLocalizationKeys.contains("Clear search"))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("No open pull requests in this repository."))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("Watch all"))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("Awaiting selection"))
         try expectTrue(manifest.requiredLocalizationKeys.contains("Regenerate"))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("Replace personal access token"))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("Cancel Review Generation"))
         try expectEqual(Set(manifest.requiredLocalizationKeys).count, manifest.requiredLocalizationKeys.count)
     }
 

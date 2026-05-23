@@ -59,6 +59,8 @@ struct ReviewInboxSidebarView: View {
                                         repository: repository,
                                         isSelected: model.selectedRepository?.id == repository.id
                                     )
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -145,6 +147,8 @@ private struct RepositoryFilterRow: View {
                     .accessibilityHidden(true)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(repository.fullName), \(repository.isPrivate ? "private" : "public")")
     }

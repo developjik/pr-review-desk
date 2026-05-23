@@ -4,7 +4,10 @@ import PRReviewDeskCore
 enum ReviewInboxFilterPresentationTests {
     static func run() throws {
         try testActiveSearchSummaryUsesTrimmedQuery()
+        try testPullRequestCountUsesSingularAndPluralCopy()
         try testFilteredEmptyDescriptionExplainsHiddenRows()
+        try testSelectedRepositoryEmptyDescriptionExplainsNoOpenPullRequests()
+        try testHiddenSelectionClearsOnlyForActiveSearch()
         try testSelectionClearedMessageMentionsSavedDraftRecovery()
     }
 
@@ -19,6 +22,17 @@ enum ReviewInboxFilterPresentationTests {
         )
     }
 
+    private static func testPullRequestCountUsesSingularAndPluralCopy() throws {
+        try expectEqual(
+            ReviewInboxFilterPresentation.pullRequestCountTitle(1),
+            "1 pull request"
+        )
+        try expectEqual(
+            ReviewInboxFilterPresentation.pullRequestCountTitle(2),
+            "2 pull requests"
+        )
+    }
+
     private static func testFilteredEmptyDescriptionExplainsHiddenRows() throws {
         try expectEqual(
             ReviewInboxFilterPresentation.emptyDescription(
@@ -27,6 +41,43 @@ enum ReviewInboxFilterPresentationTests {
                 hasSelectedRepository: true
             ),
             "Search \"cache\" is hiding pull requests in this repository. Clear search to show saved drafts and open PRs again."
+        )
+    }
+
+    private static func testSelectedRepositoryEmptyDescriptionExplainsNoOpenPullRequests() throws {
+        try expectEqual(
+            ReviewInboxFilterPresentation.emptyDescription(
+                section: .recents,
+                query: "",
+                hasSelectedRepository: true
+            ),
+            "No open pull requests in this repository."
+        )
+        try expectEqual(
+            ReviewInboxFilterPresentation.emptyDescription(
+                section: .recents,
+                query: "",
+                hasSelectedRepository: false
+            ),
+            "Select a repository to load open pull requests."
+        )
+    }
+
+    private static func testHiddenSelectionClearsOnlyForActiveSearch() throws {
+        try expectEqual(
+            ReviewInboxFilterPresentation.shouldClearHiddenSelection(query: "", hasLocalSelection: false),
+            false
+        )
+        try expectEqual(
+            ReviewInboxFilterPresentation.shouldClearHiddenSelection(query: "   ", hasLocalSelection: false),
+            false
+        )
+        try expectTrue(
+            ReviewInboxFilterPresentation.shouldClearHiddenSelection(query: "stale", hasLocalSelection: false)
+        )
+        try expectEqual(
+            ReviewInboxFilterPresentation.shouldClearHiddenSelection(query: "stale", hasLocalSelection: true),
+            false
         )
     }
 

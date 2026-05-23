@@ -4,6 +4,7 @@ import PRReviewDeskCore
 struct ReviewInboxView: View {
     @ObservedObject var model: AppModel
     let selectedSection: ReviewInboxSection
+    @State private var selectedRowID: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -15,17 +16,33 @@ struct ReviewInboxView: View {
             } else if rows.isEmpty {
                 emptyState
             } else {
-                List(rows, selection: selectedRowIDBinding) { row in
+                List(rows, selection: $selectedRowID) { row in
                     PullRequestTriageRowView(
                         row: row,
                         isSelected: isSelected(row)
                     )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedRowID = row.id
+                    }
                     .tag(row.id)
                 }
                 .listStyle(.inset)
             }
         }
         .navigationTitle(AppL10n.string(selectedSection.displayName))
+        .onAppear {
+            syncSelectedRowIDFromModel()
+        }
+        .onChange(of: selectedRowID) { _, newValue in
+            selectVisibleRow(with: newValue)
+        }
+        .onChange(of: model.selectedRepository?.id) { _, _ in
+            syncSelectedRowIDFromModel()
+        }
+        .onChange(of: model.selectedPullRequest?.id) { _, _ in
+            syncSelectedRowIDFromModel()
+        }
         .onChange(of: selectedSection) { _, _ in
             Task {
                 await syncSelectionToVisibleRows()
@@ -60,30 +77,37 @@ struct ReviewInboxView: View {
             }
 
             HStack(spacing: 8) {
-                Text(AppL10n.string("%d pull requests", rows.count))
+                Text(AppL10n.string(ReviewInboxFilterPresentation.pullRequestCountLocalizationKey(for: rows.count), rows.count))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if let activeSearchSummary {
+                Spacer()
+
+                if model.canWatchSelectedRepository {
+                    Button {
+                        model.startWatchingSelectedRepository()
+                    } label: {
+                        Label(AppL10n.string("Watch all"), systemImage: "eye")
+                    }
+                    .controlSize(.small)
+                    .help(AppL10n.string("Watch all open pull requests in this repository"))
+                }
+            }
+
+            if let activeSearchSummary {
+                HStack(spacing: 8) {
                     StatusBadge(title: activeSearchSummary, systemImage: "magnifyingglass", tone: .info)
+                        .lineLimit(1)
+
                     Button {
                         clearPullRequestSearch()
                     } label: {
                         Label(AppL10n.string("Clear search"), systemImage: "xmark.circle")
                     }
                     .controlSize(.small)
-                }
 
-                if model.canWatchSelectedRepository {
-                    Button {
-                        model.startWatchingSelectedRepository()
-                    } label: {
-                        Label(AppL10n.string("Watch all open pull requests in this repository"), systemImage: "eye")
-                    }
-                    .controlSize(.small)
+                    Spacer()
                 }
-
-                Spacer()
             }
         }
         .padding()
@@ -150,43 +174,78 @@ struct ReviewInboxView: View {
     }
 
     private func isSelected(_ row: PullRequestTriageRow) -> Bool {
-        model.selectedRepository?.fullName == row.repositoryFullName
-            && model.selectedPullRequest?.number == row.number
+        selectedRowID == row.id
+            || (
+                model.selectedRepository?.id == row.repository.id
+                    && model.selectedPullRequest?.id == row.pullRequest.id
+            )
     }
 
-    private var selectedRowIDBinding: Binding<String?> {
-        Binding(
-            get: {
-                rows.first(where: isSelected)?.id
-            },
-            set: { newValue in
-                guard let newValue,
-                      let row = rows.first(where: { $0.id == newValue }) else {
-                    return
-                }
+    private func selectVisibleRow(with rowID: String?) {
+        guard let rowID,
+              let row = rows.first(where: { $0.id == rowID }),
+              !(model.selectedRepository?.id == row.repository.id && model.selectedPullRequest?.id == row.pullRequest.id) else {
+            return
+        }
 
-                Task {
-                    await model.selectTriageRow(row)
-                }
+        Task {
+            await model.selectTriageRow(row)
+        }
+    }
+
+    private func syncSelectedRowIDFromModel() {
+        if let modelSelectedRowID = rows.first(where: isModelSelected)?.id {
+            if selectedRowID != modelSelectedRowID {
+                selectedRowID = modelSelectedRowID
             }
-        )
+            return
+        }
+
+        if let selectedRowID,
+           rows.contains(where: { $0.id == selectedRowID }) {
+            return
+        }
+
+        selectedRowID = nil
+    }
+
+    private func isModelSelected(_ row: PullRequestTriageRow) -> Bool {
+        model.selectedRepository?.id == row.repository.id
+            && model.selectedPullRequest?.id == row.pullRequest.id
     }
 
     private func syncSelectionToVisibleRows() async {
         let visiblePullRequests = rows.map(\.pullRequest)
+        guard model.selectedPullRequest != nil else {
+            if let selectedRowID,
+               !rows.contains(where: { $0.id == selectedRowID }) {
+                self.selectedRowID = nil
+            }
+            return
+        }
+
         guard let visibleSelection = StableSelection.visiblePullRequest(
             in: visiblePullRequests,
             previousSelection: model.selectedPullRequest
         ) else {
-            model.clearSelectedPullRequestForVisibleFilter(hasVisibleRows: !rows.isEmpty)
-            return
-        }
-        guard visibleSelection.id != model.selectedPullRequest?.id,
-              let row = rows.first(where: { $0.pullRequest.id == visibleSelection.id }) else {
+            let hadLocalSelection = selectedRowID != nil
+            selectedRowID = nil
+            if ReviewInboxFilterPresentation.shouldClearHiddenSelection(
+                query: model.pullRequestSearchText,
+                hasLocalSelection: hadLocalSelection
+            ) {
+                model.clearSelectedPullRequestForVisibleFilter(hasVisibleRows: !rows.isEmpty)
+            }
             return
         }
 
-        await model.selectTriageRow(row)
+        guard let row = rows.first(where: { $0.pullRequest.id == visibleSelection.id }) else {
+            return
+        }
+
+        if selectedRowID != row.id {
+            selectedRowID = row.id
+        }
     }
 }
 
@@ -245,7 +304,9 @@ private struct PullRequestTriageRowView: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(isSelected ? AppTheme.background(.focus) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Pull request #\(row.number), \(row.title), \(row.draftStatus.displayName)")
     }

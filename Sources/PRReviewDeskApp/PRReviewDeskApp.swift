@@ -99,7 +99,7 @@ struct PRReviewDeskApp: App {
                 .keyboardShortcut("r", modifiers: [.command, .shift])
                 .disabled(!model.canGenerateReview)
 
-                Button(AppL10n.string("Cancel")) {
+                Button(AppL10n.string("Cancel Review Generation")) {
                     model.cancelCurrentOperation()
                 }
                 .keyboardShortcut(".", modifiers: [.command])

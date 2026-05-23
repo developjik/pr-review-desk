@@ -10,6 +10,14 @@ public enum ReviewInboxFilterPresentation {
         return "Search \"\(trimmed)\" - \(visibleCount) visible"
     }
 
+    public static func pullRequestCountTitle(_ count: Int) -> String {
+        "\(count) \(count == 1 ? "pull request" : "pull requests")"
+    }
+
+    public static func pullRequestCountLocalizationKey(for count: Int) -> String {
+        count == 1 ? "%d pull request" : "%d pull requests"
+    }
+
     public static func emptyDescription(
         section: ReviewInboxSection,
         query: String,
@@ -33,8 +41,14 @@ public enum ReviewInboxFilterPresentation {
         case .submitted:
             return "No reviews have been submitted from this queue."
         case .recents:
-            return "Select a repository to load open pull requests."
+            return hasSelectedRepository
+                ? "No open pull requests in this repository."
+                : "Select a repository to load open pull requests."
         }
+    }
+
+    public static func shouldClearHiddenSelection(query: String, hasLocalSelection: Bool) -> Bool {
+        !hasLocalSelection && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     public static func selectionClearedStatus(hasVisibleRows: Bool) -> String {

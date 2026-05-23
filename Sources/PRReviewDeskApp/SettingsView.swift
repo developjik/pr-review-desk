@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var model: AppModel
     @AppStorage("appearance") private var appearanceRawValue = AppAppearance.system.rawValue
+    @State private var isPersonalAccessTokenEditorPresented = false
 
     private var appearanceBinding: Binding<AppAppearance> {
         Binding(
@@ -52,48 +53,10 @@ struct SettingsView: View {
                 }
 
                 if !model.grantedGitHubScopes.isEmpty {
-                    DisclosureGroup(AppL10n.string("Show granted scopes")) {
-                        Text(model.grantedGitHubScopes.joined(separator: ", "))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    grantedScopesDisclosure
                 }
 
-                Text(AppL10n.string("Paste a GitHub token with repository access, save it locally, then validate scopes."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                SecureField(AppL10n.string("Personal access token"), text: $model.tokenInput)
-                    .textFieldStyle(.roundedBorder)
-
-                HStack {
-                    Button {
-                        Task {
-                            await model.saveTokenAndRefresh()
-                        }
-                    } label: {
-                        Label(AppL10n.string("Save or Replace with PAT"), systemImage: "key")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(model.isWorking || model.tokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                    Button {
-                        model.loadStoredToken()
-                    } label: {
-                        Label(AppL10n.string("Load"), systemImage: "lock.open")
-                    }
-                    .disabled(model.isWorking)
-
-                    Button(role: .destructive) {
-                        model.deleteStoredToken()
-                    } label: {
-                        Label(AppL10n.string("Delete Local Credential"), systemImage: "trash")
-                    }
-                    .disabled(model.isWorking || !model.hasToken)
-                }
+                personalAccessTokenControls
 
                 DisclosureGroup(AppL10n.string("Advanced GitHub OAuth")) {
                     TextField(AppL10n.string("OAuth App client ID"), text: $model.oauthClientID)
@@ -173,6 +136,7 @@ struct SettingsView: View {
                         Label(AppL10n.string("Validate"), systemImage: "checkmark.seal")
                     }
                     .disabled(model.isWorking || !model.hasToken)
+                    .smokeAccessibilityIdentifier("settings.github.validate")
                 }
             }
 
@@ -215,6 +179,115 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .padding()
         .frame(width: 620)
+    }
+
+    private var grantedScopesDisclosure: some View {
+        DisclosureGroup(AppL10n.string("Show granted scopes")) {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(model.grantedGitHubScopes.sorted(), id: \.self) { scope in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Image(systemName: "checkmark.circle")
+                            .foregroundStyle(AppTheme.foreground(.success))
+                        Text(scope)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(AppL10n.string("Granted scope %@", scope))
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    @ViewBuilder
+    private var personalAccessTokenControls: some View {
+        if isPersonalAccessTokenEditorPresented {
+            Text(AppL10n.string("Paste a GitHub token with repository access, save it locally, then validate scopes."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            SecureField(AppL10n.string("Personal access token"), text: $model.tokenInput)
+                .textFieldStyle(.roundedBorder)
+
+            HStack {
+                Button {
+                    Task {
+                        await model.saveTokenAndRefresh()
+                    }
+                } label: {
+                    Label(AppL10n.string("Save or Replace with PAT"), systemImage: "key")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(model.isWorking || model.tokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .smokeAccessibilityIdentifier("settings.github.save-pat")
+
+                Button {
+                    model.loadStoredToken()
+                } label: {
+                    Label(AppL10n.string("Load"), systemImage: "lock.open")
+                }
+                .disabled(model.isWorking)
+                .smokeAccessibilityIdentifier("settings.github.load")
+
+                Button {
+                    model.tokenInput = ""
+                    isPersonalAccessTokenEditorPresented = false
+                } label: {
+                    Label(AppL10n.string("Cancel PAT entry"), systemImage: "xmark.circle")
+                }
+                .disabled(model.isWorking)
+                .smokeAccessibilityIdentifier("settings.github.cancel-pat-entry")
+
+                Button(role: .destructive) {
+                    model.deleteStoredToken()
+                } label: {
+                    Label(AppL10n.string("Delete Local Credential"), systemImage: "trash")
+                }
+                .disabled(model.isWorking || !model.hasToken)
+                .smokeAccessibilityIdentifier("settings.github.delete")
+            }
+        } else {
+            Text(AppL10n.string("Personal access token entry is hidden until you choose to add or replace it."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Button {
+                    isPersonalAccessTokenEditorPresented = true
+                } label: {
+                    Label(
+                        model.hasToken ? AppL10n.string("Replace personal access token") : AppL10n.string("Enter personal access token"),
+                        systemImage: "key"
+                    )
+                }
+                .disabled(model.isWorking)
+                .smokeAccessibilityIdentifier(
+                    "settings.github.show-pat-entry",
+                    state: model.hasToken ? "replace" : "enter"
+                )
+
+                Button {
+                    model.loadStoredToken()
+                } label: {
+                    Label(AppL10n.string("Load"), systemImage: "lock.open")
+                }
+                .disabled(model.isWorking)
+                .smokeAccessibilityIdentifier("settings.github.load")
+
+                Button(role: .destructive) {
+                    model.deleteStoredToken()
+                } label: {
+                    Label(AppL10n.string("Delete Local Credential"), systemImage: "trash")
+                }
+                .disabled(model.isWorking || !model.hasToken)
+                .smokeAccessibilityIdentifier("settings.github.delete")
+            }
+        }
     }
 
     private var grantedScopesSummary: String {

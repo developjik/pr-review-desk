@@ -24,7 +24,7 @@ struct ReviewControlsView: View {
                 Button {
                     model.cancelCurrentOperation()
                 } label: {
-                    Label(AppL10n.string("Cancel"), systemImage: "xmark.circle")
+                    Label(AppL10n.string("Cancel Review Generation"), systemImage: "xmark.circle")
                 }
                 .keyboardShortcut(".", modifiers: [.command])
             }
