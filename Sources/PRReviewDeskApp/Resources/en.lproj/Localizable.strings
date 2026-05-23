@@ -121,6 +121,9 @@
 "Light" = "Light";
 "Dark" = "Dark";
 "Appearance" = "Appearance";
+"Language" = "Language";
+"English" = "English";
+"Korean" = "Korean";
 "Review" = "Review";
 "Refresh" = "Refresh";
 "Actions" = "Actions";
@@ -140,6 +143,7 @@
 "Draft Ready" = "Draft Ready";
 "Stale" = "Stale";
 "Running" = "Running";
+"Needs Setup" = "Needs Setup";
 "Submitted" = "Submitted";
 "Recents/Favorites" = "Recents/Favorites";
 "No draft" = "No draft";

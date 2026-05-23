@@ -6,9 +6,22 @@ import PRReviewDeskCore
 struct PRReviewDeskApp: App {
     @StateObject private var model = AppModel()
     @AppStorage("appearance") private var appearanceRawValue = AppAppearance.system.rawValue
+    @AppStorage(AppLanguage.storageKey) private var languageRawValue = AppLanguage.system.rawValue
 
     private var appearance: AppAppearance {
         AppAppearance(rawValue: appearanceRawValue) ?? .system
+    }
+
+    private var language: AppLanguage {
+        AppLanguage.preferred(from: languageRawValue)
+    }
+
+    private var locale: Locale {
+        guard let localizationIdentifier = language.localizationIdentifier else {
+            return .current
+        }
+
+        return Locale(identifier: localizationIdentifier)
     }
 
     init() {
@@ -37,6 +50,29 @@ struct PRReviewDeskApp: App {
         if CommandLine.arguments.contains("--ui-smoke-command-selection-visual") {
             let report = MainActor.assumeIsolated {
                 UISmokeRenderRunner.commandPanelSelectionVisualReport()
+            }
+            print(report)
+            Foundation.exit(0)
+        }
+
+        if let smokeLanguageSwitch = Self.commandLineArgument(after: "--ui-smoke-language-switch-defaults") {
+            let previousLanguage = UserDefaults.standard.string(forKey: AppLanguage.storageKey)
+            UserDefaults.standard.set(AppLanguage.english.rawValue, forKey: AppLanguage.storageKey)
+            let report = MainActor.assumeIsolated {
+                let model = AppModel()
+                UserDefaults.standard.set(smokeLanguageSwitch, forKey: AppLanguage.storageKey)
+                model.refreshLocalizedDefaults()
+                return [
+                    "language_switch_default=credentialKindDescription:\(model.credentialKindDescription)",
+                    "language_switch_default=tokenValidationStatus:\(model.tokenValidationStatus)",
+                    "language_switch_default=codexCLIStatus:\(model.codexCLIStatus)",
+                    "language_switch_default=codexLoginStatus:\(model.codexLoginStatus)"
+                ].joined(separator: "\n")
+            }
+            if let previousLanguage {
+                UserDefaults.standard.set(previousLanguage, forKey: AppLanguage.storageKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: AppLanguage.storageKey)
             }
             print(report)
             Foundation.exit(0)
@@ -76,16 +112,37 @@ struct PRReviewDeskApp: App {
         return languageBundle.localizedString(forKey: key, value: nil, table: nil)
     }
 
+    private static func commandLineArgument(after flag: String) -> String? {
+        let arguments = CommandLine.arguments
+        guard let index = arguments.firstIndex(of: flag) else {
+            return nil
+        }
+
+        let valueIndex = arguments.index(after: index)
+        guard arguments.indices.contains(valueIndex) else {
+            return nil
+        }
+
+        return arguments[valueIndex]
+    }
+
     var body: some Scene {
         WindowGroup {
-            MainView(model: model)
+            ZStack {
+                MainView(model: model)
+                    .id(languageRawValue)
+            }
                 .frame(minWidth: 1180, minHeight: 720)
                 .preferredColorScheme(appearance.colorScheme)
+                .environment(\.locale, locale)
                 .task {
                     model.loadStoredToken()
                     if model.hasToken {
                         await model.refreshRepositories()
                     }
+                }
+                .onChange(of: languageRawValue) { _, _ in
+                    model.refreshLocalizedDefaults()
                 }
         }
         .windowStyle(.titleBar)
@@ -181,6 +238,8 @@ struct PRReviewDeskApp: App {
         Settings {
             SettingsView(model: model)
                 .preferredColorScheme(appearance.colorScheme)
+                .environment(\.locale, locale)
+                .id(languageRawValue)
         }
     }
 }

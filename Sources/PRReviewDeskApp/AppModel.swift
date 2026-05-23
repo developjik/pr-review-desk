@@ -17,7 +17,7 @@ struct InlineCommentFocusTarget: Equatable, Sendable {
     let position: Int
 }
 
-private enum ProbeReadinessStatus {
+private enum ProbeReadinessStatus: Equatable {
     case ready
     case needsAction
     case unknown
@@ -111,6 +111,7 @@ final class AppModel: ObservableObject {
     private let userDefaults: UserDefaults
     private var githubClient: GitHubClient?
     private var activeGitHubCredential: GitHubCredential?
+    private var validatedGitHubLogin: String?
     private var reviewedHeadSha: String?
     private var currentOperationTask: Task<Void, Never>?
     private var backgroundQueueTask: Task<Void, Never>?
@@ -366,6 +367,7 @@ final class AppModel: ObservableObject {
         do {
             guard let credential = try credentialStore.loadCredential(), !credential.accessToken.isEmpty else {
                 activeGitHubCredential = nil
+                validatedGitHubLogin = nil
                 hasToken = false
                 grantedGitHubScopes = []
                 credentialKindDescription = AppL10n.string("None")
@@ -381,6 +383,27 @@ final class AppModel: ObservableObject {
         } catch {
             statusMessage = AppL10n.string("Could not load token: %@", String(describing: error))
         }
+    }
+
+    func refreshLocalizedDefaults() {
+        if let activeGitHubCredential {
+            credentialKindDescription = AppL10n.string(GitHubCredentialKind(credential: activeGitHubCredential).displayName)
+        } else {
+            credentialKindDescription = relocalizedDefault(credentialKindDescription, key: "None")
+        }
+        statusMessage = relocalizedDefault(statusMessage, key: "Enter a GitHub token or load one from Keychain.")
+        if let validatedGitHubLogin, tokenValidationReadinessStatus == .ready {
+            tokenValidationStatus = AppL10n.string(
+                "Valid for @%@. Scopes: %@.",
+                validatedGitHubLogin,
+                scopeSummary(grantedGitHubScopes)
+            )
+        } else {
+            tokenValidationStatus = relocalizedDefault(tokenValidationStatus, key: "Not validated.")
+        }
+        codexCLIStatus = relocalizedDefault(codexCLIStatus, key: "Not checked.")
+        codexLoginStatus = relocalizedDefault(codexLoginStatus, key: "Not checked.")
+        oauthStatus = relocalizedDefault(oauthStatus, key: "Not started.")
     }
 
     func saveTokenAndRefresh() async {
@@ -412,6 +435,7 @@ final class AppModel: ObservableObject {
             try credentialStore.deleteCredential()
             githubClient = nil
             activeGitHubCredential = nil
+            validatedGitHubLogin = nil
             hasToken = false
             repositories = []
             pullRequests = []
@@ -476,6 +500,7 @@ final class AppModel: ObservableObject {
         await runWorking(AppL10n.string("Validating GitHub token...")) {
             let validation = try await githubClient.validateToken()
             grantedGitHubScopes = validation.scopes
+            validatedGitHubLogin = validation.login
             if let credential = activeGitHubCredential {
                 credentialKindDescription = AppL10n.string(GitHubCredentialKind(credential: credential).displayName)
                 if let credentialMetadataStore {
@@ -1213,6 +1238,7 @@ final class AppModel: ObservableObject {
     private func applyStoredCredentialMetadata(fallbackCredential: GitHubCredential) {
         guard let storedCredential = try? storedCredentialLoader?.loadStoredCredential() else {
             grantedGitHubScopes = []
+            validatedGitHubLogin = nil
             credentialKindDescription = AppL10n.string(GitHubCredentialKind(credential: fallbackCredential).displayName)
             tokenValidationReadinessStatus = .unknown
             return
@@ -1221,9 +1247,11 @@ final class AppModel: ObservableObject {
         grantedGitHubScopes = storedCredential.scopes
         credentialKindDescription = AppL10n.string(storedCredential.kind.displayName)
         if let login = storedCredential.login {
+            validatedGitHubLogin = login
             tokenValidationStatus = AppL10n.string("Valid for @%@. Scopes: %@.", login, scopeSummary(storedCredential.scopes))
             tokenValidationReadinessStatus = .ready
         } else {
+            validatedGitHubLogin = nil
             tokenValidationReadinessStatus = .unknown
         }
     }
@@ -1263,6 +1291,7 @@ final class AppModel: ObservableObject {
                 configureGitHubClient(credential: .oauthUserToken(token.accessToken))
                 tokenInput = ""
                 grantedGitHubScopes = token.scopes
+                validatedGitHubLogin = nil
                 credentialKindDescription = AppL10n.string(GitHubCredentialKind.oauthUserToken.displayName)
                 tokenValidationStatus = AppL10n.string(
                     "OAuth token saved. Validate to confirm login. Scopes: %@.",
@@ -1637,6 +1666,18 @@ final class AppModel: ObservableObject {
         case .unknown:
             return .unknown(AppL10n.string("Check Codex login status. If needed, run `codex login` in Terminal."))
         }
+    }
+
+    private func relocalizedDefault(_ currentValue: String, key: String) -> String {
+        let knownLocalizedValues = AppLanguage.allCases
+            .filter { $0.localizationIdentifier != nil }
+            .map { AppL10n.string(key, language: $0) }
+
+        guard knownLocalizedValues.contains(currentValue) || currentValue == key else {
+            return currentValue
+        }
+
+        return AppL10n.string(key)
     }
 
     private func loadPullRequests(

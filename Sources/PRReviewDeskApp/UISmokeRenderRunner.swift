@@ -11,6 +11,10 @@ enum UISmokeRenderRunner {
             .map(String.init)
         lines.append("ui_language=\(AppL10n.languageIdentifier)")
         lines.append("localized_sample=submit-preview-title:\(AppL10n.string("Submit Review Preview"))")
+        if AppL10n.usesSmokeLanguagePreference {
+            lines.append("ui_preference_language=\(AppL10n.languageIdentifier)")
+            lines.append("preference_localized_sample=submit-preview-title:\(AppL10n.string("Submit Review Preview"))")
+        }
 
         for surface in UISmokeSurface.allCases {
             do {

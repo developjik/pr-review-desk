@@ -20,24 +20,46 @@ extract_source_keys() {
   perl -0777 -ne 'while (/AppL10n\.string\(\s*"((?:\\.|[^"\\])*)"/g) { $key = $1; $key =~ s/\\"/"/g; print "$key\n"; }' "$APP_DIR"/*.swift | sort -u
 }
 
+extract_dynamic_keys() {
+  printf "%s\n" \
+    "Draft Ready" \
+    "Stale" \
+    "Running" \
+    "Needs Setup" \
+    "Submitted" \
+    "Recents/Favorites" \
+    "No draft" \
+    "Queued" \
+    "Generating" \
+    "Draft ready" \
+    "Failed" |
+    sort -u
+}
+
 missing_keys() {
   local locale="$1"
   local strings_file="$2"
   local source_keys
+  local dynamic_keys
+  local required_keys
   local strings_keys
   source_keys="$(mktemp)"
+  dynamic_keys="$(mktemp)"
+  required_keys="$(mktemp)"
   strings_keys="$(mktemp)"
-  trap 'rm -f "$source_keys" "$strings_keys"' RETURN
+  trap 'rm -f "$source_keys" "$dynamic_keys" "$required_keys" "$strings_keys"' RETURN
 
   extract_source_keys >"$source_keys"
+  extract_dynamic_keys >"$dynamic_keys"
+  cat "$source_keys" "$dynamic_keys" | sort -u >"$required_keys"
   extract_strings_keys "$strings_file" >"$strings_keys"
 
-  if ! comm -23 "$source_keys" "$strings_keys" | sed "s/^/$locale missing key: /" >&2; then
+  if ! comm -23 "$required_keys" "$strings_keys" | sed "s/^/$locale missing key: /" >&2; then
     return 1
   fi
 
   local missing_count
-  missing_count="$(comm -23 "$source_keys" "$strings_keys" | wc -l | tr -d ' ')"
+  missing_count="$(comm -23 "$required_keys" "$strings_keys" | wc -l | tr -d ' ')"
   [[ "$missing_count" == "0" ]]
 }
 

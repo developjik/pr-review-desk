@@ -3,12 +3,20 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var model: AppModel
     @AppStorage("appearance") private var appearanceRawValue = AppAppearance.system.rawValue
+    @AppStorage(AppLanguage.storageKey) private var languageRawValue = AppLanguage.system.rawValue
     @State private var isPersonalAccessTokenEditorPresented = false
 
     private var appearanceBinding: Binding<AppAppearance> {
         Binding(
             get: { AppAppearance(rawValue: appearanceRawValue) ?? .system },
             set: { appearanceRawValue = $0.rawValue }
+        )
+    }
+
+    private var languageBinding: Binding<AppLanguage> {
+        Binding(
+            get: { AppLanguage.preferred(from: languageRawValue) },
+            set: { languageRawValue = $0.rawValue }
         )
     }
 
@@ -21,6 +29,14 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+
+                Picker(AppL10n.string("Language"), selection: languageBinding) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(language.displayName).tag(language)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .smokeAccessibilityIdentifier("settings.language")
             }
 
             Section(AppL10n.string("Readiness")) {

@@ -121,6 +121,9 @@
 "Light" = "라이트";
 "Dark" = "다크";
 "Appearance" = "화면 모드";
+"Language" = "언어";
+"English" = "영어";
+"Korean" = "한국어";
 "Review" = "리뷰";
 "Refresh" = "새로 고침";
 "Actions" = "작업";
@@ -140,6 +143,7 @@
 "Draft Ready" = "초안 준비됨";
 "Stale" = "오래됨";
 "Running" = "실행 중";
+"Needs Setup" = "설정 필요";
 "Submitted" = "제출됨";
 "Recents/Favorites" = "최근/즐겨찾기";
 "No draft" = "초안 없음";
