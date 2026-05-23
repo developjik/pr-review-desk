@@ -56,6 +56,7 @@
 "Refreshing Safety" = "Refreshing Safety";
 "Event %@" = "Event %@";
 "Selected" = "Selected";
+"Not selected" = "Not selected";
 "Selected %d" = "Selected %d";
 "Invalid %d" = "Invalid %d";
 "Reviewed %@" = "Reviewed %@";
