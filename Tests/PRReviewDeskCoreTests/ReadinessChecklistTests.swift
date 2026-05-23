@@ -40,6 +40,7 @@ enum ReadinessChecklistTests {
         try expectEqual(itemsByID[.githubTokenValidation]?.action, .validateGitHubToken)
         try expectEqual(itemsByID[.codexCLI]?.state, .needsAction)
         try expectEqual(itemsByID[.codexCLI]?.action, .checkCodexReadiness)
+        try expectEqual(itemsByID[.codexLogin]?.title, "ChatGPT Codex login")
         try expectEqual(itemsByID[.codexLogin]?.state, .unknown)
         try expectEqual(itemsByID[.codexLogin]?.action, .copyCodexLoginCommand)
         try expectEqual(itemsByID[.privacyDisclosure]?.state, .needsAction)

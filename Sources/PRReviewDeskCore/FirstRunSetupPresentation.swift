@@ -18,7 +18,8 @@ public enum FirstRunSetupPresentation {
     public static func steps(
         hasGitHubCredential: Bool,
         isGitHubReady: Bool,
-        isCodexReady: Bool,
+        isCodexCLIReady: Bool,
+        isCodexChatGPTLoginReady: Bool,
         isPrivacyAcknowledged: Bool
     ) -> [FirstRunSetupStep] {
         [
@@ -32,13 +33,23 @@ public enum FirstRunSetupPresentation {
             ),
             FirstRunSetupStep(
                 id: "codex",
-                title: "Codex readiness",
-                detail: isCodexReady
-                    ? "Codex CLI and login are ready."
-                    : "Check that Codex CLI is installed and logged in before generating reviews.",
+                title: "Codex CLI",
+                detail: isCodexCLIReady
+                    ? "Codex CLI is available on PATH."
+                    : "Check that Codex CLI is installed and available on PATH.",
                 actionTitle: "Check Codex",
                 systemImage: "terminal",
-                state: isCodexReady ? .complete : .needsAction
+                state: isCodexCLIReady ? .complete : .needsAction
+            ),
+            FirstRunSetupStep(
+                id: "codexLogin",
+                title: "ChatGPT Codex login",
+                detail: isCodexChatGPTLoginReady
+                    ? "Codex is signed in with ChatGPT."
+                    : "Run `codex login` and sign in with ChatGPT before generating reviews.",
+                actionTitle: "Copy command",
+                systemImage: "person.crop.circle.badge.checkmark",
+                state: isCodexChatGPTLoginReady ? .complete : .needsAction
             ),
             FirstRunSetupStep(
                 id: "privacy",

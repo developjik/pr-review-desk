@@ -162,7 +162,11 @@ struct SettingsView: View {
                 }
             }
 
-            Section(AppL10n.string("Codex")) {
+            Section(AppL10n.string("Codex for ChatGPT")) {
+                Text(AppL10n.string("PR Review Desk uses your local Codex CLI session. Sign in with ChatGPT to generate review drafts."))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 HStack {
                     Text(model.codexCLIStatus)
                         .foregroundStyle(.secondary)
@@ -173,6 +177,18 @@ struct SettingsView: View {
                         }
                     } label: {
                         Label(AppL10n.string("Check"), systemImage: "terminal")
+                    }
+                    .disabled(model.isWorking)
+                }
+
+                HStack {
+                    Text(model.codexLoginStatus)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        model.copyCodexLoginCommand()
+                    } label: {
+                        Label(AppL10n.string("Copy command"), systemImage: "doc.on.doc")
                     }
                     .disabled(model.isWorking)
                 }
