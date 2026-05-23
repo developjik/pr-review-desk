@@ -14,7 +14,10 @@ output_en="$("$APP_BINARY" --ui-smoke --ui-smoke-language en)"
 output_ko="$("$APP_BINARY" --ui-smoke --ui-smoke-language ko)"
 output_ko_sample="$("$APP_BINARY" --ui-smoke-localization ko)"
 output_command="$("$APP_BINARY" --ui-smoke-command-interaction)"
-output="${output_en}"$'\n'"${output_ko}"$'\n'"${output_ko_sample}"$'\n'"${output_command}"
+output_keyboard="$("$APP_BINARY" --ui-smoke-command-keyboard)"
+output_selection_visual="$("$APP_BINARY" --ui-smoke-command-selection-visual)"
+output_accessibility="$("$APP_BINARY" --ui-smoke-accessibility-contract)"
+output="${output_en}"$'\n'"${output_ko}"$'\n'"${output_ko_sample}"$'\n'"${output_command}"$'\n'"${output_keyboard}"$'\n'"${output_selection_visual}"$'\n'"${output_accessibility}"
 
 required=(
   "ui_smoke=ready"
@@ -48,9 +51,14 @@ required=(
   "interaction=command-panel:filtered=1"
   "interaction=command-panel:selected=select-section-stale"
   "interaction=command-panel:return=select-section-stale"
-  "assert=first-run-setup:finish-setup,guided-setup,github-codex-privacy"
-  "assert=submit-preview:submit-preview,preflight-state,last-checked,refresh-action,regenerate-action,submit-disabled"
-  "assert=command-panel:command-panel,shortcut-hints,selected-row,return-execution"
+  "interaction=command-panel-keyboard:selected-section=stale"
+  "interaction=command-panel-keyboard:is-presented=false"
+  "interaction=command-panel-keyboard:deferred-submit=0"
+  "visual=command-panel:selected-row=select-section-stale"
+  "accessibility=first-run-setup.no-token:rendered-controls=first-run.codex.check,first-run.github.load-keychain,first-run.github.save-pat,first-run.privacy.acknowledge"
+  "accessibility=first-run-setup.loaded-token:rendered-controls=first-run.codex.check,first-run.github.reload,first-run.github.validate,first-run.privacy.acknowledge"
+  "accessibility=submit-preview:rendered-controls=submit-preview.refresh-safety[enabled],submit-preview.regenerate[enabled],submit-preview.submit[disabled]"
+  "accessibility=command-panel:rendered-controls=command-panel.action.select-section-stale[selected],command-panel.search"
 )
 
 for needle in "${required[@]}"; do

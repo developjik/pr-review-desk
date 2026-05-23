@@ -5,6 +5,7 @@ enum ReviewCommandPanelPresentationTests {
     static func run() throws {
         try testReturnExecutesSelectedEnabledAction()
         try testSelectionFallsBackToFirstEnabledFilteredAction()
+        try testKeyboardMoveSelectsNextEnabledAction()
     }
 
     private static func testReturnExecutesSelectedEnabledAction() throws {
@@ -34,6 +35,25 @@ enum ReviewCommandPanelPresentationTests {
 
         try expectEqual(selectedID, ReviewCommandPanelActionKind.generateReview.stableID)
         try expectEqual(action.kind, .generateReview)
+    }
+
+    private static func testKeyboardMoveSelectsNextEnabledAction() throws {
+        let actions = sampleActions()
+        let filtered = ReviewCommandPanelPresentation.filteredActions(actions, query: "filter")
+
+        let nextID = ReviewCommandPanelPresentation.movedSelectionID(
+            currentSelectionID: ReviewCommandPanelActionKind.selectSection(.draftReady).stableID,
+            filteredActions: filtered,
+            offset: 1
+        )
+        let previousID = ReviewCommandPanelPresentation.movedSelectionID(
+            currentSelectionID: nextID,
+            filteredActions: filtered,
+            offset: -1
+        )
+
+        try expectEqual(nextID, ReviewCommandPanelActionKind.selectSection(.stale).stableID)
+        try expectEqual(previousID, ReviewCommandPanelActionKind.selectSection(.draftReady).stableID)
     }
 
     private static func sampleActions() -> [ReviewCommandPanelAction] {

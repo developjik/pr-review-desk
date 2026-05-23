@@ -386,6 +386,7 @@ private struct FirstRunSetupView: View {
                 }
                 .controlSize(.small)
                 .disabled(model.isWorking)
+                .smokeAccessibilityIdentifier("first-run.codex.check")
             case "privacy":
                 Button {
                     model.acknowledgePrivacyDisclosure()
@@ -394,6 +395,7 @@ private struct FirstRunSetupView: View {
                 }
                 .controlSize(.small)
                 .disabled(model.isWorking)
+                .smokeAccessibilityIdentifier("first-run.privacy.acknowledge")
             default:
                 EmptyView()
             }
@@ -416,6 +418,7 @@ private struct GitHubCredentialSetupControls: View {
                         Label(AppL10n.string("Validate GitHub"), systemImage: "checkmark.seal")
                     }
                     .disabled(model.isWorking)
+                    .smokeAccessibilityIdentifier("first-run.github.validate")
 
                     Button {
                         model.loadStoredToken()
@@ -426,6 +429,7 @@ private struct GitHubCredentialSetupControls: View {
                         Label(AppL10n.string("Reload credential"), systemImage: "lock.open")
                     }
                     .disabled(model.isWorking)
+                    .smokeAccessibilityIdentifier("first-run.github.reload")
                 }
                 .controlSize(.small)
 
@@ -451,6 +455,7 @@ private struct GitHubCredentialSetupControls: View {
                         Label(AppL10n.string("Save PAT"), systemImage: "key")
                     }
                     .disabled(model.isWorking || model.tokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .smokeAccessibilityIdentifier("first-run.github.save-pat")
 
                     Button {
                         model.loadStoredToken()
@@ -461,6 +466,7 @@ private struct GitHubCredentialSetupControls: View {
                         Label(AppL10n.string("Load from Keychain"), systemImage: "lock.open")
                     }
                     .disabled(model.isWorking)
+                    .smokeAccessibilityIdentifier("first-run.github.load-keychain")
                 }
                 .controlSize(.small)
             }
@@ -485,6 +491,7 @@ private struct GitHubCredentialSetupControls: View {
                             )
                         }
                         .disabled(model.isOAuthSignInPending || model.oauthClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .smokeAccessibilityIdentifier("first-run.github.oauth")
 
                         if model.isOAuthSignInPending {
                             Button {

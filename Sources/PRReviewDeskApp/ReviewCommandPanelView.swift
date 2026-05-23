@@ -9,6 +9,7 @@ struct ReviewCommandPanelView: View {
     let onDeferredSubmit: () -> Void
     @State private var query = ""
     @State private var selectedActionID: String?
+    @FocusState private var isSearchFocused: Bool
 
     init(
         model: AppModel,
@@ -32,8 +33,18 @@ struct ReviewCommandPanelView: View {
         VStack(alignment: .leading, spacing: 12) {
             TextField(AppL10n.string("Search actions"), text: $query)
                 .textFieldStyle(.roundedBorder)
+                .smokeAccessibilityIdentifier("command-panel.search")
+                .focused($isSearchFocused)
                 .onSubmit {
                     performSelectedAction()
+                }
+                .onKeyPress(.downArrow) {
+                    moveSelection(offset: 1)
+                    return .handled
+                }
+                .onKeyPress(.upArrow) {
+                    moveSelection(offset: -1)
+                    return .handled
                 }
 
             if filteredActions.isEmpty {
@@ -73,25 +84,54 @@ struct ReviewCommandPanelView: View {
                                     )
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 4)
+                        .padding(.horizontal, 6)
+                        .background(
+                            selectedActionID == action.id
+                                ? Color(nsColor: .systemBlue).opacity(0.12)
+                                : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 6)
+                        )
+                        .overlay {
+                            if selectedActionID == action.id {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color(nsColor: .systemBlue).opacity(0.55), lineWidth: 1)
+                            }
+                        }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .smokeAccessibilityIdentifier(
+                        "command-panel.action.\(action.id)",
+                        state: accessibilityState(for: action)
+                    )
+                    .accessibilityLabel(action.title)
+                    .accessibilityValue(selectedActionID == action.id ? AppL10n.string("Selected") : "")
+                    .accessibilityAddTraits(selectedActionID == action.id ? [.isSelected] : [])
                     .disabled(!action.isEnabled)
                     .tag(action.id)
-                    .listRowBackground(
-                        selectedActionID == action.id
-                            ? AppTheme.background(.focus)
-                            : Color.clear
-                    )
+                    .listRowBackground(Color.clear)
                 }
                 .listStyle(.inset)
             }
         }
         .padding()
         .frame(width: 520, height: 520)
+        .focusable()
+        .onMoveCommand { direction in
+            switch direction {
+            case .down:
+                moveSelection(offset: 1)
+            case .up:
+                moveSelection(offset: -1)
+            default:
+                break
+            }
+        }
         .onAppear {
             syncSelectedAction()
+            isSearchFocused = true
         }
         .onChange(of: query) { _, _ in
             syncSelectedAction()
@@ -170,5 +210,25 @@ struct ReviewCommandPanelView: View {
         }
 
         perform(action)
+    }
+
+    private func moveSelection(offset: Int) {
+        selectedActionID = ReviewCommandPanelPresentation.movedSelectionID(
+            currentSelectionID: selectedActionID,
+            filteredActions: filteredActions,
+            offset: offset
+        )
+    }
+
+    private func accessibilityState(for action: ReviewCommandPanelAction) -> String {
+        if !action.isEnabled {
+            return "disabled"
+        }
+
+        if selectedActionID == action.id {
+            return "selected"
+        }
+
+        return "enabled"
     }
 }

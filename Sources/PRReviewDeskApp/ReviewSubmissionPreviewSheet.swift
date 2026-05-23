@@ -73,6 +73,10 @@ struct ReviewSubmissionPreviewSheet: View {
                     )
                 }
                 .disabled(isRefreshingSafety)
+                .smokeAccessibilityIdentifier(
+                    "submit-preview.refresh-safety",
+                    state: isRefreshingSafety ? "disabled" : "enabled"
+                )
                 if preview?.safetyState.isStale == true {
                     Button {
                         onRegenerate()
@@ -80,6 +84,10 @@ struct ReviewSubmissionPreviewSheet: View {
                         Label(AppL10n.string("Regenerate"), systemImage: "arrow.triangle.2.circlepath")
                     }
                     .disabled(isRefreshingSafety)
+                    .smokeAccessibilityIdentifier(
+                        "submit-preview.regenerate",
+                        state: isRefreshingSafety ? "disabled" : "enabled"
+                    )
                 }
             }
             Spacer()
@@ -91,6 +99,10 @@ struct ReviewSubmissionPreviewSheet: View {
             .buttonStyle(.borderedProminent)
             .disabled(preview?.canSubmit != true)
             .keyboardShortcut(.return, modifiers: [.command])
+            .smokeAccessibilityIdentifier(
+                "submit-preview.submit",
+                state: preview?.canSubmit == true ? "enabled" : "disabled"
+            )
         }
         .padding()
     }
