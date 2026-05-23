@@ -22,6 +22,8 @@ public enum ReviewWorkspaceLayoutPolicy {
     public static let inspectorIdealColumnWidth = 380.0
     public static let inspectorMaximumColumnWidth = 480.0
     public static let inspectorTopContentInset = 88.0
+    public static let primaryColumnTopContentInset = 40.0
+    public static let sidebarTopContentInset = 72.0
     public static let commandSubtitleLineLimit = 2
     public static let pullRequestTitleLineLimit = 2
     public static let pullRequestMetadataLineLimit = 2

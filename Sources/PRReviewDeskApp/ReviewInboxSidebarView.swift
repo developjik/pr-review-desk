@@ -7,6 +7,19 @@ struct ReviewInboxSidebarView: View {
     @SceneStorage("sidebar.repositoriesExpanded.v4") private var isRepositoriesExpanded = ReviewWorkspaceLayoutPolicy.defaultRepositoriesExpanded
 
     var body: some View {
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(height: CGFloat(ReviewWorkspaceLayoutPolicy.sidebarTopContentInset))
+
+            if !model.readinessChecklist.isReady {
+                readinessPanel
+            }
+
+            sidebarList
+        }
+    }
+
+    private var sidebarList: some View {
         List(selection: selectedSectionListBinding) {
             Section(AppL10n.string("Review Inbox")) {
                 ForEach(ReviewInboxSection.allCases) { section in
@@ -74,19 +87,19 @@ struct ReviewInboxSidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .safeAreaInset(edge: .top) {
-            if !model.readinessChecklist.isReady {
-                VStack(alignment: .leading, spacing: 8) {
-                    ReadinessChecklistView(model: model, mode: .compact)
-                    SettingsLink {
-                        Label(AppL10n.string("Open Settings"), systemImage: "gear")
-                    }
-                    .controlSize(.small)
-                }
-                .padding()
-                .background(.bar)
+    }
+
+    private var readinessPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ReadinessChecklistView(model: model, mode: .compact)
+            SettingsLink {
+                Label(AppL10n.string("Open Settings"), systemImage: "gear")
             }
+            .controlSize(.small)
         }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.bar)
     }
 
     private var selectedSectionListBinding: Binding<ReviewInboxSection?> {
@@ -119,7 +132,7 @@ private struct InboxSectionRow: View {
         }
         .padding(.vertical, 3)
         .padding(.horizontal, 6)
-        .accessibilityLabel("\(section.displayName), \(count)")
+        .accessibilityLabel(AppL10n.string("%@, %d", AppL10n.string(section.displayName), count))
     }
 }
 
@@ -150,7 +163,11 @@ private struct RepositoryFilterRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(repository.fullName), \(repository.isPrivate ? "private" : "public")")
+        .accessibilityLabel(AppL10n.string(
+            "%@, %@",
+            repository.fullName,
+            repository.isPrivate ? AppL10n.string("Private") : AppL10n.string("Public")
+        ))
     }
 }
 

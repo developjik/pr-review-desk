@@ -30,7 +30,8 @@ struct ReviewInboxView: View {
                 .listStyle(.inset)
             }
         }
-        .navigationTitle(AppL10n.string(selectedSection.displayName))
+        .padding(.top, CGFloat(ReviewWorkspaceLayoutPolicy.primaryColumnTopContentInset))
+        .navigationTitle("")
         .onAppear {
             syncSelectedRowIDFromModel()
         }
@@ -308,7 +309,12 @@ private struct PullRequestTriageRowView: View {
         .background(isSelected ? AppTheme.background(.focus) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Pull request #\(row.number), \(row.title), \(row.draftStatus.displayName)")
+        .accessibilityLabel(AppL10n.string(
+            "Pull request #%d, %@, %@",
+            row.number,
+            row.title,
+            AppL10n.string(row.draftStatus.displayName)
+        ))
         .accessibilityValue(AppL10n.string(isSelected ? "Selected" : "Not selected"))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .smokeAccessibilityIdentifier("review-inbox.pull-request.\(row.number)", state: isSelected ? "selected" : "unselected")

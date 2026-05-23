@@ -59,11 +59,11 @@ struct SelectedFileDetailView: View {
                 }
                 Spacer()
                 if let reviewedHeadSha = model.reviewedHeadShaForDisplay {
-                    Text("Draft \(reviewedHeadSha.prefix(8))")
+                    Text(AppL10n.string("Draft %@", String(reviewedHeadSha.prefix(8))))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("No draft SHA")
+                    Text(AppL10n.string("No draft SHA"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -127,7 +127,10 @@ struct SelectedFileDetailView: View {
         case let .omitted(reason):
             return AnnotatedDiff(
                 path: file.path,
-                annotatedPatch: "\(reason.displayName). This file was not sent to Codex because GitHub did not provide reviewable patch content.",
+                annotatedPatch: AppL10n.string(
+                    "%@. This file was not sent to Codex because GitHub did not provide reviewable patch content.",
+                    AppL10n.string(reason.displayName)
+                ),
                 positionsByNewLine: [:]
             )
         }

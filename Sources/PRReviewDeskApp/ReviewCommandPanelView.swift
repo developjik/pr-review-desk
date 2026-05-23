@@ -185,7 +185,7 @@ struct ReviewCommandPanelView: View {
         case .generateReview:
             model.startGenerateReview()
         case .regenerateSelectedFile:
-            model.statusMessage = "Selected-file regeneration is not available yet; regenerate the full review."
+            model.statusMessage = AppL10n.string("Selected-file regeneration is not available yet; regenerate the full review.")
         case .submitReview:
             onDeferredSubmit()
             return
