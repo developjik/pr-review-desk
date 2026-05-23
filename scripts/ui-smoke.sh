@@ -70,7 +70,7 @@ required=(
   "accessibility=first-run-setup.loaded-token:rendered-controls=first-run.codex-login.copy,first-run.codex.check,first-run.github.reload,first-run.github.validate,first-run.privacy.acknowledge"
   "accessibility=submit-preview:rendered-controls=submit-preview.refresh-safety[enabled],submit-preview.regenerate[enabled],submit-preview.submit[disabled]"
   "accessibility=command-panel:rendered-controls=command-panel.action.select-section-stale[selected],command-panel.search"
-  "accessibility=settings.loaded-token:rendered-controls=settings.github.delete,settings.github.oauth,settings.github.validate"
+  "accessibility=settings.loaded-token:rendered-controls=settings.github.delete,settings.github.oauth,settings.github.restore,settings.github.validate"
   "accessibility=review-inbox:rendered-controls=review-inbox.pull-request.74[selected]"
 )
 

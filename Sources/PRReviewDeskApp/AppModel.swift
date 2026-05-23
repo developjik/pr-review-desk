@@ -119,6 +119,7 @@ final class AppModel: ObservableObject {
     private var oauthSignInTask: Task<Void, Never>?
     private var privateRepositoryConsentAcknowledgements: Set<String> = []
     private var pendingPrivateRepositoryConsentContinuation: PrivateRepositoryConsentContinuation?
+    private var launchSessionRestoreGate = OneShotGate()
 
     var selectedInlineCommentCount: Int {
         draft?.inlineComments.filter(\.isSelected).count ?? 0
@@ -389,10 +390,38 @@ final class AppModel: ObservableObject {
             configureGitHubClient(credential: credential)
             applyStoredCredentialMetadata(fallbackCredential: credential)
             hasToken = true
-            statusMessage = AppL10n.string("GitHub OAuth credential loaded from Keychain.")
+            if let validatedGitHubLogin {
+                statusMessage = AppL10n.string("Signed in as @%@. Loading repositories...", validatedGitHubLogin)
+            } else {
+                statusMessage = AppL10n.string("GitHub session restored. Validate access before generating reviews.")
+            }
         } catch {
-            statusMessage = AppL10n.string("Could not load token: %@", String(describing: error))
+            let details = SensitiveTextRedactor.redact(String(describing: error))
+            let summary = AppL10n.string("Could not restore saved GitHub session.")
+            statusMessage = summary
+            recoverableError = RecoverableErrorDetails(
+                operation: AppL10n.string("Restore GitHub session"),
+                summary: summary,
+                details: details,
+                recoverySuggestion: AppL10n.string("Unlock the saved Keychain item, retry restore, or sign in with GitHub again.")
+            )
         }
+    }
+
+    func restoreGitHubSessionOnLaunchIfNeeded() async {
+        guard launchSessionRestoreGate.consume() else {
+            return
+        }
+
+        loadStoredToken()
+        if hasToken {
+            await refreshRepositories()
+        }
+    }
+
+    func retryGitHubSessionRestore() async {
+        launchSessionRestoreGate.reset()
+        await restoreGitHubSessionOnLaunchIfNeeded()
     }
 
     func refreshLocalizedDefaults() {
