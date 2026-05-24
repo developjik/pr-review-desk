@@ -35,7 +35,7 @@ struct ReviewInboxView: View {
         .onAppear {
             syncSelectedRowIDFromModel()
             Task {
-                await syncSelectionToVisibleRows()
+                await syncSelectionToVisibleRows(reason: .contentChanged)
             }
         }
         .onChange(of: selectedRowID) { _, newValue in
@@ -49,17 +49,17 @@ struct ReviewInboxView: View {
         }
         .onChange(of: selectedSection) { _, _ in
             Task {
-                await syncSelectionToVisibleRows()
+                await syncSelectionToVisibleRows(reason: .userSelectedFilter)
             }
         }
         .onChange(of: model.pullRequestSearchText) { _, _ in
             Task {
-                await syncSelectionToVisibleRows()
+                await syncSelectionToVisibleRows(reason: .userSelectedFilter)
             }
         }
         .onChange(of: rows.map(\.id)) { _, _ in
             Task {
-                await syncSelectionToVisibleRows()
+                await syncSelectionToVisibleRows(reason: .contentChanged)
             }
         }
     }
@@ -120,24 +120,25 @@ struct ReviewInboxView: View {
 
     @ViewBuilder
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            ContentUnavailableView(
-                AppL10n.string(selectedSection.displayName),
-                systemImage: selectedSection.systemImage,
-                description: Text(emptyDescription)
-            )
-
-            if hasActiveSearch {
-                Button {
-                    clearPullRequestSearch()
-                } label: {
-                    Label(AppL10n.string("Clear search"), systemImage: "xmark.circle")
+        List {
+            EmptyInboxFilterRowView(
+                section: selectedSection,
+                description: emptyDescription
+            ) {
+                if hasActiveSearch {
+                    Button {
+                        clearPullRequestSearch()
+                    } label: {
+                        Label(AppL10n.string("Clear search"), systemImage: "xmark.circle")
+                    }
+                } else {
+                    emptyStateAction
                 }
-            } else {
-                emptyStateAction
             }
+            .listRowInsets(EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 12))
+            .smokeAccessibilityIdentifier("review-inbox.empty-placeholder")
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .listStyle(.inset)
     }
 
     @ViewBuilder
@@ -255,12 +256,13 @@ struct ReviewInboxView: View {
             && model.selectedPullRequest?.id == row.pullRequest.id
     }
 
-    private func syncSelectionToVisibleRows() async {
+    private func syncSelectionToVisibleRows(reason: ReviewInboxSelectionReason) async {
         let selectedRow = model.reviewInboxRows.first(where: isModelSelected)
         let decision = ReviewInboxSelectionPolicy.decision(
             selectedRow: selectedRow,
             visibleRows: rows,
-            selectedSection: selectedSection
+            selectedSection: selectedSection,
+            reason: reason
         )
 
         switch decision {
@@ -388,6 +390,41 @@ private struct PullRequestTriageRowView: View {
         case .submitted:
             return .info
         }
+    }
+}
+
+private struct EmptyInboxFilterRowView<Action: View>: View {
+    let section: ReviewInboxSection
+    let description: String
+    @ViewBuilder var action: () -> Action
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: section.systemImage)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(AppL10n.string(section.displayName))
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                action()
+                    .controlSize(.small)
+                    .padding(.top, 2)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

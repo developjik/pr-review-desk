@@ -162,7 +162,7 @@ enum UISmokeRenderRunner {
             return []
         case .reviewInbox:
             return [
-                AppL10n.string("Recents/Favorites")
+                AppL10n.string("Review Inbox")
             ]
         case .diffWorkspace:
             return [

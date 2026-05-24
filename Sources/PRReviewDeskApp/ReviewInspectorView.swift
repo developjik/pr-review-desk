@@ -3,15 +3,18 @@ import PRReviewDeskCore
 
 struct ReviewInspectorView: View {
     @ObservedObject var model: AppModel
+    var suppressesEmptyFilterSecondaryPaneContent = false
     @State private var isDiscardConfirmationPresented = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(AppL10n.string("Review Inspector"))
-                    .font(.headline)
+                if model.selectedPullRequest == nil && suppressesEmptyFilterSecondaryPaneContent {
+                    EmptyView()
+                } else if model.selectedPullRequest == nil {
+                    Text(AppL10n.string("Review Inspector"))
+                        .font(.headline)
 
-                if model.selectedPullRequest == nil {
                     VStack(alignment: .leading, spacing: 8) {
                         Label(AppL10n.string("Awaiting selection"), systemImage: "sidebar.trailing")
                             .font(.subheadline)
@@ -23,6 +26,9 @@ struct ReviewInspectorView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 } else {
+                    Text(AppL10n.string("Review Inspector"))
+                        .font(.headline)
+
                     ReviewEventSection(model: model)
 
                     if model.draft != nil {

@@ -8,6 +8,7 @@ enum ReviewInboxTests {
         try testRecentsKeepsActionablePullRequestsVisible()
         try testInboxSelectionPolicySelectsFirstVisibleRowWhenNothingIsSelected()
         try testInboxSelectionPolicyMovesToSelectedRowsCurrentSection()
+        try testInboxSelectionPolicyStaysOnUserSelectedEmptySection()
         try testInboxSelectionPolicyClearsHiddenSelectionWhenCurrentSectionIsEmpty()
         try testDiffReviewFileStateTracksViewedAndCollapsedFiles()
         try testCommandAvailabilityIncludesContextualActions()
@@ -139,6 +140,26 @@ enum ReviewInboxTests {
                 selectedSection: .stale
             ),
             .moveSection(.draftReady, rowID: selected.id)
+        )
+    }
+
+    private static func testInboxSelectionPolicyStaysOnUserSelectedEmptySection() throws {
+        let repository = sampleRepository(isPrivate: false)
+        let selected = PullRequestTriageRow(
+            repository: repository,
+            pullRequest: samplePullRequest(number: 22, headSha: "ready-sha"),
+            draft: sampleDraft(),
+            reviewedHeadSha: "ready-sha"
+        )
+
+        try expectEqual(
+            ReviewInboxSelectionPolicy.decision(
+                selectedRow: selected,
+                visibleRows: [],
+                selectedSection: .stale,
+                reason: .userSelectedFilter
+            ),
+            .clear
         )
     }
 

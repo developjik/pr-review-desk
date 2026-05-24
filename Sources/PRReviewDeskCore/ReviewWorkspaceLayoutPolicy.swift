@@ -52,4 +52,26 @@ public enum ReviewWorkspaceLayoutPolicy {
     public static func shouldOpenInspectorAfterDraftGeneration(previousRevision: Int, currentRevision: Int) -> Bool {
         currentRevision > previousRevision
     }
+
+    public static func usesQuietEmptySelectionPlaceholder(
+        hasSelectedPullRequest: Bool,
+        hasVisibleInboxRows: Bool,
+        selectedSection: ReviewInboxSection
+    ) -> Bool {
+        !hasSelectedPullRequest
+            && !hasVisibleInboxRows
+            && selectedSection != .needsSetup
+    }
+
+    public static func suppressesSecondaryPaneContentForEmptyFilter(
+        hasSelectedPullRequest: Bool,
+        hasVisibleInboxRows: Bool,
+        selectedSection: ReviewInboxSection
+    ) -> Bool {
+        usesQuietEmptySelectionPlaceholder(
+            hasSelectedPullRequest: hasSelectedPullRequest,
+            hasVisibleInboxRows: hasVisibleInboxRows,
+            selectedSection: selectedSection
+        )
+    }
 }

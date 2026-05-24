@@ -10,7 +10,9 @@ KO_STRINGSDICT="$APP_DIR/Resources/ko.lproj/Localizable.stringsdict"
 
 cd "$ROOT_DIR"
 
-plutil -lint "$EN_STRINGS" "$KO_STRINGS" "$EN_STRINGSDICT" "$KO_STRINGSDICT" >/dev/null
+for localization_file in "$EN_STRINGS" "$KO_STRINGS" "$EN_STRINGSDICT" "$KO_STRINGSDICT"; do
+  plutil -lint "$localization_file" >/dev/null
+done
 
 extract_strings_keys() {
   perl -ne 'while (/"((?:\\.|[^"\\])*)"\s*=/g) { $key = $1; $key =~ s/\\"/"/g; print "$key\n"; }' "$1" | sort -u

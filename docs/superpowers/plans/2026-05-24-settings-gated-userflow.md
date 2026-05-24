@@ -1,39 +1,39 @@
-# Settings-Gated User Flow Implementation Plan
+# Settings-Gated User Flow 구현 계획
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Agent 작업자 안내:** 이 계획을 task-by-task로 구현할 때는 `superpowers:subagent-driven-development` 또는 `superpowers:executing-plans`를 사용합니다. Step은 checkbox(`- [ ]`) 형식으로 추적합니다.
 
-**Goal:** Route users to setup/settings when required setup is incomplete, and show the PR review workspace only after GitHub, Codex, and privacy readiness are complete.
+**목표:** 필수 setup이 incomplete이면 사용자를 setup/settings로 route하고, GitHub, Codex, privacy readiness가 complete일 때만 PR review workspace를 보여준다.
 
-**Architecture:** Add a small core presentation policy that decides whether the main window should show setup-required content or the review workspace. Keep setup-changing actions in Settings/setup surfaces, while main review surfaces expose only status and Settings navigation.
+**아키텍처:** Main window가 setup-required content를 보여줄지 review workspace를 보여줄지 결정하는 작은 core presentation policy를 추가한다. Setup을 변경하는 action은 Settings/setup surface에 두고, main review surface는 status와 Settings navigation만 노출한다.
 
-**Tech Stack:** Swift 6.1 SwiftPM package, SwiftUI macOS app, existing executable test harness, existing UI smoke renderer, Computer Use UI verification.
+**기술 스택:** Swift 6.1 SwiftPM package, SwiftUI macOS app, existing executable test harness, existing UI smoke renderer, Computer Use UI verification.
 
 ---
 
-### Task 1: Add User Flow Policy Tests
+### Task 1: User Flow Policy Test 추가
 
 **Files:**
 - Create: `Sources/PRReviewDeskCore/SettingsGatePresentation.swift`
 - Create: `Tests/PRReviewDeskCoreTests/SettingsGatePresentationTests.swift`
 - Modify: `Tests/PRReviewDeskCoreTests/TestHarness.swift`
 
-- [ ] **Step 1: Write failing tests**
+- [ ] **Step 1: 실패하는 test 작성**
 
-Add tests that assert incomplete readiness routes to setup, complete readiness routes to review, and main-window setup actions are limited to opening Settings.
+Incomplete readiness가 setup으로 route되고, complete readiness가 review로 route되며, main-window setup action이 Settings 열기로 제한되는지 assert하는 test를 추가한다.
 
-- [ ] **Step 2: Verify RED**
+- [ ] **Step 2: RED 확인**
 
-Run `swift run PRReviewDeskCoreTests` and confirm the new test suite fails to build because `SettingsGatePresentation` does not exist.
+`swift run PRReviewDeskCoreTests`를 실행하고 `SettingsGatePresentation`이 없어 new test suite build가 fail하는지 확인한다.
 
-- [ ] **Step 3: Implement presentation policy**
+- [ ] **Step 3: Presentation policy 구현**
 
-Add `SettingsGateDestination`, `SettingsGateAction`, and `SettingsGatePresentation.make(readinessChecklist:)` in core.
+Core에 `SettingsGateDestination`, `SettingsGateAction`, `SettingsGatePresentation.make(readinessChecklist:)`를 추가한다.
 
-- [ ] **Step 4: Verify GREEN**
+- [ ] **Step 4: GREEN 확인**
 
-Run `swift run PRReviewDeskCoreTests` and confirm the policy tests pass.
+`swift run PRReviewDeskCoreTests`를 실행하고 policy test가 pass하는지 확인한다.
 
-### Task 2: Gate Main Window UI
+### Task 2: Main Window UI Gate
 
 **Files:**
 - Create: `Sources/PRReviewDeskApp/SetupRequiredView.swift`
@@ -42,23 +42,23 @@ Run `swift run PRReviewDeskCoreTests` and confirm the policy tests pass.
 - Modify: `Sources/PRReviewDeskApp/ReviewInboxSidebarView.swift`
 - Modify: `Sources/PRReviewDeskApp/ReviewCommandPanelView.swift`
 
-- [ ] **Step 1: Add setup-required view**
+- [ ] **Step 1: Setup-required view 추가**
 
-Create a setup-required main-window view that summarizes missing readiness items and exposes `SettingsLink` as the primary setup action.
+Missing readiness item을 summarize하고 `SettingsLink`를 primary setup action으로 노출하는 setup-required main-window view를 만든다.
 
-- [ ] **Step 2: Gate `MainView`**
+- [ ] **Step 2: `MainView` gate**
 
-When `SettingsGatePresentation.destination == .setupRequired`, show `SetupRequiredView`; otherwise show the existing review split view.
+`SettingsGatePresentation.destination == .setupRequired`이면 `SetupRequiredView`를 보여주고, 아니면 기존 review split view를 보여준다.
 
-- [ ] **Step 3: Restore GitHub session on launch**
+- [ ] **Step 3: Launch 시 GitHub session restore**
 
-Run GitHub session restore together with Codex readiness on launch so saved setup is recognized before the user sees the gate.
+Saved setup이 gate 전에 인식되도록 launch 시 GitHub session restore와 Codex readiness를 함께 실행한다.
 
-- [ ] **Step 4: Remove main-window setup mutation**
+- [ ] **Step 4: Main-window setup mutation 제거**
 
-Keep GitHub/Codex/privacy mutation controls in Settings/setup surfaces only. The review command panel should not expose setup actions when the main window is gated.
+GitHub/Codex/privacy mutation control은 Settings/setup surface에만 둔다. Main window가 gated일 때 review command panel은 setup action을 노출하지 않는다.
 
-### Task 3: Update Smoke Contracts And Copy
+### Task 3: Smoke Contract와 Copy 갱신
 
 **Files:**
 - Modify: `Sources/PRReviewDeskApp/UISmokeRenderRunner.swift`
@@ -67,35 +67,35 @@ Keep GitHub/Codex/privacy mutation controls in Settings/setup surfaces only. The
 - Modify: `Sources/PRReviewDeskApp/Resources/ko.lproj/Localizable.strings`
 - Modify: `README.md`
 
-- [ ] **Step 1: Add setup-gate smoke surface**
+- [ ] **Step 1: Setup-gate smoke surface 추가**
 
-Add a deterministic smoke render for the setup-required main window and assert that it contains `Open Settings`.
+Setup-required main window의 deterministic smoke render를 추가하고 `Open Settings`를 포함하는지 assert한다.
 
-- [ ] **Step 2: Update localization**
+- [ ] **Step 2: Localization 갱신**
 
-Add English and Korean strings for setup-required title, summary, and Settings-only guidance.
+Setup-required title, summary, Settings-only guidance의 English/Korean string을 추가한다.
 
-- [ ] **Step 3: Update docs**
+- [ ] **Step 3: Docs 갱신**
 
-Document that setup is managed from Settings and the review workspace appears after readiness is complete.
+Setup은 Settings에서 관리되고 readiness가 complete된 뒤 review workspace가 나타난다는 내용을 문서화한다.
 
-### Task 4: Verify And UI Test
+### Task 4: Verify와 UI Test
 
 **Files:**
-- No source files expected unless verification exposes defects.
+- 검증 중 defect가 드러나지 않는 한 source file 변경은 예상하지 않는다.
 
-- [ ] **Step 1: Run focused tests**
+- [ ] **Step 1: Focused test 실행**
 
-Run `swift run PRReviewDeskCoreTests`.
+`swift run PRReviewDeskCoreTests`를 실행한다.
 
-- [ ] **Step 2: Run full gate**
+- [ ] **Step 2: Full gate 실행**
 
-Run `scripts/verify.sh`.
+`scripts/verify.sh`를 실행한다.
 
-- [ ] **Step 3: Launch app**
+- [ ] **Step 3: App launch**
 
-Run `./script/build_and_run.sh --verify` or the existing app launch path.
+`./script/build_and_run.sh --verify` 또는 기존 app launch path를 실행한다.
 
-- [ ] **Step 4: Computer Use verification**
+- [ ] **Step 4: Computer Use 검증**
 
-Use Computer Use to inspect the launched macOS app in setup-incomplete and setup-complete smoke states where possible, confirming Settings-only setup routing and review workspace visibility.
+가능하면 Computer Use로 launched macOS app의 setup-incomplete와 setup-complete smoke state를 inspect해서 Settings-only setup routing과 review workspace visibility를 확인한다.

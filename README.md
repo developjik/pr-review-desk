@@ -40,6 +40,16 @@ scripts/ui-smoke.sh
 swift run PRReviewDeskCoreTests
 ```
 
+## Development Workflow
+
+This project uses a document-driven workflow. The detailed workflow documents are maintained in Korean:
+
+- [`docs/product`](docs/product/README.md)는 현재 제품 기준 문서이며 같은 브랜치의 구현과 일치해야 합니다.
+- [`docs/changes`](docs/changes/README.md)는 제안되었거나 진행 중인 동작을 기록하는 곳입니다.
+- [`docs/development/document-driven-workflow.md`](docs/development/document-driven-workflow.md)는 변경 제안, 구현, 현재 문서 갱신, 정합성 리뷰, 검증 순서를 정의합니다.
+
+구현 전 미래 동작을 `docs/product/*`에 쓰지 않습니다. 사소하지 않은 변경은 `docs/changes/TEMPLATE.md`에서 시작하고, issue/PR에 제안을 연결한 뒤, 앱이 실제로 구현한 후 `docs/product/*`를 갱신합니다.
+
 ## Localization And Appearance
 
 The app declares English as the default localization and includes Korean resources for the SwiftUI app target. UI resources live under:
@@ -55,7 +65,9 @@ The packaged app must include the SwiftPM resource bundle in `Contents/Resources
 
 ## Review Workflow UI
 
-The main window first checks required setup. If GitHub access, Codex readiness, or privacy acknowledgement is missing, the window shows a setup-required state with a Settings entry point; setup changes are made from Settings. Once ready, the main window opens around a review inbox, not a repository-first control panel. Inbox sections group work into Draft Ready, Stale, Running, Needs Setup, Submitted, and Recents/Favorites. Repositories remain in the sidebar as scope filters and draft creation sources.
+The main window first checks required setup. If GitHub access, Codex readiness, or privacy acknowledgement is missing, the window shows a setup-required state with a Settings entry point; setup changes are made from Settings. Once ready, the main window opens around a review inbox, not a repository-first control panel. Inbox filters group work into Review Inbox, Draft Ready, Stale, Running, Needs Setup, and Submitted. Repositories remain in the sidebar as scope filters and draft creation sources.
+
+The current product documentation lives in [`docs/product`](docs/product/README.md), including the PRD, user stories, user flows, functional specification, and implementation alignment review.
 
 The detail area uses a focused diff workspace. Changed files stay next to the diff, while review body editing, inline comment selection, pre-submit checks, event selection, and AI trust details live in the trailing inspector. The toolbar and Review menu expose refresh, generation, submission, GitHub opening, file/change-block/comment navigation, draft creation actions, and Codex login actions; `Command-K` opens the contextual action panel.
 
