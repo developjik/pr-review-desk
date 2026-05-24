@@ -577,3 +577,10 @@
 "Opened this comment in the inspector. Its original diff spot may no longer exist." = "Opened this comment in the inspector. Its original diff spot may no longer exist.";
 "%d draft queue items" = "%d draft queue items";
 "Pending %d, ready %d, needs attention %d" = "Pending %d, ready %d, needs attention %d";
+"Filter has no pull requests" = "Filter has no pull requests";
+"Choose another inbox filter, refresh GitHub, or add drafts for this repository." = "Choose another inbox filter, refresh GitHub, or add drafts for this repository.";
+"No generated drafts are waiting for review. Add drafts for this repository or generate a draft from an open PR." = "No generated drafts are waiting for review. Add drafts for this repository or generate a draft from an open PR.";
+"No drafts are being created. Add drafts for a repository to fill this list." = "No drafts are being created. Add drafts for a repository to fill this list.";
+"Selected pull request is hidden by the current filter. Saved drafts remain available when the filter is cleared." = "Selected pull request is hidden by the current filter. Saved drafts remain available when the filter is cleared.";
+"No pull requests match the current filter." = "No pull requests match the current filter.";
+"No pull requests match the current filter. Clear search to return to saved drafts and recents." = "No pull requests match the current filter. Clear search to return to saved drafts and recents.";

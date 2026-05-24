@@ -16,6 +16,8 @@ enum ReviewWorkspaceLayoutPolicyTests {
         try testInspectorContentClearsWindowToolbar()
         try testPrimaryColumnsClearWindowToolbar()
         try testDenseWorkflowTextUsesMultiLineFallbacks()
+        try testEmptyFilterSelectionUsesQuietSecondaryPanes()
+        try testEmptyFilterSelectionSuppressesSecondaryPaneContent()
     }
 
     private static func testInspectorIsHiddenByDefaultToProtectDiffWidth() throws {
@@ -98,4 +100,61 @@ enum ReviewWorkspaceLayoutPolicyTests {
         try expectEqual(ReviewWorkspaceLayoutPolicy.repositoryOwnerLineLimit, 2)
         try expectEqual(ReviewWorkspaceLayoutPolicy.commandShortcutMinimumWidth, 44)
     }
+
+    private static func testEmptyFilterSelectionUsesQuietSecondaryPanes() throws {
+        try expectTrue(ReviewWorkspaceLayoutPolicy.usesQuietEmptySelectionPlaceholder(
+            hasSelectedPullRequest: false,
+            hasVisibleInboxRows: false,
+            selectedSection: .running
+        ))
+        try expectEqual(
+            ReviewWorkspaceLayoutPolicy.usesQuietEmptySelectionPlaceholder(
+                hasSelectedPullRequest: false,
+                hasVisibleInboxRows: true,
+                selectedSection: .recents
+            ),
+            false
+        )
+        try expectEqual(
+            ReviewWorkspaceLayoutPolicy.usesQuietEmptySelectionPlaceholder(
+                hasSelectedPullRequest: true,
+                hasVisibleInboxRows: false,
+                selectedSection: .running
+            ),
+            false
+        )
+    }
+
+    private static func testEmptyFilterSelectionSuppressesSecondaryPaneContent() throws {
+        try expectTrue(ReviewWorkspaceLayoutPolicy.suppressesSecondaryPaneContentForEmptyFilter(
+            hasSelectedPullRequest: false,
+            hasVisibleInboxRows: false,
+            selectedSection: .stale
+        ))
+        try expectEqual(
+            ReviewWorkspaceLayoutPolicy.suppressesSecondaryPaneContentForEmptyFilter(
+                hasSelectedPullRequest: false,
+                hasVisibleInboxRows: true,
+                selectedSection: .recents
+            ),
+            false
+        )
+        try expectEqual(
+            ReviewWorkspaceLayoutPolicy.suppressesSecondaryPaneContentForEmptyFilter(
+                hasSelectedPullRequest: true,
+                hasVisibleInboxRows: false,
+                selectedSection: .submitted
+            ),
+            false
+        )
+        try expectEqual(
+            ReviewWorkspaceLayoutPolicy.suppressesSecondaryPaneContentForEmptyFilter(
+                hasSelectedPullRequest: false,
+                hasVisibleInboxRows: false,
+                selectedSection: .needsSetup
+            ),
+            false
+        )
+    }
+
 }

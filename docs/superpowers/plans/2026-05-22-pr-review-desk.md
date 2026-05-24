@@ -1,16 +1,16 @@
-# PR Review Desk Implementation Plan
+# PR Review Desk 구현 계획
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Agent 작업자 안내:** 이 계획을 task-by-task로 구현할 때는 `superpowers:subagent-driven-development` 또는 `superpowers:executing-plans`를 사용합니다. Step은 checkbox(`- [ ]`) 형식으로 추적합니다.
 
-**Goal:** Build a personal macOS SwiftUI app that browses GitHub repositories and PRs, generates Codex review drafts, lets the user edit/select comments, and submits a GitHub PR review.
+**목표:** GitHub repository와 PR을 탐색하고, Codex review draft를 생성하며, 사용자가 comment를 편집/선택한 뒤 GitHub PR review를 제출할 수 있는 개인용 macOS SwiftUI app을 만든다.
 
-**Architecture:** Create a SwiftPM workspace with a tested `PRReviewDeskCore` library and a SwiftUI executable target. Keep GitHub, Keychain, and Codex process execution behind focused types so tests can verify behavior without live credentials.
+**아키텍처:** Test가 있는 `PRReviewDeskCore` library와 SwiftUI executable target을 가진 SwiftPM workspace를 만든다. GitHub, Keychain, Codex process execution은 focused type 뒤에 둬서 live credential 없이 behavior를 test할 수 있게 한다.
 
-**Tech Stack:** Swift 6.2, SwiftPM, SwiftUI, Foundation URLSession, Security.framework Keychain, local `codex exec`, GitHub REST API.
+**기술 스택:** Swift 6.2, SwiftPM, SwiftUI, Foundation URLSession, Security.framework Keychain, local `codex exec`, GitHub REST API.
 
 ---
 
-### Task 1: Package Skeleton And Core Models
+### Task 1: Package Skeleton과 Core Models
 
 **Files:**
 - Create: `Package.swift`
@@ -18,25 +18,25 @@
 - Create: `Tests/PRReviewDeskCoreTests/ModelsTests.swift`
 - Create: `.gitignore`
 
-- [ ] **Step 1: Write failing model tests**
+- [ ] **Step 1: 실패하는 model test 작성**
 
-Create tests that require `Repository`, `PullRequest`, `ReviewEvent`, `ReviewDraft`, and `InlineCommentDraft` to exist and encode/decode predictably.
+`Repository`, `PullRequest`, `ReviewEvent`, `ReviewDraft`, `InlineCommentDraft`가 존재하고 predictably encode/decode되어야 한다는 test를 작성한다.
 
-- [ ] **Step 2: Run model tests and verify RED**
-
-Run: `swift test --filter ModelsTests`
-
-Expected: build fails because the package and models do not exist yet.
-
-- [ ] **Step 3: Add package skeleton and model implementation**
-
-Create the SwiftPM package and model types used by the app and later services.
-
-- [ ] **Step 4: Run model tests and verify GREEN**
+- [ ] **Step 2: Model test를 실행하고 RED 확인**
 
 Run: `swift test --filter ModelsTests`
 
-Expected: model tests pass.
+Expected: package와 model이 아직 없어서 build가 fail한다.
+
+- [ ] **Step 3: Package skeleton과 model 구현 추가**
+
+앱과 이후 service에서 사용할 SwiftPM package와 model type을 만든다.
+
+- [ ] **Step 4: Model test를 실행하고 GREEN 확인**
+
+Run: `swift test --filter ModelsTests`
+
+Expected: model test가 pass한다.
 
 ### Task 2: Diff Position Mapping
 
@@ -44,25 +44,25 @@ Expected: model tests pass.
 - Create: `Sources/PRReviewDeskCore/DiffPositionMapper.swift`
 - Create: `Tests/PRReviewDeskCoreTests/DiffPositionMapperTests.swift`
 
-- [ ] **Step 1: Write failing diff mapper tests**
+- [ ] **Step 1: 실패하는 diff mapper test 작성**
 
-Cover single-hunk and multi-hunk patches. Verify that the first non-header line after `@@` is position 1 and positions continue through later hunks in the same file.
+Single-hunk와 multi-hunk patch를 cover한다. `@@` 다음 첫 non-header line이 position 1이고 같은 file의 later hunk에서도 position이 계속 이어지는지 검증한다.
 
-- [ ] **Step 2: Run mapper tests and verify RED**
-
-Run: `swift test --filter DiffPositionMapperTests`
-
-Expected: build fails because `DiffPositionMapper` does not exist.
-
-- [ ] **Step 3: Implement mapper**
-
-Add a mapper that returns annotated patch text and maps new-line numbers to GitHub diff positions.
-
-- [ ] **Step 4: Run mapper tests and verify GREEN**
+- [ ] **Step 2: Mapper test를 실행하고 RED 확인**
 
 Run: `swift test --filter DiffPositionMapperTests`
 
-Expected: mapper tests pass.
+Expected: `DiffPositionMapper`가 없어서 build가 fail한다.
+
+- [ ] **Step 3: Mapper 구현**
+
+Annotated patch text를 반환하고 new-line number를 GitHub diff position에 mapping하는 mapper를 추가한다.
+
+- [ ] **Step 4: Mapper test를 실행하고 GREEN 확인**
+
+Run: `swift test --filter DiffPositionMapperTests`
+
+Expected: mapper test가 pass한다.
 
 ### Task 3: GitHub Client
 
@@ -70,25 +70,25 @@ Expected: mapper tests pass.
 - Create: `Sources/PRReviewDeskCore/GitHubClient.swift`
 - Create: `Tests/PRReviewDeskCoreTests/GitHubClientTests.swift`
 
-- [ ] **Step 1: Write failing GitHub client tests**
+- [ ] **Step 1: 실패하는 GitHub client test 작성**
 
-Use a custom `URLProtocol` to capture requests. Verify auth headers, repository and PR decoding, changed file decoding, and review submission payload.
+Custom `URLProtocol`로 request를 capture한다. Auth header, repository/PR decoding, changed file decoding, review submission payload를 검증한다.
 
-- [ ] **Step 2: Run client tests and verify RED**
-
-Run: `swift test --filter GitHubClientTests`
-
-Expected: build fails because `GitHubClient` does not exist.
-
-- [ ] **Step 3: Implement client**
-
-Add a URLSession-backed client with methods for listing repositories, listing open PRs, fetching PR details, fetching changed files, and submitting reviews.
-
-- [ ] **Step 4: Run client tests and verify GREEN**
+- [ ] **Step 2: Client test를 실행하고 RED 확인**
 
 Run: `swift test --filter GitHubClientTests`
 
-Expected: client tests pass.
+Expected: `GitHubClient`가 없어서 build가 fail한다.
+
+- [ ] **Step 3: Client 구현**
+
+Repository list, open PR list, PR detail fetch, changed file fetch, review submit method가 있는 URLSession-backed client를 추가한다.
+
+- [ ] **Step 4: Client test를 실행하고 GREEN 확인**
+
+Run: `swift test --filter GitHubClientTests`
+
+Expected: client test가 pass한다.
 
 ### Task 4: Codex Review Agent
 
@@ -96,25 +96,25 @@ Expected: client tests pass.
 - Create: `Sources/PRReviewDeskCore/CodexReviewAgent.swift`
 - Create: `Tests/PRReviewDeskCoreTests/CodexReviewAgentTests.swift`
 
-- [ ] **Step 1: Write failing Codex agent tests**
+- [ ] **Step 1: 실패하는 Codex agent test 작성**
 
-Use a fake command runner. Verify command arguments include `codex exec`, schema output, read-only sandbox, and that valid JSON becomes a `ReviewDraft`.
+Fake command runner를 사용한다. Command argument가 `codex exec`, schema output, read-only sandbox를 포함하는지, valid JSON이 `ReviewDraft`가 되는지 검증한다.
 
-- [ ] **Step 2: Run agent tests and verify RED**
-
-Run: `swift test --filter CodexReviewAgentTests`
-
-Expected: build fails because `CodexReviewAgent` does not exist.
-
-- [ ] **Step 3: Implement Codex agent**
-
-Add prompt construction, JSON schema writing, process execution, and output decoding.
-
-- [ ] **Step 4: Run agent tests and verify GREEN**
+- [ ] **Step 2: Agent test를 실행하고 RED 확인**
 
 Run: `swift test --filter CodexReviewAgentTests`
 
-Expected: agent tests pass.
+Expected: `CodexReviewAgent`가 없어서 build가 fail한다.
+
+- [ ] **Step 3: Codex agent 구현**
+
+Prompt construction, JSON schema writing, process execution, output decoding을 추가한다.
+
+- [ ] **Step 4: Agent test를 실행하고 GREEN 확인**
+
+Run: `swift test --filter CodexReviewAgentTests`
+
+Expected: agent test가 pass한다.
 
 ### Task 5: Keychain Token Store
 
@@ -122,25 +122,25 @@ Expected: agent tests pass.
 - Create: `Sources/PRReviewDeskCore/KeychainTokenStore.swift`
 - Create: `Tests/PRReviewDeskCoreTests/KeychainTokenStoreTests.swift`
 
-- [ ] **Step 1: Write failing Keychain interface tests**
+- [ ] **Step 1: 실패하는 Keychain interface test 작성**
 
-Test a memory-backed `TokenStore` implementation and the shared protocol used by the app. Avoid writing real user secrets in unit tests.
+Memory-backed `TokenStore` implementation과 앱에서 공유할 protocol을 test한다. Unit test에서 실제 user secret을 쓰지 않는다.
 
-- [ ] **Step 2: Run token store tests and verify RED**
-
-Run: `swift test --filter KeychainTokenStoreTests`
-
-Expected: build fails because `TokenStore` does not exist.
-
-- [ ] **Step 3: Implement token store**
-
-Add `TokenStore`, `InMemoryTokenStore`, and `KeychainTokenStore` using Security.framework.
-
-- [ ] **Step 4: Run token store tests and verify GREEN**
+- [ ] **Step 2: Token store test를 실행하고 RED 확인**
 
 Run: `swift test --filter KeychainTokenStoreTests`
 
-Expected: token store tests pass.
+Expected: `TokenStore`가 없어서 build가 fail한다.
+
+- [ ] **Step 3: Token store 구현**
+
+Security.framework를 사용해 `TokenStore`, `InMemoryTokenStore`, `KeychainTokenStore`를 추가한다.
+
+- [ ] **Step 4: Token store test를 실행하고 GREEN 확인**
+
+Run: `swift test --filter KeychainTokenStoreTests`
+
+Expected: token store test가 pass한다.
 
 ### Task 6: SwiftUI App
 
@@ -149,51 +149,51 @@ Expected: token store tests pass.
 - Create: `Sources/PRReviewDeskApp/AppModel.swift`
 - Create: `Sources/PRReviewDeskApp/MainView.swift`
 
-- [ ] **Step 1: Add app state tests if core gaps appear**
+- [ ] **Step 1: Core gap이 보이면 app state test 추가**
 
-Keep app logic thin. Add core tests first for any behavior that would otherwise sit in SwiftUI views.
+App logic은 얇게 유지한다. SwiftUI view에 들어갈 behavior는 먼저 core test로 만든다.
 
-- [ ] **Step 2: Implement SwiftUI app shell**
+- [ ] **Step 2: SwiftUI app shell 구현**
 
-Build the repository sidebar, PR list, review pane, token entry, generate review action, editable draft, event picker, and submit action.
+Repository sidebar, PR list, review pane, token entry, generate review action, editable draft, event picker, submit action을 만든다.
 
-- [ ] **Step 3: Build app**
+- [ ] **Step 3: App build**
 
 Run: `swift build`
 
-Expected: build succeeds.
+Expected: build가 succeed한다.
 
-### Task 7: End-To-End Verification
+### Task 7: End-To-End 검증
 
 **Files:**
-- No new files expected.
+- 새 파일 예상 없음.
 
-- [ ] **Step 1: Run unit tests**
+- [ ] **Step 1: Unit test 실행**
 
 Run: `swift test`
 
-Expected: all tests pass.
+Expected: 모든 test가 pass한다.
 
-- [ ] **Step 2: Run build**
+- [ ] **Step 2: Build 실행**
 
 Run: `swift build`
 
-Expected: build succeeds.
+Expected: build가 succeed한다.
 
-- [ ] **Step 3: Verify Codex CLI**
+- [ ] **Step 3: Codex CLI 확인**
 
-Run a small `codex exec` JSON smoke test without using project secrets.
+Project secret을 사용하지 않고 작은 `codex exec` JSON smoke test를 실행한다.
 
-- [ ] **Step 4: Verify GitHub token**
+- [ ] **Step 4: GitHub token 확인**
 
-Call GitHub `/user` with the provided token without printing the token.
+Token을 출력하지 않고 제공된 token으로 GitHub `/user`를 호출한다.
 
-- [ ] **Step 5: Run app target briefly**
+- [ ] **Step 5: App target을 짧게 실행**
 
 Run: `timeout 5 swift run PRReviewDeskApp`
 
-Expected: the executable starts. If the GUI run blocks as expected, terminate after timeout and treat a timeout as successful launch.
+Expected: executable이 시작된다. GUI run이 예상대로 block되면 timeout 후 종료하고 successful launch로 간주한다.
 
-- [ ] **Step 6: Report live-test limits**
+- [ ] **Step 6: Live-test 제한 보고**
 
-If there is no safe open PR to review, do not submit a real review. Report repository/PR discovery and stop before posting to an arbitrary PR.
+안전한 open PR이 없으면 실제 review를 제출하지 않는다. Repository/PR discovery를 보고하고 임의 PR에 posting하기 전에 멈춘다.

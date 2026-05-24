@@ -54,6 +54,14 @@ public enum ReviewInboxFilterPresentation {
     public static func selectionClearedStatus(hasVisibleRows: Bool) -> String {
         hasVisibleRows
             ? "Selected pull request is hidden by the current filter. Saved drafts remain available when the filter is cleared."
-            : "No pull requests match the current filter. Clear search to return to saved drafts and recents."
+            : "No pull requests match the current filter."
+    }
+
+    public static func selectionClearedStatus(hasVisibleRows: Bool, hasActiveSearch: Bool) -> String {
+        if hasActiveSearch && !hasVisibleRows {
+            return "No pull requests match the current filter. Clear search to return to saved drafts and recents."
+        }
+
+        return selectionClearedStatus(hasVisibleRows: hasVisibleRows)
     }
 }

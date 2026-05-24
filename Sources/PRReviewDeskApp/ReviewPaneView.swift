@@ -3,6 +3,7 @@ import PRReviewDeskCore
 
 struct ReviewPaneView: View {
     @ObservedObject var model: AppModel
+    var suppressesEmptyFilterSecondaryPaneContent = false
     var onFocusInlineComment: () -> Void = {}
 
     var body: some View {
@@ -15,6 +16,8 @@ struct ReviewPaneView: View {
                 ReviewControlsView(model: model)
                 Divider()
                 reviewWorkspace
+            } else if suppressesEmptyFilterSecondaryPaneContent {
+                EmptyView()
             } else {
                 VStack(alignment: .leading, spacing: 18) {
                     ReadinessChecklistView(model: model, mode: .compact)

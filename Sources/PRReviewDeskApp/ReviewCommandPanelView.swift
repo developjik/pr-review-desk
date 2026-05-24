@@ -166,7 +166,7 @@ struct ReviewCommandPanelView: View {
             ReviewCommandPanelActionGroup(title: "View", actions: [
                 ReviewCommandPanelAction(title: AppL10n.string("Toggle Inspector"), subtitle: isInspectorPresented ? AppL10n.string("Hide draft and submit controls.") : AppL10n.string("Show draft and submit controls."), systemImage: "sidebar.trailing", shortcut: "⌥⌘I", isEnabled: availability.canToggleInspector, kind: .toggleInspector)
             ]),
-            ReviewCommandPanelActionGroup(title: "Inbox Filters", actions: ReviewInboxSection.allCases.map { section in
+            ReviewCommandPanelActionGroup(title: "Inbox Filters", actions: ReviewInboxSidebarPresentation.sections.map { section in
                 ReviewCommandPanelAction(
                     title: AppL10n.string("Filter %@", AppL10n.string(section.displayName)),
                     subtitle: AppL10n.string("Show %@ inbox items.", AppL10n.string(section.displayName)),

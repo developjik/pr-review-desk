@@ -7,11 +7,17 @@ public enum ReviewInboxSelectionDecision: Equatable, Hashable, Sendable {
     case clear
 }
 
+public enum ReviewInboxSelectionReason: Equatable, Hashable, Sendable {
+    case contentChanged
+    case userSelectedFilter
+}
+
 public enum ReviewInboxSelectionPolicy {
     public static func decision(
         selectedRow: PullRequestTriageRow?,
         visibleRows: [PullRequestTriageRow],
-        selectedSection: ReviewInboxSection
+        selectedSection: ReviewInboxSection,
+        reason: ReviewInboxSelectionReason = .contentChanged
     ) -> ReviewInboxSelectionDecision {
         if let selectedRow,
            visibleRows.contains(where: { $0.id == selectedRow.id }) {
@@ -19,7 +25,8 @@ public enum ReviewInboxSelectionPolicy {
         }
 
         if let selectedRow,
-           selectedRow.section != selectedSection {
+           selectedRow.section != selectedSection,
+           reason == .contentChanged {
             return .moveSection(selectedRow.section, rowID: selectedRow.id)
         }
 

@@ -135,11 +135,17 @@ struct MainView: View {
                 max: CGFloat(ReviewWorkspaceLayoutPolicy.pullRequestListMaximumColumnWidth)
             )
         } detail: {
-            ReviewPaneView(model: model) {
+            ReviewPaneView(
+                model: model,
+                suppressesEmptyFilterSecondaryPaneContent: suppressesEmptyFilterSecondaryPaneContent
+            ) {
                 isInspectorPresented = true
             }
                 .inspector(isPresented: $isInspectorPresented) {
-                    ReviewInspectorView(model: model)
+                    ReviewInspectorView(
+                        model: model,
+                        suppressesEmptyFilterSecondaryPaneContent: suppressesEmptyFilterSecondaryPaneContent
+                    )
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .inspectorColumnWidth(
                             min: CGFloat(ReviewWorkspaceLayoutPolicy.inspectorMinimumColumnWidth),
@@ -221,6 +227,18 @@ struct MainView: View {
 
     private var isReviewWorkspace: Bool {
         model.settingsGatePresentation.destination == .reviewWorkspace
+    }
+
+    private var hasVisibleRowsInSelectedInboxSection: Bool {
+        !model.reviewInboxRows(for: selectedInboxSection).isEmpty
+    }
+
+    private var suppressesEmptyFilterSecondaryPaneContent: Bool {
+        ReviewWorkspaceLayoutPolicy.suppressesSecondaryPaneContentForEmptyFilter(
+            hasSelectedPullRequest: model.selectedPullRequest != nil,
+            hasVisibleInboxRows: hasVisibleRowsInSelectedInboxSection,
+            selectedSection: selectedInboxSection
+        )
     }
 
     private var selectedInboxSection: ReviewInboxSection {

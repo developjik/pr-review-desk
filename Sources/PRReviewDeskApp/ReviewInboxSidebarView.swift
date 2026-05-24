@@ -21,8 +21,8 @@ struct ReviewInboxSidebarView: View {
 
     private var sidebarList: some View {
         List(selection: selectedSectionListBinding) {
-            Section(AppL10n.string("Review Inbox")) {
-                ForEach(ReviewInboxSection.allCases) { section in
+            Section(AppL10n.string(ReviewInboxSidebarPresentation.reviewSectionTitle)) {
+                ForEach(ReviewInboxSidebarPresentation.sections(isReady: model.readinessChecklist.isReady)) { section in
                     InboxSectionRow(
                         section: section,
                         count: model.reviewInboxCount(for: section)

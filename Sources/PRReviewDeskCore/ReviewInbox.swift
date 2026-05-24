@@ -23,7 +23,7 @@ public enum ReviewInboxSection: String, Codable, CaseIterable, Equatable, Hashab
         case .submitted:
             return "Submitted"
         case .recents:
-            return "Recents/Favorites"
+            return "Review Inbox"
         }
     }
 

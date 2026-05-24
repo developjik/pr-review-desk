@@ -9,6 +9,7 @@ enum ReviewInboxFilterPresentationTests {
         try testSelectedRepositoryEmptyDescriptionExplainsNoOpenPullRequests()
         try testHiddenSelectionClearsOnlyForActiveSearch()
         try testSelectionClearedMessageMentionsSavedDraftRecovery()
+        try testSelectionClearedMessageOnlyMentionsSearchWhenSearchIsActive()
     }
 
     private static func testActiveSearchSummaryUsesTrimmedQuery() throws {
@@ -88,6 +89,13 @@ enum ReviewInboxFilterPresentationTests {
         )
         try expectEqual(
             ReviewInboxFilterPresentation.selectionClearedStatus(hasVisibleRows: false),
+            "No pull requests match the current filter."
+        )
+    }
+
+    private static func testSelectionClearedMessageOnlyMentionsSearchWhenSearchIsActive() throws {
+        try expectEqual(
+            ReviewInboxFilterPresentation.selectionClearedStatus(hasVisibleRows: false, hasActiveSearch: true),
             "No pull requests match the current filter. Clear search to return to saved drafts and recents."
         )
     }

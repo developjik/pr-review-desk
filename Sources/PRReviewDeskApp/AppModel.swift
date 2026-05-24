@@ -684,7 +684,12 @@ final class AppModel: ObservableObject {
         }
 
         clearPullRequestContext(clearPullRequests: false)
-        statusMessage = ReviewInboxFilterPresentation.selectionClearedStatus(hasVisibleRows: hasVisibleRows)
+        statusMessage = AppL10n.string(
+            ReviewInboxFilterPresentation.selectionClearedStatus(
+                hasVisibleRows: hasVisibleRows,
+                hasActiveSearch: !pullRequestSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            )
+        )
     }
 
     func startGenerateReview() {
