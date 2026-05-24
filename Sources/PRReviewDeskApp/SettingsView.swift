@@ -1,4 +1,5 @@
 import SwiftUI
+import PRReviewDeskCore
 
 struct SettingsView: View {
     @ObservedObject var model: AppModel
@@ -71,7 +72,7 @@ struct SettingsView: View {
                     grantedScopesDisclosure
                 }
 
-                Text(AppL10n.string("Sign in with GitHub to authorize repository review access."))
+                Text(AppL10n.string(gitHubAccessPresentation.caption))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -179,8 +180,8 @@ struct SettingsView: View {
                 }
             }
 
-            Section(AppL10n.string("Codex for ChatGPT")) {
-                Text(AppL10n.string("PR Review Desk uses Codex on this Mac. Sign in with ChatGPT to generate review drafts."))
+            Section(AppL10n.string("Codex")) {
+                Text(AppL10n.string("PR Review Desk uses Codex on this Mac to generate review drafts."))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -208,7 +209,7 @@ struct SettingsView: View {
                     } label: {
                         Label(AppL10n.string("Copy sign-in step"), systemImage: "doc.on.doc")
                     }
-                    .accessibilityHint(AppL10n.string("Copies the ChatGPT sign-in step."))
+                    .accessibilityHint(AppL10n.string("Copies the Codex sign-in step."))
                     .disabled(!model.commandAvailability.canCopyCodexLoginCommand)
                     Button {
                         model.openTerminalForCodexLogin()
@@ -274,6 +275,13 @@ struct SettingsView: View {
         }
 
         return AppL10n.string("%d scopes granted", model.grantedGitHubScopes.count)
+    }
+
+    private var gitHubAccessPresentation: SettingsGitHubAccessPresentation {
+        SettingsGitHubAccessPresentation.make(
+            hasCredential: model.hasToken,
+            hasValidatedScopes: !model.grantedGitHubScopes.isEmpty
+        )
     }
 
     private var tokenValidationSummary: String {

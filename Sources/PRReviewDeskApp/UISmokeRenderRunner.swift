@@ -27,6 +27,27 @@ enum UISmokeRenderRunner {
         return lines.joined(separator: "\n")
     }
 
+    static func launchCodexReadinessReport() async -> String {
+        let model = AppModel(
+            credentialStore: VersionedCredentialStore(tokenStore: InMemoryTokenStore()),
+            codexAuthenticationChecker: FixedCodexAuthenticationChecker(
+                state: .ready(
+                    executablePath: "/opt/homebrew/bin/codex",
+                    method: .chatGPT,
+                    message: "Logged in using ChatGPT"
+                )
+            ),
+            reviewDraftStore: InMemoryReviewDraftStore(),
+            userDefaults: UserDefaults(suiteName: "PRReviewDesk.UISmoke.\(UUID().uuidString)") ?? .standard
+        )
+
+        await model.refreshCodexStatusOnLaunchIfNeeded()
+
+        let codexItem = model.readinessChecklist.items.first { $0.id == .codexCLI }
+        let readiness = codexItem?.state == .ready ? "ready" : "not-ready"
+        return "launch_codex_readiness=\(readiness)"
+    }
+
     private static func render(surface: UISmokeSurface) throws -> String {
         try render(surface: surface, size: .desktop)
             + "\n"
@@ -119,6 +140,18 @@ enum UISmokeRenderRunner {
 
     private static func semanticExpectations(for surface: UISmokeSurface, size: UISmokeRenderSize) -> [String] {
         switch surface {
+        case .setupGate:
+            return [
+                AppL10n.string("Complete setup in Settings")
+            ]
+        case .reviewWorkspace:
+            if size.name == "compact" {
+                return []
+            }
+
+            return [
+                AppL10n.string("Changed Files")
+            ]
         case .firstRunSetup:
             return [
                 AppL10n.string("Guided setup path"),
@@ -246,10 +279,48 @@ enum UISmokeRenderRunner {
         RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         window.close()
 
+        let escapeState = CommandPanelKeyboardSmokeState()
+        let escapeHostingView = NSHostingView(
+            rootView: ReviewCommandPanelView(
+                model: populatedModel(),
+                selectedSection: Binding(
+                    get: { escapeState.selectedSection },
+                    set: { escapeState.selectedSection = $0 }
+                ),
+                isInspectorPresented: Binding(
+                    get: { escapeState.isInspectorPresented },
+                    set: { escapeState.isInspectorPresented = $0 }
+                ),
+                isPresented: Binding(
+                    get: { escapeState.isPresented },
+                    set: { escapeState.isPresented = $0 }
+                ),
+                initialQuery: AppL10n.string("Filter"),
+                initialSelectedActionID: nil,
+                onDeferredSubmit: {
+                    escapeState.deferredSubmitCount += 1
+                }
+            )
+        )
+        let escapeWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 560),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        escapeWindow.contentView = escapeHostingView
+        escapeWindow.makeKeyAndOrderFront(nil)
+        escapeHostingView.layoutSubtreeIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        sendKey(to: escapeWindow, keyCode: 53, characters: String(UnicodeScalar(0x1B)!))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        escapeWindow.close()
+
         return [
             "interaction=command-panel-keyboard:selected-section=\(state.selectedSection.rawValue)",
             "interaction=command-panel-keyboard:is-presented=\(state.isPresented)",
-            "interaction=command-panel-keyboard:deferred-submit=\(state.deferredSubmitCount)"
+            "interaction=command-panel-keyboard:deferred-submit=\(state.deferredSubmitCount)",
+            "interaction=command-panel-keyboard:escape-is-presented=\(escapeState.isPresented)"
         ].joined(separator: "\n")
     }
 
@@ -281,7 +352,7 @@ enum UISmokeRenderRunner {
     static func layoutContractReport() -> String {
         do {
             let reviewInboxBitmap = try renderedBitmap(
-                for: ReviewInboxView(model: populatedModel(), selectedSection: .recents),
+                for: ReviewInboxView(model: populatedModel(), selectedSection: .constant(.recents)),
                 size: .desktop
             )
             let reviewInboxTopY = firstNonBackgroundRow(in: reviewInboxBitmap)
@@ -311,10 +382,10 @@ enum UISmokeRenderRunner {
 
     static func accessibilityReport() -> String {
         let firstRunNoTokenControls = renderedAccessibilityControls(
-            for: ReviewInboxView(model: firstRunModel(), selectedSection: .needsSetup)
+            for: ReviewInboxView(model: firstRunModel(), selectedSection: .constant(.needsSetup))
         )
         let firstRunLoadedTokenControls = renderedAccessibilityControls(
-            for: ReviewInboxView(model: firstRunLoadedTokenModel(), selectedSection: .needsSetup)
+            for: ReviewInboxView(model: firstRunLoadedTokenModel(), selectedSection: .constant(.needsSetup))
         )
         let submitPreviewControls = renderedAccessibilityControls(
             for: ReviewSubmissionPreviewSheet(
@@ -430,14 +501,17 @@ enum UISmokeRenderRunner {
         let settingsLoadedTokenControls = renderedAccessibilityControls(
             for: SettingsView(model: settingsLoadedTokenModel())
         )
+        let setupGateControls = renderedAccessibilityControls(
+            for: MainView(model: firstRunModel())
+        )
         let reviewInboxControls = renderedAccessibilityControls(
-            for: ReviewInboxView(model: selectedRecentsModel(), selectedSection: .recents)
+            for: ReviewInboxView(model: selectedRecentsModel(), selectedSection: .constant(.recents))
         )
         let staleDraftInboxControls = renderedAccessibilityControls(
-            for: ReviewInboxView(model: savedDraftInboxModel(), selectedSection: .stale)
+            for: ReviewInboxView(model: savedDraftInboxModel(), selectedSection: .constant(.stale))
         )
         let emptyDraftReadyControls = renderedAccessibilityControls(
-            for: ReviewInboxView(model: emptyDraftReadyModel(), selectedSection: .draftReady)
+            for: ReviewInboxView(model: emptyDraftReadyModel(), selectedSection: .constant(.draftReady))
         )
         let queueRecoveryControls = renderedAccessibilityControls(
             for: queueRecoveryRows()
@@ -462,6 +536,7 @@ enum UISmokeRenderRunner {
             accessibilityLine(surface: "first-run-setup.loaded-token", controls: firstRunLoadedTokenControls),
             accessibilityLine(surface: "submit-preview", controls: submitPreviewControls),
             accessibilityLine(surface: "command-panel", controls: commandPanelControls),
+            accessibilityLine(surface: "setup-gate", controls: setupGateControls),
             accessibilityLine(surface: "settings.loaded-token", controls: settingsLoadedTokenControls),
             accessibilityLine(surface: "review-inbox", controls: reviewInboxControls),
             accessibilityLine(surface: "review-inbox.stale-saved-draft", controls: staleDraftInboxControls),
@@ -471,7 +546,7 @@ enum UISmokeRenderRunner {
     }
 
     private static func firstRunPrivacyDisclosureLine(size: UISmokeRenderSize) -> String {
-        let controls = renderedAccessibilityControls(for: ReviewInboxView(model: firstRunModel(), selectedSection: .needsSetup), size: size)
+        let controls = renderedAccessibilityControls(for: ReviewInboxView(model: firstRunModel(), selectedSection: .constant(.needsSetup)), size: size)
         let hasDisclosure = controls.contains { $0.identifier == "first-run.privacy.disclosure" }
         return hasDisclosure
             ? "semantic=first-run-setup:\(size.name):privacy-disclosure"
@@ -495,12 +570,6 @@ enum UISmokeRenderRunner {
             "next-hunk",
             "previous-hunk",
             "reveal-inline-comment",
-            "start-github-sign-in",
-            "validate-github-access",
-            "check-codex-readiness",
-            "acknowledge-privacy-disclosure",
-            "copy-codex-login-command",
-            "open-codex-login-terminal",
             "toggle-inspector"
         ]
         let missing = requiredActionIDs.filter { !identifiers.contains("command-panel.action.\($0)") }
@@ -651,12 +720,16 @@ enum UISmokeRenderRunner {
     @ViewBuilder
     private static func view(for surface: UISmokeSurface) -> some View {
         switch surface {
+        case .setupGate:
+            MainView(model: firstRunModel())
+        case .reviewWorkspace:
+            MainView(model: reviewWorkspacePreviewModel())
         case .firstRunSetup:
-            ReviewInboxView(model: firstRunModel(), selectedSection: .needsSetup)
+            ReviewInboxView(model: firstRunModel(), selectedSection: .constant(.needsSetup))
         case .repositorySidebar:
             ReviewInboxSidebarView(model: populatedModel(), selectedSection: .constant(.recents))
         case .reviewInbox:
-            ReviewInboxView(model: populatedModel(), selectedSection: .recents)
+            ReviewInboxView(model: populatedModel(), selectedSection: .constant(.recents))
         case .diffWorkspace:
             ReviewPaneView(model: populatedModel())
         case .reviewInspector:
@@ -696,6 +769,14 @@ enum UISmokeRenderRunner {
         )
     }
 
+    static func setupGatePreviewModel() -> AppModel {
+        firstRunModel()
+    }
+
+    static func reviewWorkspacePreviewModel() -> AppModel {
+        populatedModel()
+    }
+
     private static func firstRunLoadedTokenModel() -> AppModel {
         let model = AppModel(
             credentialStore: VersionedCredentialStore(tokenStore: InMemoryTokenStore()),
@@ -729,6 +810,7 @@ enum UISmokeRenderRunner {
         let repository = sampleRepository()
         let pullRequest = samplePullRequest()
 
+        model.configureForUISmokeReadyState()
         model.hasToken = true
         model.credentialKindDescription = AppL10n.string(GitHubCredentialKind.oauthUserToken.displayName)
         model.repositories = [repository]
@@ -960,4 +1042,12 @@ private struct UISmokeRenderSize {
 
     static let desktop = UISmokeRenderSize(name: "desktop", width: 920, height: 700)
     static let compact = UISmokeRenderSize(name: "compact", width: 520, height: 700)
+}
+
+private struct FixedCodexAuthenticationChecker: CodexAuthenticationChecking {
+    let state: CodexAuthenticationState
+
+    func status() async throws -> CodexAuthenticationState {
+        state
+    }
 }

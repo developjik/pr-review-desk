@@ -77,6 +77,9 @@ struct ReviewCommandPanelView: View {
         .padding()
         .frame(width: 520, height: 640)
         .focusable()
+        .onExitCommand {
+            isPresented = false
+        }
         .onMoveCommand { direction in
             switch direction {
             case .down:
@@ -160,14 +163,6 @@ struct ReviewCommandPanelView: View {
             ReviewCommandPanelAction(title: AppL10n.string("Previous Change Block"), subtitle: hasSelectedFile ? AppL10n.string("Move to the previous changed block in the selected file.") : AppL10n.string("Select a changed file first."), systemImage: "arrow.up.to.line", shortcut: "⌥⌘[", isEnabled: hasSelectedFile, kind: .previousHunk),
             ReviewCommandPanelAction(title: AppL10n.string("Reveal Inline Comment"), subtitle: availability.canRevealInlineComment ? AppL10n.string("Show the focused comment in the changes.") : AppL10n.string("Focus an inline comment first."), systemImage: "scope", shortcut: nil, isEnabled: availability.canRevealInlineComment, kind: .revealInlineComment),
             ]),
-            ReviewCommandPanelActionGroup(title: "Setup", actions: [
-                ReviewCommandPanelAction(title: AppL10n.string("Sign in with GitHub"), subtitle: AppL10n.string("Connect GitHub so repositories can load."), systemImage: "person.crop.circle.badge.checkmark", shortcut: nil, isEnabled: !model.hasToken && !model.isWorking && !model.isOAuthSignInPending, kind: .startGitHubSignIn),
-                ReviewCommandPanelAction(title: AppL10n.string("Check GitHub Access"), subtitle: AppL10n.string("Checks that GitHub can read repositories and reviews for this account."), systemImage: "checkmark.seal", shortcut: nil, isEnabled: model.hasToken && !isGitHubAccessReady && !model.isWorking, kind: .validateGitHubAccess),
-                ReviewCommandPanelAction(title: AppL10n.string("Check Codex"), subtitle: AppL10n.string("Checks whether Codex is ready for this app."), systemImage: "terminal", shortcut: nil, isEnabled: !isCodexReady && !model.isWorking, kind: .checkCodexReadiness),
-                ReviewCommandPanelAction(title: AppL10n.string("Copy Codex Sign-In Step"), subtitle: AppL10n.string("Copies the ChatGPT sign-in step."), systemImage: "doc.on.doc", shortcut: nil, isEnabled: availability.canCopyCodexLoginCommand && !isCodexLoginReady, kind: .copyCodexLoginCommand),
-                ReviewCommandPanelAction(title: AppL10n.string("Open Terminal Sign-In Step"), subtitle: AppL10n.string("Copies the Codex sign-in step, opens Terminal, and asks you to paste it."), systemImage: "terminal", shortcut: nil, isEnabled: availability.canCopyCodexLoginCommand && !isCodexLoginReady, kind: .openCodexLoginTerminal),
-                ReviewCommandPanelAction(title: AppL10n.string("Acknowledge privacy"), subtitle: AppL10n.string("Marks the privacy disclosure as read so setup can continue."), systemImage: "hand.raised", shortcut: nil, isEnabled: !model.isPrivacyDisclosureAcknowledged && !model.isWorking, kind: .acknowledgePrivacyDisclosure)
-            ]),
             ReviewCommandPanelActionGroup(title: "View", actions: [
                 ReviewCommandPanelAction(title: AppL10n.string("Toggle Inspector"), subtitle: isInspectorPresented ? AppL10n.string("Hide draft and submit controls.") : AppL10n.string("Show draft and submit controls."), systemImage: "sidebar.trailing", shortcut: "⌥⌘I", isEnabled: availability.canToggleInspector, kind: .toggleInspector)
             ]),
@@ -192,14 +187,8 @@ struct ReviewCommandPanelView: View {
 
     private var isCodexReady: Bool {
         model.readinessChecklist.items
-            .filter { $0.id == .codexCLI || $0.id == .codexLogin }
+            .filter { $0.id == .codexCLI }
             .allSatisfy { $0.state == .ready }
-    }
-
-    private var isCodexLoginReady: Bool {
-        model.readinessChecklist.items
-            .first { $0.id == .codexLogin }?
-            .state == .ready
     }
 
     private func actionRow(_ action: ReviewCommandPanelAction) -> some View {
@@ -252,10 +241,10 @@ struct ReviewCommandPanelView: View {
         .smokeAccessibilityIdentifier(
             "command-panel.action.\(action.id)",
             state: accessibilityState(for: action),
-            details: action.subtitle
+            details: accessibilityHint(for: action)
         )
         .accessibilityLabel(action.title)
-        .accessibilityHint(action.subtitle)
+        .accessibilityHint(accessibilityHint(for: action))
         .accessibilityValue(selectedActionID == action.id ? AppL10n.string("Selected") : "")
         .accessibilityAddTraits(selectedActionID == action.id ? [.isSelected] : [])
         .disabled(!action.isEnabled)
@@ -355,5 +344,13 @@ struct ReviewCommandPanelView: View {
         }
 
         return "enabled"
+    }
+
+    private func accessibilityHint(for action: ReviewCommandPanelAction) -> String {
+        guard let shortcut = action.shortcut else {
+            return action.subtitle
+        }
+
+        return "\(action.subtitle) \(AppL10n.string("Shortcut: %@", shortcut))"
     }
 }

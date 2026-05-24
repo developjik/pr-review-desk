@@ -11,6 +11,11 @@ enum UISmokeManifestTests {
         let manifest = UISmokeManifest.current
 
         try expectEqual(Set(manifest.surfaces), Set(UISmokeSurface.allCases))
+        try expectTrue(manifest.surfaces.contains(.setupGate))
+        try expectTrue(manifest.surfaces.contains(.reviewWorkspace))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("Complete setup in Settings"))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("Open Settings"))
+        try expectTrue(manifest.requiredLocalizationKeys.contains("PR Review Desk keeps setup changes in Settings."))
         try expectTrue(manifest.requiredLocalizationKeys.contains("Finish setup"))
         try expectTrue(manifest.requiredLocalizationKeys.contains("Guided setup path"))
         try expectTrue(manifest.requiredLocalizationKeys.contains("Sign in with GitHub"))

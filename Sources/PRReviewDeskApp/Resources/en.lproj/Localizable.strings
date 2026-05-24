@@ -3,6 +3,9 @@
 "Search repositories" = "Search repositories";
 "Open Settings" = "Open Settings";
 "Setup Required" = "Setup Required";
+"Complete setup in Settings" = "Complete setup in Settings";
+"PR Review Desk keeps setup changes in Settings." = "PR Review Desk keeps setup changes in Settings.";
+"After setup is complete, the PR review workspace appears automatically." = "After setup is complete, the PR review workspace appears automatically.";
 "Ready" = "Ready";
 "Needs setup" = "Needs setup";
 "GitHub" = "GitHub";
@@ -272,6 +275,7 @@
 "Cancelling GitHub sign-in..." = "Cancelling GitHub sign-in...";
 "Cancelling current operation..." = "Cancelling current operation...";
 "Check Codex login status. If needed, run `codex login` in Terminal." = "Check Codex login status. If needed, run `codex login` in Terminal.";
+"Check Codex sign-in status. If needed, finish the Codex sign-in step." = "Check Codex sign-in status. If needed, finish the Codex sign-in step.";
 "Check ChatGPT sign-in status. If needed, finish the Codex sign-in step." = "Check ChatGPT sign-in status. If needed, finish the Codex sign-in step.";
 "Check GitHub access, token scopes, and the repository state, then retry." = "Check GitHub access, token scopes, and the repository state, then retry.";
 "Check the OAuth App client ID and network access, then start sign-in again." = "Check the OAuth App client ID and network access, then start sign-in again.";
@@ -281,6 +285,7 @@
 "Checking Codex CLI..." = "Checking Codex CLI...";
 "Cleared remembered private repository consent." = "Cleared remembered private repository consent.";
 "Codex CLI found. Codex login needs action." = "Codex CLI found. Codex login needs action.";
+"Codex is available. Codex sign-in needs action." = "Codex is available. Codex sign-in needs action.";
 "Codex is available. ChatGPT sign-in needs action." = "Codex is available. ChatGPT sign-in needs action.";
 "Codex CLI not found on PATH." = "Codex CLI not found on PATH.";
 "Codex CLI ready." = "Codex CLI ready.";
@@ -293,6 +298,7 @@
 "Copied codex login. Run it in Terminal, then check Codex readiness." = "Copied codex login. Run it in Terminal, then check Codex readiness.";
 "Copied codex login. Run it in Terminal, sign in with ChatGPT, then check Codex readiness." = "Copied codex login. Run it in Terminal, sign in with ChatGPT, then check Codex readiness.";
 "Copied the Codex sign-in step. Paste it in Terminal, sign in with ChatGPT, then return and check again." = "Copied the Codex sign-in step. Paste it in Terminal, sign in with ChatGPT, then return and check again.";
+"Copied the Codex sign-in step. Paste it in Terminal, finish Codex sign-in, then return and check again." = "Copied the Codex sign-in step. Paste it in Terminal, finish Codex sign-in, then return and check again.";
 "Copied the Codex sign-in step, but Terminal could not be opened." = "Copied the Codex sign-in step, but Terminal could not be opened.";
 "Could not delete token: %@" = "Could not delete token: %@";
 "Could not load token: %@" = "Could not load token: %@";
@@ -302,8 +308,10 @@
 "Draft ready for %@#%d. Review and submit manually." = "Draft ready for %@#%d. Review and submit manually.";
 "Failed: %@" = "Failed: %@";
 "Finish setup before generating an AI review draft." = "Finish setup before generating an AI review draft.";
+"Finish Codex sign-in before generating an AI review draft." = "Finish Codex sign-in before generating an AI review draft.";
 "Finish the current operation before generating another draft." = "Finish the current operation before generating another draft.";
 "Opened Terminal and copied the Codex sign-in step. Paste it, sign in with ChatGPT, then return and check again." = "Opened Terminal and copied the Codex sign-in step. Paste it, sign in with ChatGPT, then return and check again.";
+"Opened Terminal and copied the Codex sign-in step. Paste it, finish Codex sign-in, then return and check again." = "Opened Terminal and copied the Codex sign-in step. Paste it, finish Codex sign-in, then return and check again.";
 "Found at %@." = "Found at %@.";
 "Generate a fresh review draft before submitting." = "Generate a fresh review draft before submitting.";
 "Generate a review draft before submitting." = "Generate a review draft before submitting.";
@@ -472,10 +480,14 @@
 "Codex ChatGPT login" = "Codex ChatGPT login";
 "GitHub sign-in and repository access are ready." = "GitHub sign-in and repository access are ready.";
 "GitHub sign-in is saved. Check repository access before generating reviews." = "GitHub sign-in is saved. Check repository access before generating reviews.";
+"GitHub sign-in is saved. Validate repository access before generating reviews." = "GitHub sign-in is saved. Validate repository access before generating reviews.";
+"GitHub is connected for repository review access. Reconnect or manage access if permissions change." = "GitHub is connected for repository review access. Reconnect or manage access if permissions change.";
 "Sign in with GitHub to authorize repository review access." = "Sign in with GitHub to authorize repository review access.";
 "Install Codex for local review generation, then check readiness." = "Install Codex for local review generation, then check readiness.";
+"Install Codex before checking Codex sign-in." = "Install Codex before checking Codex sign-in.";
 "Sign in to Codex with ChatGPT before generating reviews." = "Sign in to Codex with ChatGPT before generating reviews.";
 "Connect GitHub, confirm Codex, sign in with ChatGPT, and acknowledge privacy before generating reviews." = "Connect GitHub, confirm Codex, sign in with ChatGPT, and acknowledge privacy before generating reviews.";
+"Connect GitHub, confirm Codex, and acknowledge privacy before generating reviews." = "Connect GitHub, confirm Codex, and acknowledge privacy before generating reviews.";
 "Checks whether AI review setup is ready on this Mac." = "Checks whether AI review setup is ready on this Mac.";
 "Opens official Codex setup help in your browser." = "Opens official Codex setup help in your browser.";
 "If Codex is not installed, copy one install command, paste it in Terminal, then return and check again." = "If Codex is not installed, copy one install command, paste it in Terminal, then return and check again.";
@@ -484,7 +496,10 @@
 "Copies the official Homebrew install command for Codex." = "Copies the official Homebrew install command for Codex.";
 "Copies the official npm install command for Codex." = "Copies the official npm install command for Codex.";
 "Copies codex login so you can sign in with ChatGPT." = "Copies codex login so you can sign in with ChatGPT.";
+"Copies codex login so you can finish Codex sign-in." = "Copies codex login so you can finish Codex sign-in.";
 "Copies the ChatGPT sign-in step." = "Copies the ChatGPT sign-in step.";
+"Copies the Codex sign-in step." = "Copies the Codex sign-in step.";
+"Shortcut: %@" = "Shortcut: %@";
 "Checks whether ChatGPT sign-in is complete." = "Checks whether ChatGPT sign-in is complete.";
 "Checks whether Codex is ready for this app." = "Checks whether Codex is ready for this app.";
 "Checks that GitHub can read repositories and reviews for this account." = "Checks that GitHub can read repositories and reviews for this account.";
@@ -496,6 +511,8 @@
 "Copied Codex Homebrew install command. Paste it in Terminal, wait for install to finish, then check Codex again." = "Copied Codex Homebrew install command. Paste it in Terminal, wait for install to finish, then check Codex again.";
 "Copied Codex npm install command. Paste it in Terminal, wait for install to finish, then check Codex again." = "Copied Codex npm install command. Paste it in Terminal, wait for install to finish, then check Codex again.";
 "Codex is not installed or this app cannot find it. Install the Codex command-line helper with Homebrew or npm, then check again." = "Codex is not installed or this app cannot find it. Install the Codex command-line helper with Homebrew or npm, then check again.";
+"PR Review Desk uses Codex on this Mac to generate review drafts." = "PR Review Desk uses Codex on this Mac to generate review drafts.";
+"Run `codex login` in Terminal, finish Codex sign-in, then check Codex readiness." = "Run `codex login` in Terminal, finish Codex sign-in, then check Codex readiness.";
 "Creates a fresh draft when comments no longer match the PR." = "Creates a fresh draft when comments no longer match the PR.";
 "%@ comment spot %d" = "%@ comment spot %d";
 "Regenerate the draft, or close this preview and deselect comments that need fixing." = "Regenerate the draft, or close this preview and deselect comments that need fixing.";

@@ -90,7 +90,7 @@ public struct CodexCLIAuthenticationChecker: CodexAuthenticationChecking, Sendab
 
         return readyOrUnsupportedState(
             executablePath: executablePath,
-            output: loginResult.standardOutput
+            output: loginStatusOutput(from: loginResult)
         )
     }
 
@@ -115,10 +115,11 @@ public struct CodexCLIAuthenticationChecker: CodexAuthenticationChecking, Sendab
     }
 
     private func readyOrUnsupportedState(executablePath: String, output: String) -> CodexAuthenticationState {
-        let message = sanitizedOneLine(output)
-        let normalized = message.lowercased()
+        let message = sanitizedStatusLine(from: output)
+        let normalized = SensitiveTextRedactor.redact(output).lowercased()
 
-        if normalized.contains("logged in using chatgpt") {
+        if normalized.contains("logged in using chatgpt")
+            || normalized.contains("logged in with chatgpt") {
             return .ready(executablePath: executablePath, method: .chatGPT, message: message)
         }
 
@@ -145,11 +146,28 @@ public struct CodexCLIAuthenticationChecker: CodexAuthenticationChecking, Sendab
         )
     }
 
+    private func loginStatusOutput(from result: CommandResult) -> String {
+        [result.standardOutput, result.standardError]
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n")
+    }
+
+    private func sanitizedStatusLine(from text: String) -> String {
+        let lines = SensitiveTextRedactor.redact(text)
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        return lines.first { $0.localizedCaseInsensitiveContains("chatgpt") }
+            ?? lines.first
+            ?? ""
+    }
+
     private func notLoggedInMessage(from result: CommandResult) -> String {
         let detail = sanitizedOneLine(result.standardError.isEmpty ? result.standardOutput : result.standardError)
         guard !detail.isEmpty,
               !detail.localizedCaseInsensitiveContains("not logged in") else {
-            return "Not logged in. Run `codex login` and sign in with ChatGPT."
+            return "Not logged in. Run `codex login`."
         }
 
         return "Not logged in. \(detail)"

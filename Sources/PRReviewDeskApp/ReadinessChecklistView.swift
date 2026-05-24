@@ -170,7 +170,7 @@ struct ReadinessChecklistView: View {
         case .checkCodexReadiness:
             return AppL10n.string("Checks whether AI review setup is ready on this Mac.")
         case .copyCodexLoginCommand:
-            return AppL10n.string("Copies the ChatGPT sign-in step.")
+            return AppL10n.string("Copies the Codex sign-in step.")
         case .acknowledgePrivacyDisclosure:
             return AppL10n.string("Marks the privacy disclosure as read so setup can continue.")
         }

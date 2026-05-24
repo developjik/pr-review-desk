@@ -4,6 +4,8 @@ import PRReviewDeskCore
 enum CodexAuthenticationTests {
     static func run() async throws {
         try await testChatGPTLoginIsReady()
+        try await testChatGPTStatusFromStandardErrorIsReady()
+        try await testChatGPTSubscriptionWordingIsReady()
         try await testAPIKeyLoginIsUnsupported()
         try await testAccessTokenLoginIsUnsupported()
         try await testUnknownSuccessfulLoginOutputIsUnsupported()
@@ -27,6 +29,44 @@ enum CodexAuthenticationTests {
                 executablePath: "/opt/homebrew/bin/codex",
                 method: .chatGPT,
                 message: "Logged in using ChatGPT"
+            )
+        )
+        try expectTrue(state.isReadyForChatGPTSubscription)
+    }
+
+    private static func testChatGPTStatusFromStandardErrorIsReady() async throws {
+        let checker = CodexCLIAuthenticationChecker(commandRunner: SequenceCommandRunner(results: [
+            .success(CommandResult(exitCode: 0, standardOutput: "/opt/homebrew/bin/codex\n", standardError: "")),
+            .success(CommandResult(exitCode: 0, standardOutput: "", standardError: "Logged in using ChatGPT\n"))
+        ]))
+
+        let state = try await checker.status()
+
+        try expectEqual(
+            state,
+            .ready(
+                executablePath: "/opt/homebrew/bin/codex",
+                method: .chatGPT,
+                message: "Logged in using ChatGPT"
+            )
+        )
+        try expectTrue(state.isReadyForChatGPTSubscription)
+    }
+
+    private static func testChatGPTSubscriptionWordingIsReady() async throws {
+        let checker = CodexCLIAuthenticationChecker(commandRunner: SequenceCommandRunner(results: [
+            .success(CommandResult(exitCode: 0, standardOutput: "/opt/homebrew/bin/codex\n", standardError: "")),
+            .success(CommandResult(exitCode: 0, standardOutput: "Logged in with ChatGPT subscription\n", standardError: ""))
+        ]))
+
+        let state = try await checker.status()
+
+        try expectEqual(
+            state,
+            .ready(
+                executablePath: "/opt/homebrew/bin/codex",
+                method: .chatGPT,
+                message: "Logged in with ChatGPT subscription"
             )
         )
         try expectTrue(state.isReadyForChatGPTSubscription)
@@ -101,7 +141,7 @@ enum CodexAuthenticationTests {
             state,
             .notLoggedIn(
                 executablePath: "/opt/homebrew/bin/codex",
-                message: "Not logged in. Run `codex login` and sign in with ChatGPT."
+                message: "Not logged in. Run `codex login`."
             )
         )
         try expectTrue(!state.isReadyForChatGPTSubscription)

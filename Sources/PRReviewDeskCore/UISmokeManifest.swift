@@ -1,6 +1,8 @@
 import Foundation
 
 public enum UISmokeSurface: String, CaseIterable, Hashable, Sendable {
+    case setupGate = "setup-gate"
+    case reviewWorkspace = "review-workspace"
     case firstRunSetup = "first-run-setup"
     case repositorySidebar = "repository-sidebar"
     case reviewInbox = "review-inbox"
@@ -18,6 +20,9 @@ public struct UISmokeManifest: Equatable, Hashable, Sendable {
     public static let current = UISmokeManifest(
         surfaces: UISmokeSurface.allCases,
         requiredLocalizationKeys: [
+            "Complete setup in Settings",
+            "Open Settings",
+            "PR Review Desk keeps setup changes in Settings.",
             "Finish setup",
             "Guided setup path",
             "Sign in with GitHub",
@@ -39,6 +44,9 @@ public struct UISmokeManifest: Equatable, Hashable, Sendable {
             "Search actions",
             "Readiness",
             "Reconnect GitHub Sign-In",
+            "GitHub sign-in is saved. Validate repository access before generating reviews.",
+            "GitHub is connected for repository review access. Reconnect or manage access if permissions change.",
+            "Shortcut: %@",
             "Cancel Review Generation"
         ]
     )
