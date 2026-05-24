@@ -12,6 +12,108 @@ struct MainView: View {
     @State private var isCommandPanelPresented = false
 
     var body: some View {
+        content
+            .toolbar {
+                toolbarContent
+            }
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 0) {
+                    if let recoverableError = model.recoverableError {
+                        RecoverableErrorPanel(
+                            error: recoverableError,
+                            onDismiss: {
+                                model.dismissRecoverableError()
+                            }
+                        )
+                    }
+                    StatusBarView(model: model)
+                }
+            }
+            .sheet(isPresented: $isCommandPanelPresented) {
+                ReviewCommandPanelView(
+                    model: model,
+                    selectedSection: selectedInboxSectionBinding,
+                    isInspectorPresented: $isInspectorPresented,
+                    isPresented: $isCommandPanelPresented,
+                    onDeferredSubmit: {
+                        isCommandPanelPresented = false
+                        Task { @MainActor in
+                            await Task.yield()
+                            model.requestSubmitReview()
+                        }
+                    }
+                )
+            }
+            .sheet(item: $model.pendingPrivateRepositoryConsent) { request in
+                PrivateRepositoryConsentSheet(
+                    request: request,
+                    onCancel: {
+                        model.cancelPrivateRepositoryConsent()
+                    },
+                    onAcknowledge: {
+                        model.confirmPrivateRepositoryConsentAndGenerate()
+                    }
+                )
+            }
+            .sheet(isPresented: $model.isSubmitConfirmationPresented) {
+                ReviewSubmissionPreviewSheet(
+                    preview: model.submissionPreview,
+                    eventDisplayName: model.selectedEvent.localizedDisplayName,
+                    isRefreshingSafety: model.isWorking,
+                    onCancel: {
+                        model.isSubmitConfirmationPresented = false
+                    },
+                    onRefreshSafety: {
+                        Task {
+                            await model.refreshSubmitSafety()
+                        }
+                    },
+                    onRegenerate: {
+                        model.isSubmitConfirmationPresented = false
+                        model.startGenerateReview()
+                    },
+                    onRevealInvalidComment: { comment in
+                        model.isSubmitConfirmationPresented = false
+                        model.revealInlineComment(path: comment.path, position: comment.position)
+                        isInspectorPresented = true
+                    },
+                    onDeselectInvalidComment: { comment in
+                        model.deselectInlineComment(path: comment.path, position: comment.position)
+                    },
+                    onSubmit: {
+                        model.isSubmitConfirmationPresented = false
+                        Task {
+                            await model.submitReview()
+                        }
+                    }
+                )
+            }
+            .onChange(of: model.generatedDraftPresentationRevision) { previousRevision, currentRevision in
+                if isReviewWorkspace,
+                   ReviewWorkspaceLayoutPolicy.shouldOpenInspectorAfterDraftGeneration(
+                    previousRevision: previousRevision,
+                    currentRevision: currentRevision
+                   ) {
+                    isInspectorPresented = true
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openReviewCommandPanel)) { _ in
+                if isReviewWorkspace {
+                    isCommandPanelPresented = true
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if isReviewWorkspace {
+            reviewWorkspace
+        } else {
+            SetupRequiredView(model: model)
+        }
+    }
+
+    private var reviewWorkspace: some View {
         NavigationSplitView {
             ReviewInboxSidebarView(
                 model: model,
@@ -25,7 +127,7 @@ struct MainView: View {
         } content: {
             ReviewInboxView(
                 model: model,
-                selectedSection: selectedInboxSection
+                selectedSection: selectedInboxSectionBinding
             )
             .navigationSplitViewColumnWidth(
                 min: CGFloat(ReviewWorkspaceLayoutPolicy.pullRequestListMinimumColumnWidth),
@@ -52,7 +154,11 @@ struct MainView: View {
             placement: .toolbar,
             prompt: AppL10n.string("Search pull requests")
         )
-        .toolbar {
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if isReviewWorkspace {
             ToolbarItemGroup {
                 Button {
                     isCommandPanelPresented = true
@@ -104,90 +210,17 @@ struct MainView: View {
                     Label(AppL10n.string("Settings"), systemImage: "gear")
                 }
             }
-        }
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 0) {
-                if let recoverableError = model.recoverableError {
-                    RecoverableErrorPanel(
-                        error: recoverableError,
-                        onDismiss: {
-                            model.dismissRecoverableError()
-                        }
-                    )
+        } else {
+            ToolbarItemGroup {
+                SettingsLink {
+                    Label(AppL10n.string("Open Settings"), systemImage: "gear")
                 }
-                StatusBarView(model: model)
             }
         }
-        .sheet(isPresented: $isCommandPanelPresented) {
-            ReviewCommandPanelView(
-                model: model,
-                selectedSection: selectedInboxSectionBinding,
-                isInspectorPresented: $isInspectorPresented,
-                isPresented: $isCommandPanelPresented,
-                onDeferredSubmit: {
-                    isCommandPanelPresented = false
-                    Task { @MainActor in
-                        await Task.yield()
-                        model.requestSubmitReview()
-                    }
-                }
-            )
-        }
-        .sheet(item: $model.pendingPrivateRepositoryConsent) { request in
-            PrivateRepositoryConsentSheet(
-                request: request,
-                onCancel: {
-                    model.cancelPrivateRepositoryConsent()
-                },
-                onAcknowledge: {
-                    model.confirmPrivateRepositoryConsentAndGenerate()
-                }
-            )
-        }
-        .sheet(isPresented: $model.isSubmitConfirmationPresented) {
-            ReviewSubmissionPreviewSheet(
-                preview: model.submissionPreview,
-                eventDisplayName: model.selectedEvent.localizedDisplayName,
-                isRefreshingSafety: model.isWorking,
-                onCancel: {
-                    model.isSubmitConfirmationPresented = false
-                },
-                onRefreshSafety: {
-                    Task {
-                        await model.refreshSubmitSafety()
-                    }
-                },
-                onRegenerate: {
-                    model.isSubmitConfirmationPresented = false
-                    model.startGenerateReview()
-                },
-                onRevealInvalidComment: { comment in
-                    model.isSubmitConfirmationPresented = false
-                    model.revealInlineComment(path: comment.path, position: comment.position)
-                    isInspectorPresented = true
-                },
-                onDeselectInvalidComment: { comment in
-                    model.deselectInlineComment(path: comment.path, position: comment.position)
-                },
-                onSubmit: {
-                    model.isSubmitConfirmationPresented = false
-                    Task {
-                        await model.submitReview()
-                    }
-                }
-            )
-        }
-        .onChange(of: model.generatedDraftPresentationRevision) { previousRevision, currentRevision in
-            if ReviewWorkspaceLayoutPolicy.shouldOpenInspectorAfterDraftGeneration(
-                previousRevision: previousRevision,
-                currentRevision: currentRevision
-            ) {
-                isInspectorPresented = true
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openReviewCommandPanel)) { _ in
-            isCommandPanelPresented = true
-        }
+    }
+
+    private var isReviewWorkspace: Bool {
+        model.settingsGatePresentation.destination == .reviewWorkspace
     }
 
     private var selectedInboxSection: ReviewInboxSection {

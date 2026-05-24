@@ -121,6 +121,7 @@ final class AppModel: ObservableObject {
     private var privateRepositoryConsentAcknowledgements: Set<String> = []
     private var pendingPrivateRepositoryConsentContinuation: PrivateRepositoryConsentContinuation?
     private var launchSessionRestoreGate = OneShotGate()
+    private var launchCodexStatusGate = OneShotGate()
 
     var selectedInlineCommentCount: Int {
         draft?.inlineComments.filter(\.isSelected).count ?? 0
@@ -197,6 +198,18 @@ final class AppModel: ObservableObject {
             supportsSelectedFileRegeneration: false,
             canCopyCodexLoginCommand: codexCLIReadinessStatus == .ready
         )
+    }
+
+    var isCodexCLIReadyForReviewSetup: Bool {
+        codexCLIReadinessStatus == .ready
+    }
+
+    var isCodexReviewSetupReady: Bool {
+        codexCLIReadinessStatus == .ready && codexLoginReadinessStatus == .ready
+    }
+
+    var needsCodexSignInAction: Bool {
+        codexCLIReadinessStatus == .ready && codexLoginReadinessStatus != .ready
     }
 
     var reviewInboxRows: [PullRequestTriageRow] {
@@ -315,6 +328,21 @@ final class AppModel: ObservableObject {
         )
     }
 
+    var settingsGatePresentation: SettingsGatePresentation {
+        SettingsGatePresentation.make(readinessChecklist: readinessChecklist)
+    }
+
+    func configureForUISmokeReadyState() {
+        hasToken = true
+        tokenValidationReadinessStatus = .ready
+        codexCLIReadinessStatus = .ready
+        codexLoginReadinessStatus = .ready
+        tokenValidationStatus = AppL10n.string("Valid for @%@. Scopes: %@.", "developjik", scopeSummary(["repo"]))
+        codexCLIStatus = AppL10n.string("Codex is ready for this app.")
+        codexLoginStatus = AppL10n.string("Codex is signed in with ChatGPT.")
+        isPrivacyDisclosureAcknowledged = true
+    }
+
     private var hasSubmittableDraft: Bool {
         draft != nil && submitSafetyState.canSubmit
     }
@@ -427,6 +455,14 @@ final class AppModel: ObservableObject {
 
     func retryGitHubSessionRestore() async {
         await restoreGitHubSession()
+    }
+
+    func refreshCodexStatusOnLaunchIfNeeded() async {
+        guard launchCodexStatusGate.consume() else {
+            return
+        }
+
+        await refreshCodexCLIStatus()
     }
 
     private func restoreGitHubSession() async {
@@ -1169,7 +1205,7 @@ final class AppModel: ObservableObject {
     func copyCodexLoginCommand() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString("codex login", forType: .string)
-        statusMessage = AppL10n.string("Copied the Codex sign-in step. Paste it in Terminal, sign in with ChatGPT, then return and check again.")
+        statusMessage = AppL10n.string("Copied the Codex sign-in step. Paste it in Terminal, finish Codex sign-in, then return and check again.")
     }
 
     func copyHomebrewCodexInstallCommand() {
@@ -1193,7 +1229,7 @@ final class AppModel: ObservableObject {
         }
 
         NSWorkspace.shared.open(terminalURL)
-        statusMessage = AppL10n.string("Opened Terminal and copied the Codex sign-in step. Paste it, sign in with ChatGPT, then return and check again.")
+        statusMessage = AppL10n.string("Opened Terminal and copied the Codex sign-in step. Paste it, finish Codex sign-in, then return and check again.")
     }
 
     func openSelectedPullRequestInBrowser() {
@@ -1874,7 +1910,7 @@ final class AppModel: ObservableObject {
         case .needsAction:
             return .needsAction(codexLoginStatus)
         case .unknown:
-            return .unknown(AppL10n.string("Check ChatGPT sign-in status. If needed, finish the Codex sign-in step."))
+            return .unknown(AppL10n.string("Check Codex sign-in status. If needed, finish the Codex sign-in step."))
         }
     }
 
@@ -1882,7 +1918,7 @@ final class AppModel: ObservableObject {
         switch state {
         case let .unknown(message):
             codexCLIStatus = AppL10n.string(message)
-            codexLoginStatus = AppL10n.string("Check ChatGPT sign-in status. If needed, finish the Codex sign-in step.")
+            codexLoginStatus = AppL10n.string("Check Codex sign-in status. If needed, finish the Codex sign-in step.")
             codexCLIReadinessStatus = .unknown
             codexLoginReadinessStatus = .unknown
             if announceStatus {
@@ -1890,7 +1926,7 @@ final class AppModel: ObservableObject {
             }
         case let .missingCLI(message):
             codexCLIStatus = AppL10n.string(message)
-            codexLoginStatus = AppL10n.string("Install Codex before checking ChatGPT login.")
+            codexLoginStatus = AppL10n.string("Install Codex before checking Codex sign-in.")
             codexCLIReadinessStatus = .needsAction
             codexLoginReadinessStatus = .needsAction
             if announceStatus {
@@ -1902,7 +1938,7 @@ final class AppModel: ObservableObject {
             codexCLIReadinessStatus = .ready
             codexLoginReadinessStatus = .needsAction
             if announceStatus {
-                statusMessage = AppL10n.string("Codex is available. ChatGPT sign-in needs action.")
+                statusMessage = AppL10n.string("Codex is available. Codex sign-in needs action.")
             }
         case let .unsupportedLogin(executablePath, _, message):
             codexCLIStatus = AppL10n.string("Found at %@.", executablePath)
@@ -1948,7 +1984,7 @@ final class AppModel: ObservableObject {
         case .missingCLI:
             return AppL10n.string("Codex is not installed or this app cannot find it.")
         case .notLoggedIn:
-            return AppL10n.string("Sign in to Codex with ChatGPT before generating an AI review draft.")
+            return AppL10n.string("Finish Codex sign-in before generating an AI review draft.")
         case .unsupportedLogin:
             return AppL10n.string("Codex login must use ChatGPT.")
         case .unknown:
@@ -1966,7 +2002,7 @@ final class AppModel: ObservableObject {
              .unsupportedLogin,
              .unknown,
              .ready:
-            return AppL10n.string("Run `codex login` in Terminal and sign in with ChatGPT, then check Codex readiness.")
+            return AppL10n.string("Run `codex login` in Terminal, finish Codex sign-in, then check Codex readiness.")
         }
     }
 

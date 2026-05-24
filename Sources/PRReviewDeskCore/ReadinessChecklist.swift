@@ -103,18 +103,10 @@ public struct ReadinessChecklist: Equatable, Hashable, Sendable {
             ReadinessChecklistItem(
                 id: .codexCLI,
                 title: "AI review setup",
-                detail: codexCLI.detail,
-                state: codexCLI.itemState,
-                action: .checkCodexReadiness,
-                actionTitle: "Check"
-            ),
-            ReadinessChecklistItem(
-                id: .codexLogin,
-                title: "ChatGPT sign-in",
-                detail: codexLogin.detail,
-                state: codexLogin.itemState,
-                action: .copyCodexLoginCommand,
-                actionTitle: "Copy sign-in step"
+                detail: Self.codexDetail(cli: codexCLI, login: codexLogin),
+                state: Self.codexState(cli: codexCLI, login: codexLogin),
+                action: Self.codexAction(cli: codexCLI, login: codexLogin),
+                actionTitle: Self.codexActionTitle(cli: codexCLI, login: codexLogin)
             ),
             ReadinessChecklistItem(
                 id: .privacyDisclosure,
@@ -131,5 +123,49 @@ public struct ReadinessChecklist: Equatable, Hashable, Sendable {
 
     public var isReady: Bool {
         items.allSatisfy { $0.state == .ready }
+    }
+
+    private static func codexState(cli: ReadinessProbeState, login: ReadinessProbeState) -> ReadinessChecklistItemState {
+        guard cli.itemState == .ready else {
+            return cli.itemState
+        }
+
+        return login.itemState
+    }
+
+    private static func codexDetail(cli: ReadinessProbeState, login: ReadinessProbeState) -> String {
+        guard cli.itemState == .ready else {
+            return cli.detail
+        }
+
+        guard login.itemState == .ready else {
+            return "Codex is installed. Finish Codex sign-in before generating reviews."
+        }
+
+        return "AI review drafting is ready on this Mac."
+    }
+
+    private static func codexAction(cli: ReadinessProbeState, login: ReadinessProbeState) -> ReadinessChecklistAction {
+        guard cli.itemState == .ready else {
+            return .checkCodexReadiness
+        }
+
+        guard login.itemState == .ready else {
+            return .copyCodexLoginCommand
+        }
+
+        return .checkCodexReadiness
+    }
+
+    private static func codexActionTitle(cli: ReadinessProbeState, login: ReadinessProbeState) -> String {
+        guard cli.itemState == .ready else {
+            return "Check"
+        }
+
+        guard login.itemState == .ready else {
+            return "Copy sign-in step"
+        }
+
+        return "Check"
     }
 }

@@ -3,7 +3,7 @@ import PRReviewDeskCore
 
 struct ReviewInboxView: View {
     @ObservedObject var model: AppModel
-    let selectedSection: ReviewInboxSection
+    @Binding var selectedSection: ReviewInboxSection
     @State private var selectedRowID: String?
 
     var body: some View {
@@ -34,6 +34,9 @@ struct ReviewInboxView: View {
         .navigationTitle("")
         .onAppear {
             syncSelectedRowIDFromModel()
+            Task {
+                await syncSelectionToVisibleRows()
+            }
         }
         .onChange(of: selectedRowID) { _, newValue in
             selectVisibleRow(with: newValue)
@@ -253,36 +256,40 @@ struct ReviewInboxView: View {
     }
 
     private func syncSelectionToVisibleRows() async {
-        let visiblePullRequests = rows.map(\.pullRequest)
-        guard model.selectedPullRequest != nil else {
-            if let selectedRowID,
-               !rows.contains(where: { $0.id == selectedRowID }) {
-                self.selectedRowID = nil
-            }
-            return
-        }
+        let selectedRow = model.reviewInboxRows.first(where: isModelSelected)
+        let decision = ReviewInboxSelectionPolicy.decision(
+            selectedRow: selectedRow,
+            visibleRows: rows,
+            selectedSection: selectedSection
+        )
 
-        guard let visibleSelection = StableSelection.visiblePullRequest(
-            in: visiblePullRequests,
-            previousSelection: model.selectedPullRequest
-        ) else {
-            let hadLocalSelection = selectedRowID != nil
+        switch decision {
+        case let .keep(rowID):
+            if selectedRowID != rowID {
+                selectedRowID = rowID
+            }
+        case let .select(rowID):
+            guard let row = rows.first(where: { $0.id == rowID }) else {
+                return
+            }
+            if selectedRowID == rowID {
+                await model.selectTriageRow(row)
+            } else {
+                selectedRowID = rowID
+            }
+        case let .moveSection(section, rowID):
+            if selectedRowID != rowID {
+                selectedRowID = rowID
+            }
+            if selectedSection != section {
+                selectedSection = section
+            }
+        case .clear:
+            let hadModelSelection = model.selectedPullRequest != nil
             selectedRowID = nil
-            if ReviewInboxFilterPresentation.shouldClearHiddenSelection(
-                query: model.pullRequestSearchText,
-                hasLocalSelection: hadLocalSelection
-            ) {
+            if hadModelSelection {
                 model.clearSelectedPullRequestForVisibleFilter(hasVisibleRows: !rows.isEmpty)
             }
-            return
-        }
-
-        guard let row = rows.first(where: { $0.pullRequest.id == visibleSelection.id }) else {
-            return
-        }
-
-        if selectedRowID != row.id {
-            selectedRowID = row.id
         }
     }
 }
@@ -394,7 +401,7 @@ private struct FirstRunSetupView: View {
                     .font(.title3)
                     .fontWeight(.semibold)
 
-                Text(AppL10n.string("Connect GitHub, confirm Codex, sign in with ChatGPT, and acknowledge privacy before generating reviews."))
+                Text(AppL10n.string("Connect GitHub, confirm Codex, and acknowledge privacy before generating reviews."))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -418,18 +425,11 @@ private struct FirstRunSetupView: View {
         let gitHubReady = checklist.items
             .filter { $0.id == .githubCredential || $0.id == .githubTokenValidation }
             .allSatisfy { $0.state == .ready }
-        let codexCLIReady = checklist.items
-            .first { $0.id == .codexCLI }?
-            .state == .ready
-        let codexLoginReady = checklist.items
-            .first { $0.id == .codexLogin }?
-            .state == .ready
-
         return FirstRunSetupPresentation.steps(
             hasGitHubCredential: model.hasToken,
             isGitHubReady: gitHubReady,
-            isCodexCLIReady: codexCLIReady,
-            isCodexChatGPTLoginReady: codexLoginReady,
+            isCodexCLIReady: model.isCodexCLIReadyForReviewSetup,
+            isCodexChatGPTLoginReady: model.isCodexReviewSetupReady,
             isPrivacyAcknowledged: model.isPrivacyDisclosureAcknowledged
         )
     }
@@ -472,16 +472,9 @@ private struct FirstRunSetupView: View {
         }
     }
 
-    private var isCodexCLIReady: Bool {
-        model.readinessChecklist.items
-            .first { $0.id == .codexCLI }?
-            .state == .ready
-    }
-
     private var needsCodexInstallAction: Bool {
-        model.readinessChecklist.items
-            .first { $0.id == .codexCLI }?
-            .state == .needsAction
+        !model.isCodexCLIReadyForReviewSetup
+            && model.readinessChecklist.items.first { $0.id == .codexCLI }?.state == .needsAction
     }
 
     private var privacyDisclosureCallout: some View {
@@ -557,33 +550,17 @@ private struct FirstRunSetupView: View {
                         .font(.caption)
                         .controlSize(.small)
                     }
-                }
-                .controlSize(.small)
-            case "codexLogin":
-                if isCodexCLIReady {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 8) {
-                            Button {
-                                Task {
-                                    await model.refreshCodexCLIStatus()
-                                }
-                            } label: {
-                                Label(AppL10n.string("Check again"), systemImage: "arrow.clockwise")
-                            }
-                            .accessibilityHint(AppL10n.string("Checks whether ChatGPT sign-in is complete."))
-                            .disabled(model.isWorking)
-                            .smokeAccessibilityIdentifier("first-run.codex-login.check")
-                        }
 
+                    if model.needsCodexSignInAction {
                         DisclosureGroup(AppL10n.string("Manual sign-in options")) {
                             Button {
                                 model.copyCodexLoginCommand()
                             } label: {
-                                Label(AppL10n.string(step.actionTitle), systemImage: "doc.on.doc")
+                                Label(AppL10n.string("Copy sign-in step"), systemImage: "doc.on.doc")
                             }
-                            .accessibilityHint(AppL10n.string("Copies codex login so you can sign in with ChatGPT."))
+                            .accessibilityHint(AppL10n.string("Copies codex login so you can finish Codex sign-in."))
                             .disabled(model.isWorking)
-                            .smokeAccessibilityIdentifier("first-run.codex-login.copy")
+                            .smokeAccessibilityIdentifier("first-run.codex.copy-login")
 
                             Button {
                                 model.openTerminalForCodexLogin()
@@ -592,17 +569,12 @@ private struct FirstRunSetupView: View {
                             }
                             .accessibilityHint(AppL10n.string("Copies the Codex sign-in step, opens Terminal, and asks you to paste it."))
                             .disabled(model.isWorking)
-                            .smokeAccessibilityIdentifier("first-run.codex-login.open-terminal")
+                            .smokeAccessibilityIdentifier("first-run.codex.open-terminal-login")
                         }
                         .font(.caption)
                     }
-                    .controlSize(.small)
-                } else {
-                    Text(AppL10n.string("Check Codex first. Login actions appear after Codex is ready."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .controlSize(.small)
             case "privacy":
                 Button {
                     model.acknowledgePrivacyDisclosure()

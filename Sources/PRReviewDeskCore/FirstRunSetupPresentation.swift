@@ -22,7 +22,8 @@ public enum FirstRunSetupPresentation {
         isCodexChatGPTLoginReady: Bool,
         isPrivacyAcknowledged: Bool
     ) -> [FirstRunSetupStep] {
-        [
+        let isCodexReady = isCodexCLIReady && isCodexChatGPTLoginReady
+        return [
             FirstRunSetupStep(
                 id: "github",
                 title: "GitHub access",
@@ -34,22 +35,10 @@ public enum FirstRunSetupPresentation {
             FirstRunSetupStep(
                 id: "codex",
                 title: "AI review setup",
-                detail: isCodexCLIReady
-                    ? "AI review drafting is ready on this Mac."
-                    : "Check whether this Mac can create AI review drafts.",
+                detail: codexDetail(isCLIReady: isCodexCLIReady, isLoginReady: isCodexChatGPTLoginReady),
                 actionTitle: "Check Codex",
                 systemImage: "terminal",
-                state: isCodexCLIReady ? .complete : .needsAction
-            ),
-            FirstRunSetupStep(
-                id: "codexLogin",
-                title: "ChatGPT sign-in",
-                detail: isCodexChatGPTLoginReady
-                    ? "ChatGPT sign-in is ready."
-                    : "Sign in to Codex with ChatGPT before generating reviews.",
-                actionTitle: "Copy sign-in step",
-                systemImage: "person.crop.circle.badge.checkmark",
-                state: isCodexChatGPTLoginReady ? .complete : .needsAction
+                state: isCodexReady ? .complete : .needsAction
             ),
             FirstRunSetupStep(
                 id: "privacy",
@@ -74,5 +63,17 @@ public enum FirstRunSetupPresentation {
         }
 
         return "Sign in with GitHub to authorize repository review access."
+    }
+
+    private static func codexDetail(isCLIReady: Bool, isLoginReady: Bool) -> String {
+        if isCLIReady && isLoginReady {
+            return "AI review drafting is ready on this Mac."
+        }
+
+        if isCLIReady {
+            return "Codex is installed. Finish Codex sign-in before generating reviews."
+        }
+
+        return "Check whether this Mac can create AI review drafts."
     }
 }

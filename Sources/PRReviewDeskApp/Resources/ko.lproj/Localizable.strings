@@ -3,6 +3,9 @@
 "Search repositories" = "저장소 검색";
 "Open Settings" = "설정 열기";
 "Setup Required" = "설정 필요";
+"Complete setup in Settings" = "설정에서 준비를 완료하세요";
+"PR Review Desk keeps setup changes in Settings." = "PR Review Desk의 설정 변경은 설정 화면에서만 진행합니다.";
+"After setup is complete, the PR review workspace appears automatically." = "설정이 완료되면 PR 리뷰 작업 화면이 자동으로 표시됩니다.";
 "Ready" = "준비됨";
 "Needs setup" = "설정 필요";
 "GitHub" = "GitHub";
@@ -272,6 +275,7 @@
 "Cancelling GitHub sign-in..." = "GitHub 로그인 취소 중...";
 "Cancelling current operation..." = "현재 작업 취소 중...";
 "Check Codex login status. If needed, run `codex login` in Terminal." = "Codex 로그인 상태를 확인하세요. 필요하면 ChatGPT 로그인을 완료하세요.";
+"Check Codex sign-in status. If needed, finish the Codex sign-in step." = "Codex 로그인 상태를 확인하세요. 필요하면 Codex 로그인 단계를 완료하세요.";
 "Check GitHub access, token scopes, and the repository state, then retry." = "GitHub 접근 권한, 로그인 권한, 저장소 상태를 확인한 뒤 다시 시도하세요.";
 "Check the OAuth App client ID and network access, then start sign-in again." = "GitHub 로그인 앱 ID와 네트워크 접근을 확인한 뒤 로그인을 다시 시작하세요.";
 "Check the details, adjust the input if needed, then retry." = "세부 정보를 확인하고 필요하면 입력을 수정한 뒤 다시 시도하세요.";
@@ -282,6 +286,7 @@
 "Cleared remembered private repository consent." = "저장된 비공개 저장소 동의를 지웠습니다.";
 "Codex CLI found. Codex login needs action." = "Codex 도구를 찾았습니다. Codex 로그인이 필요합니다.";
 "Codex is available. ChatGPT sign-in needs action." = "Codex를 사용할 수 있습니다. ChatGPT 로그인이 필요합니다.";
+"Codex is available. Codex sign-in needs action." = "Codex를 사용할 수 있습니다. Codex 로그인이 필요합니다.";
 "Codex CLI not found on PATH." = "앱이 찾는 위치에서 Codex 도구를 찾을 수 없습니다.";
 "Codex CLI ready." = "Codex 도구가 준비되었습니다.";
 "Codex CLI ready for ChatGPT." = "Codex 도구가 ChatGPT 사용 준비를 마쳤습니다.";
@@ -293,6 +298,7 @@
 "Copied codex login. Run it in Terminal, then check Codex readiness." = "Codex 로그인 단계를 복사했습니다. 안내를 완료한 뒤 Codex 준비 상태를 확인하세요.";
 "Copied codex login. Run it in Terminal, sign in with ChatGPT, then check Codex readiness." = "Codex 로그인 단계를 복사했습니다. ChatGPT 로그인을 완료한 뒤 Codex 준비 상태를 확인하세요.";
 "Copied the Codex sign-in step. Paste it in Terminal, sign in with ChatGPT, then return and check again." = "Codex 로그인 단계를 복사했습니다. Mac 명령 창에 붙여넣고 ChatGPT로 로그인한 뒤 돌아와 다시 확인하세요.";
+"Copied the Codex sign-in step. Paste it in Terminal, finish Codex sign-in, then return and check again." = "Codex 로그인 단계를 복사했습니다. Mac 명령 창에 붙여넣고 Codex 로그인을 완료한 뒤 돌아와 다시 확인하세요.";
 "Copied the Codex sign-in step, but Terminal could not be opened." = "Codex 로그인 단계를 복사했지만 Mac 명령 창을 열 수 없습니다.";
 "Could not delete token: %@" = "로그인을 삭제할 수 없습니다: %@";
 "Could not load token: %@" = "로그인을 불러올 수 없습니다: %@";
@@ -302,8 +308,10 @@
 "Draft ready for %@#%d. Review and submit manually." = "%@#%d 초안이 준비되었습니다. 직접 검토한 뒤 제출하세요.";
 "Failed: %@" = "실패: %@";
 "Finish setup before generating an AI review draft." = "AI 리뷰 초안을 생성하기 전에 설정을 완료하세요.";
+"Finish Codex sign-in before generating an AI review draft." = "AI 리뷰 초안을 생성하기 전에 Codex 로그인을 완료하세요.";
 "Finish the current operation before generating another draft." = "다른 초안을 생성하기 전에 현재 작업을 완료하세요.";
 "Opened Terminal and copied the Codex sign-in step. Paste it, sign in with ChatGPT, then return and check again." = "Mac 명령 창을 열고 Codex 로그인 단계를 복사했습니다. 붙여넣고 ChatGPT로 로그인한 뒤 돌아와 다시 확인하세요.";
+"Opened Terminal and copied the Codex sign-in step. Paste it, finish Codex sign-in, then return and check again." = "Mac 명령 창을 열고 Codex 로그인 단계를 복사했습니다. 붙여넣고 Codex 로그인을 완료한 뒤 돌아와 다시 확인하세요.";
 "Found at %@." = "%@에서 찾았습니다.";
 "Generate a fresh review draft before submitting." = "제출 전에 새 리뷰 초안을 생성하세요.";
 "Generate a review draft before submitting." = "제출 전에 리뷰 초안을 생성하세요.";
@@ -472,10 +480,14 @@
 "Codex ChatGPT login" = "Codex ChatGPT 로그인";
 "GitHub sign-in and repository access are ready." = "GitHub 로그인과 저장소 접근이 준비되었습니다.";
 "GitHub sign-in is saved. Check repository access before generating reviews." = "GitHub 로그인이 저장되었습니다. AI 리뷰 초안을 생성하기 전에 저장소 접근을 확인하세요.";
+"GitHub sign-in is saved. Validate repository access before generating reviews." = "GitHub 로그인이 저장되었습니다. AI 리뷰 초안을 생성하기 전에 저장소 접근을 확인하세요.";
+"GitHub is connected for repository review access. Reconnect or manage access if permissions change." = "GitHub가 저장소 리뷰 접근에 연결되어 있습니다. 권한이 바뀌면 다시 연결하거나 접근을 관리하세요.";
 "Sign in with GitHub to authorize repository review access." = "저장소 리뷰 접근을 허용하려면 GitHub로 로그인하세요.";
 "Install Codex for local review generation, then check readiness." = "이 Mac에서 리뷰 초안을 만들 수 있도록 Codex를 설치한 뒤 준비 상태를 확인하세요.";
+"Install Codex before checking Codex sign-in." = "Codex 로그인을 확인하기 전에 Codex를 설치하세요.";
 "Sign in to Codex with ChatGPT before generating reviews." = "AI 리뷰 초안을 생성하기 전에 ChatGPT로 Codex에 로그인하세요.";
 "Connect GitHub, confirm Codex, sign in with ChatGPT, and acknowledge privacy before generating reviews." = "AI 리뷰 초안을 생성하기 전에 GitHub 연결, Codex 준비, ChatGPT 로그인, 개인정보 고지를 확인하세요.";
+"Connect GitHub, confirm Codex, and acknowledge privacy before generating reviews." = "AI 리뷰 초안을 생성하기 전에 GitHub 연결, Codex 준비, 개인정보 고지를 확인하세요.";
 "Checks whether AI review setup is ready on this Mac." = "이 Mac에서 AI 리뷰를 만들 준비가 되었는지 확인합니다.";
 "Opens official Codex setup help in your browser." = "공식 Codex 설정 도움말을 브라우저에서 엽니다.";
 "If Codex is not installed, copy one install command, paste it in Terminal, then return and check again." = "Codex가 설치되어 있지 않다면 설치 안내 중 하나를 복사해 실행하고, 설치가 끝나면 돌아와 다시 확인하세요.";
@@ -484,7 +496,10 @@
 "Copies the official Homebrew install command for Codex." = "Codex 공식 설치 단계를 복사합니다.";
 "Copies the official npm install command for Codex." = "Codex 대체 설치 단계를 복사합니다.";
 "Copies codex login so you can sign in with ChatGPT." = "ChatGPT 로그인 단계를 복사합니다.";
+"Copies codex login so you can finish Codex sign-in." = "Codex 로그인 단계를 복사합니다.";
 "Copies the ChatGPT sign-in step." = "ChatGPT 로그인 단계를 복사합니다.";
+"Copies the Codex sign-in step." = "Codex 로그인 단계를 복사합니다.";
+"Shortcut: %@" = "단축키: %@";
 "Checks whether ChatGPT sign-in is complete." = "ChatGPT 로그인이 완료되었는지 확인합니다.";
 "Checks whether Codex is ready for this app." = "Codex가 이 앱에서 사용할 준비를 마쳤는지 확인합니다.";
 "Checks that GitHub can read repositories and reviews for this account." = "이 계정으로 저장소와 리뷰를 읽을 수 있는지 확인합니다.";
@@ -496,6 +511,8 @@
 "Copied Codex Homebrew install command. Paste it in Terminal, wait for install to finish, then check Codex again." = "Codex 설치 단계를 복사했습니다. 설치가 끝나면 Codex를 다시 확인하세요.";
 "Copied Codex npm install command. Paste it in Terminal, wait for install to finish, then check Codex again." = "Codex 대체 설치 단계를 복사했습니다. 설치가 끝나면 Codex를 다시 확인하세요.";
 "Codex is not installed or this app cannot find it. Install the Codex command-line helper with Homebrew or npm, then check again." = "Codex가 설치되어 있지 않거나 이 앱에서 찾을 수 없습니다. Codex 도움말의 안내에 따라 설치한 뒤 다시 확인하세요.";
+"PR Review Desk uses Codex on this Mac to generate review drafts." = "PR Review Desk는 이 Mac의 Codex로 리뷰 초안을 만듭니다.";
+"Run `codex login` in Terminal, finish Codex sign-in, then check Codex readiness." = "Codex 로그인 단계를 실행하고 Codex 로그인을 완료한 뒤 준비 상태를 확인하세요.";
 "Creates a fresh draft when comments no longer match the PR." = "코멘트 위치가 PR과 맞지 않을 때 새 초안을 만듭니다.";
 "%@ comment spot %d" = "%@ 코멘트 위치 %d";
 "Regenerate the draft, or close this preview and deselect comments that need fixing." = "초안을 다시 생성하거나, 미리보기를 닫고 확인이 필요한 코멘트 선택을 해제하세요.";

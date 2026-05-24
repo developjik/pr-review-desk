@@ -10,14 +10,14 @@ You need:
 
 - A GitHub account with access to the repositories you want to review.
 - Codex installed on this Mac. If the app cannot find Codex, open the [Codex CLI help](https://developers.openai.com/codex/cli), install Codex, then return to PR Review Desk and choose Check Codex.
-- A ChatGPT sign-in for Codex. PR Review Desk uses that local sign-in for review generation.
+- Codex signed in on this Mac. PR Review Desk uses that local Codex session for review generation.
 
 First run:
 
 1. Open PR Review Desk.
-2. Sign in with GitHub when the setup screen asks for repository access.
-3. Check Codex. If Codex is installed but not signed in, copy `codex login`, open Terminal, paste the command, and sign in with ChatGPT.
-4. Confirm the privacy disclosure. Pull request details and reviewable changes may be sent to Codex and OpenAI when generating a draft.
+2. If required setup is incomplete, the main window asks you to finish setup in Settings.
+3. In Settings, sign in with GitHub, check Codex, and confirm the privacy disclosure. Pull request details and reviewable changes may be sent to Codex and OpenAI when generating a draft.
+4. When setup is complete, PR Review Desk automatically shows the PR review workspace.
 5. Select a repository and an open pull request.
 6. Generate an AI review draft, edit the review body and selected inline comments, then use the submit preview to confirm exactly what will be posted to GitHub.
 
@@ -55,7 +55,7 @@ The packaged app must include the SwiftPM resource bundle in `Contents/Resources
 
 ## Review Workflow UI
 
-The main window opens around a review inbox, not a repository-first control panel. Inbox sections group work into Draft Ready, Stale, Running, Needs Setup, Submitted, and Recents/Favorites. Repositories remain in the sidebar as scope filters and draft creation sources.
+The main window first checks required setup. If GitHub access, Codex readiness, or privacy acknowledgement is missing, the window shows a setup-required state with a Settings entry point; setup changes are made from Settings. Once ready, the main window opens around a review inbox, not a repository-first control panel. Inbox sections group work into Draft Ready, Stale, Running, Needs Setup, Submitted, and Recents/Favorites. Repositories remain in the sidebar as scope filters and draft creation sources.
 
 The detail area uses a focused diff workspace. Changed files stay next to the diff, while review body editing, inline comment selection, pre-submit checks, event selection, and AI trust details live in the trailing inspector. The toolbar and Review menu expose refresh, generation, submission, GitHub opening, file/change-block/comment navigation, draft creation actions, and Codex login actions; `Command-K` opens the contextual action panel.
 
@@ -63,7 +63,7 @@ Diff review supports old/new line gutters, GitHub diff positions, inline comment
 
 The executable `PRReviewDeskCoreTests` target is the current test harness. It does not require live GitHub credentials or Codex credentials. `scripts/probe-swift-testing.sh` reports whether the selected developer directory can import `XCTest` or `Testing`; it is informational unless run with `--require`.
 
-`scripts/ui-smoke.sh` runs the app executable in `--ui-smoke` mode and checks deterministic offscreen SwiftUI/AppKit renders for the first-run setup, repository sidebar, review inbox, diff workspace, inspector, submit preview, command panel, and Settings readiness surfaces. It emits rendered pixel sizes and PNG checksums, and it does not load stored credentials, touch GitHub, or call Codex.
+`scripts/ui-smoke.sh` runs the app executable in `--ui-smoke` mode and checks deterministic offscreen SwiftUI/AppKit renders for the setup gate, first-run setup, repository sidebar, review inbox, diff workspace, inspector, submit preview, command panel, and Settings readiness surfaces. It emits rendered pixel sizes and PNG checksums, and it does not load stored credentials, touch GitHub, or call Codex.
 
 The package tools version is kept at Swift 6.1 so the GitHub-hosted macOS runner can execute the same gate without installing an additional toolchain. Newer local Swift toolchains can still build the package.
 

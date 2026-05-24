@@ -4,9 +4,10 @@ import PRReviewDeskCore
 
 @main
 struct PRReviewDeskApp: App {
-    @StateObject private var model = AppModel()
+    @StateObject private var model: AppModel
     @AppStorage("appearance") private var appearanceRawValue = AppAppearance.system.rawValue
     @AppStorage(AppLanguage.storageKey) private var languageRawValue = AppLanguage.system.rawValue
+    private let uiPreviewMode: UIPreviewMode?
 
     private var appearance: AppAppearance {
         AppAppearance(rawValue: appearanceRawValue) ?? .system
@@ -25,6 +26,10 @@ struct PRReviewDeskApp: App {
     }
 
     init() {
+        let previewMode = Self.uiPreviewMode()
+        self.uiPreviewMode = previewMode
+        self._model = StateObject(wrappedValue: Self.initialModel(previewMode: previewMode))
+
         if CommandLine.arguments.contains("--ui-smoke-localization") {
             let language = CommandLine.arguments.last == "--ui-smoke-localization" ? "en" : CommandLine.arguments.last ?? "en"
             print("localized_sample=submit-preview-title:\(Self.localizedString("Submit Review Preview", language: language))")
@@ -94,6 +99,15 @@ struct PRReviewDeskApp: App {
             Foundation.exit(0)
         }
 
+        if CommandLine.arguments.contains("--ui-smoke-launch-codex-readiness") {
+            Task { @MainActor in
+                let report = await UISmokeRenderRunner.launchCodexReadinessReport()
+                print(report)
+                Foundation.exit(0)
+            }
+            RunLoop.main.run()
+        }
+
         if CommandLine.arguments.contains("--ui-smoke") {
             let report = MainActor.assumeIsolated {
                 UISmokeRenderRunner.run()
@@ -126,6 +140,25 @@ struct PRReviewDeskApp: App {
         return arguments[valueIndex]
     }
 
+    private static func uiPreviewMode() -> UIPreviewMode? {
+        commandLineArgument(after: "--ui-preview").flatMap(UIPreviewMode.init(rawValue:))
+    }
+
+    private static func initialModel(previewMode: UIPreviewMode?) -> AppModel {
+        guard let previewMode else {
+            return AppModel()
+        }
+
+        return MainActor.assumeIsolated {
+            switch previewMode {
+            case .setupGate:
+                return UISmokeRenderRunner.setupGatePreviewModel()
+            case .reviewWorkspace:
+                return UISmokeRenderRunner.reviewWorkspacePreviewModel()
+            }
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             ZStack {
@@ -137,6 +170,13 @@ struct PRReviewDeskApp: App {
                 .environment(\.locale, locale)
                 .onChange(of: languageRawValue) { _, _ in
                     model.refreshLocalizedDefaults()
+                }
+                .task {
+                    guard uiPreviewMode == nil else {
+                        return
+                    }
+                    await model.restoreGitHubSessionOnLaunchIfNeeded()
+                    await model.refreshCodexStatusOnLaunchIfNeeded()
                 }
         }
         .windowStyle(.titleBar)
@@ -228,11 +268,6 @@ struct PRReviewDeskApp: App {
                 }
                 .disabled(!model.commandAvailability.canRevealInlineComment)
 
-                Divider()
-
-                Button(AppL10n.string("Copy Codex Sign-In Step")) {
-                    model.copyCodexLoginCommand()
-                }
             }
         }
 
@@ -243,4 +278,9 @@ struct PRReviewDeskApp: App {
                 .id(languageRawValue)
         }
     }
+}
+
+private enum UIPreviewMode: String {
+    case setupGate = "setup-gate"
+    case reviewWorkspace = "review-workspace"
 }

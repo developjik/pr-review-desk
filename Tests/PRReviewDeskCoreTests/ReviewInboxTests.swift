@@ -6,6 +6,9 @@ enum ReviewInboxTests {
         try testInboxSectionsClassifyQueuedReviews()
         try testTriageRowMetadataSummarizesFilesDraftAndSeverity()
         try testRecentsKeepsActionablePullRequestsVisible()
+        try testInboxSelectionPolicySelectsFirstVisibleRowWhenNothingIsSelected()
+        try testInboxSelectionPolicyMovesToSelectedRowsCurrentSection()
+        try testInboxSelectionPolicyClearsHiddenSelectionWhenCurrentSectionIsEmpty()
         try testDiffReviewFileStateTracksViewedAndCollapsedFiles()
         try testCommandAvailabilityIncludesContextualActions()
     }
@@ -97,6 +100,65 @@ enum ReviewInboxTests {
         try expectEqual(submitted.isVisible(in: .recents), false)
         try expectTrue(draftReady.isVisible(in: .draftReady))
         try expectTrue(stale.isVisible(in: .stale))
+    }
+
+    private static func testInboxSelectionPolicySelectsFirstVisibleRowWhenNothingIsSelected() throws {
+        let repository = sampleRepository(isPrivate: false)
+        let first = PullRequestTriageRow(
+            repository: repository,
+            pullRequest: samplePullRequest(number: 11, headSha: "first-sha")
+        )
+        let second = PullRequestTriageRow(
+            repository: repository,
+            pullRequest: samplePullRequest(number: 12, headSha: "second-sha")
+        )
+
+        try expectEqual(
+            ReviewInboxSelectionPolicy.decision(
+                selectedRow: nil,
+                visibleRows: [first, second],
+                selectedSection: .recents
+            ),
+            .select(rowID: first.id)
+        )
+    }
+
+    private static func testInboxSelectionPolicyMovesToSelectedRowsCurrentSection() throws {
+        let repository = sampleRepository(isPrivate: false)
+        let selected = PullRequestTriageRow(
+            repository: repository,
+            pullRequest: samplePullRequest(number: 21, headSha: "ready-sha"),
+            draft: sampleDraft(),
+            reviewedHeadSha: "ready-sha"
+        )
+
+        try expectEqual(
+            ReviewInboxSelectionPolicy.decision(
+                selectedRow: selected,
+                visibleRows: [],
+                selectedSection: .stale
+            ),
+            .moveSection(.draftReady, rowID: selected.id)
+        )
+    }
+
+    private static func testInboxSelectionPolicyClearsHiddenSelectionWhenCurrentSectionIsEmpty() throws {
+        let repository = sampleRepository(isPrivate: false)
+        let selected = PullRequestTriageRow(
+            repository: repository,
+            pullRequest: samplePullRequest(number: 31, headSha: "ready-sha"),
+            draft: sampleDraft(),
+            reviewedHeadSha: "ready-sha"
+        )
+
+        try expectEqual(
+            ReviewInboxSelectionPolicy.decision(
+                selectedRow: selected,
+                visibleRows: [],
+                selectedSection: .draftReady
+            ),
+            .clear
+        )
     }
 
     private static func testDiffReviewFileStateTracksViewedAndCollapsedFiles() throws {

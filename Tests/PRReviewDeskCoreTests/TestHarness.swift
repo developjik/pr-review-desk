@@ -10,6 +10,8 @@ enum TestHarness {
             try AIReviewDraftActionPresentationTests.run()
             try ReviewWorkspaceLayoutPolicyTests.run()
             try ReviewCommandAvailabilityTests.run()
+            try SettingsGatePresentationTests.run()
+            try SettingsGitHubAccessPresentationTests.run()
             try ReviewCommandPanelPresentationTests.run()
             try ReviewSubmissionPreviewTests.run()
             try RepositorySearchPresentationTests.run()
