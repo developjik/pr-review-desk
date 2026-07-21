@@ -1,0 +1,15 @@
+/* ---- tooltip ------------------------------------------------------------- */
+/* Tooltip (Base UI) — positioned via floating-ui; we only theme the popup. */
+
+.tooltip {
+  z-index: var(--z-toast);
+  max-width: 280px;
+  padding: 4px 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+  box-shadow: var(--shadow);
+}

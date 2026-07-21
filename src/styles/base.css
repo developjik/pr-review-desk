@@ -1,0 +1,51 @@
+/* base.css — Phase 1 foundation: @font-face declarations for self-hosted Geist
+   Variable families, plus the global :focus-visible ring.
+
+   font-display: optional is intentional (NOT swap). Tauri desktop webview has
+   no warm font cache on cold start; `swap` causes a ~100 ms FOUT on every cold
+   start. `optional` = first launch renders the system fallback; subsequent
+   launches render Geist zero-flash once the woff2 is in cache. See plan §5
+   Phase 1 / Architect #8. */
+
+/* ---- @font-face ----------------------------------------------------------- */
+
+@font-face {
+  font-family: "Geist Variable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: optional;
+  src: url("@fontsource-variable/geist/files/geist-latin-wght-normal.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "Geist Mono Variable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: optional;
+  src: url("@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2") format("woff2-variations");
+}
+
+/* ---- global focus ring ---------------------------------------------------- */
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: var(--ring-offset);
+}
+
+/* ---- global prefers-reduced-motion neutralizer (Phase 3) ------------------
+   Forces CSS animations/transitions to near-zero duration for users who opt
+   out of motion. Applies to ALL CSS animations and transitions including the
+   status-dot pulse, slide-over keyframes, and grandfathered paint-only
+   transitions on .btn/.sidebar-item/.tab-item/.filter-chip. The motion/react
+   animations are reduced via <MotionConfig reducedMotion="user"> in main.tsx
+   which auto-reduces all child motion for users with the OS preference. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

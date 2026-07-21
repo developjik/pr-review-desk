@@ -1,0 +1,7 @@
+#!/bin/sh
+# pr-review-daemon sidecar - P1 PLACEHOLDER STUB
+#
+# This is NOT the real daemon. It exists only so Tauri's bundle.externalBin
+# codegen succeeds during project scaffolding. The real binary is produced in
+# P2 by @yao-pkg/pkg and overwrites this file.
+exit 0

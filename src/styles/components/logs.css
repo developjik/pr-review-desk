@@ -1,0 +1,121 @@
+/* ---- logs ---------------------------------------------------------------- */
+
+.logs-panel h2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+
+/* P4: auto-follow toggle in the logs header. Sits next to Clear; reads as a
+   single chip with an active (accent) and inactive (muted) state. */
+.auto-follow-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-family: inherit;
+  line-height: 1.4;
+  cursor: pointer;
+  transition:
+    background 0.12s var(--ease-out),
+    color 0.12s var(--ease-out),
+    border-color 0.12s var(--ease-out);
+}
+
+.auto-follow-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.auto-follow-btn[aria-pressed="true"] {
+  color: var(--accent);
+  background: var(--accent-faint);
+  border-color: transparent;
+}
+
+.logs-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.log-stream {
+  width: 100%;
+  height: calc(100dvh - 140px);
+  min-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  background: var(--bg-deep);
+}
+
+.log-line {
+  display: flex;
+  gap: 0.6rem;
+  padding: 1px 4px;
+  border-radius: var(--r-input);
+}
+
+.log-line:hover {
+  background: var(--surface-2);
+}
+
+.log-time {
+  color: var(--muted-2);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.log-level {
+  font-weight: 600;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  width: 3rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.log-msg {
+  flex: 1;
+  word-break: break-word;
+  color: var(--text);
+}
+
+.log-info {
+  /* level tag muted; message stays default */
+}
+
+.log-info .log-level {
+  color: var(--muted);
+}
+
+.log-warn .log-level {
+  color: var(--warning);
+}
+
+.log-error .log-level {
+  color: var(--error);
+}
+
+.log-error {
+  background: var(--error-tint-bg);
+}
+
+
+/* P4: faint warning tint on the whole .log-warn line (not just the level tag),
+   mirroring the existing .log-error line tint so warn vs error vs info rows
+   stay scannable in the tail. Uses a dedicated token to keep the alpha
+   byte-stable (no color-mix re-composite). */
+.log-warn {
+  background: var(--warning-tint-bg);
+}

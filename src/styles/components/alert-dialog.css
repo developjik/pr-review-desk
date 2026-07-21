@@ -1,0 +1,64 @@
+/* ---- alert dialog -------------------------------------------------------- */
+/* AlertDialog (Base UI) — destructive-action confirmation modal.
+   Reuses tokens only. The backdrop uses --backdrop (same as slide-over /
+   settings); the panel mirrors the surface style of the settings overlay card;
+   the confirm button uses --error as the destructive affordance. */
+
+.alert-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: var(--backdrop);
+}
+
+.alert-dialog-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: var(--z-modal);
+  width: 100%;
+  max-width: 380px;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-container);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.alert-dialog-title {
+  margin: 0;
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  line-height: var(--lh-snug);
+}
+
+.alert-dialog-description {
+  margin: 0;
+  font-size: var(--fs-body);
+  color: var(--muted);
+  line-height: var(--lh-base);
+}
+
+.alert-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.alert-dialog-confirm {
+  background: var(--error);
+  border-color: var(--error);
+  color: var(--on-accent);
+}
+
+.alert-dialog-confirm:hover:not(:disabled) {
+  filter: brightness(1.08);
+  background: var(--error);
+  border-color: var(--error);
+}

@@ -1,0 +1,134 @@
+/* ---- wizard overlay ------------------------------------------------------ */
+
+.wizard-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-wizard);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(
+      120% 120% at 50% 0%,
+      var(--accent-tint-faint),
+      transparent 60%
+    ),
+    var(--bg);
+  animation: fade-in 0.2s ease-out;
+}
+
+.wizard {
+  width: 100%;
+  max-width: 560px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-container);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.wizard-head {
+  padding: 20px 24px 0;
+}
+
+.wizard-head h2 {
+  font-size: 1.2rem;
+}
+
+.wizard-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.wizard-progress {
+  display: flex;
+  align-items: flex-start;
+  padding: 18px 24px 8px;
+  gap: 0;
+}
+
+.wizard-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.wizard-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted);
+  transition:
+    background 0.18s var(--ease-out),
+    border-color 0.18s var(--ease-out),
+    color 0.18s var(--ease-out),
+    box-shadow 0.18s var(--ease-out);
+}
+
+.wizard-dot.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  /* P4: faint accent halo gives the active step a clear visual distinction
+     beyond just the filled dot — a soft "you are here" cue without being
+     loud. The done step stays flat (no halo) so active vs done stay distinct. */
+  box-shadow: 0 0 0 4px var(--accent-tint-faint);
+}
+
+.wizard-dot.done {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--on-success);
+}
+
+.wizard-step-label {
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.wizard-step.active .wizard-step-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.wizard-connector {
+  flex: 1;
+  height: 2px;
+  background: var(--border);
+  margin: 13px 4px 0;
+}
+
+.wizard-connector.done {
+  background: var(--success);
+}
+
+.wizard-body {
+  padding: 16px 24px;
+  min-height: 200px;
+}
+
+.wizard-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 16px 24px 20px;
+  border-top: 1px solid var(--border-muted);
+  background: var(--surface-2);
+}
+
+.wizard-nav .nav-right {
+  display: flex;
+  gap: 0.5rem;
+}

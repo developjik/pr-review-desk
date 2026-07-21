@@ -1,0 +1,66 @@
+/* ---- shortcut help overlay ----------------------------------------------- */
+/* Uses the centered .settings-overlay-card from settings.css; this file styles
+   only the inner content (header + shortcut list). */
+
+.shortcut-help {
+  padding: 24px;
+}
+
+.shortcut-help-header {
+  margin-bottom: 16px;
+}
+
+.shortcut-help-header h3 {
+  margin: 0;
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+}
+
+.shortcut-help-subtitle {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.shortcut-help-list {
+  margin: 0;
+}
+
+.shortcut-help-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border-muted);
+}
+
+.shortcut-help-row:first-child {
+  border-top: none;
+}
+
+.shortcut-help-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.shortcut-help-keys kbd {
+  min-width: 22px;
+  padding: 2px 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: var(--r-input);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: 1;
+  text-align: center;
+}
+
+.shortcut-help-label {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-body);
+}

@@ -1,0 +1,7 @@
+@echo off
+REM pr-review-daemon sidecar - P1 PLACEHOLDER STUB
+REM
+REM This is NOT the real daemon. It exists only so Tauri's bundle.externalBin
+REM codegen succeeds during project scaffolding. The real binary is produced in
+REM P2 by @yao-pkg/pkg and overwrites this file.
+exit /b 0

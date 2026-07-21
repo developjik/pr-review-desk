@@ -1,0 +1,73 @@
+/* ---- settings ------------------------------------------------------------ */
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 8px;
+}
+
+/* ---- settings footer link ------------------------------------------------ */
+
+.settings-link .shortcut-hint {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: var(--muted-2);
+}
+
+/* ---- settings overlay ---------------------------------------------------- */
+
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-settings);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 5vh 16px;
+}
+
+.settings-overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--backdrop);
+}
+
+.settings-overlay-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 720px;
+  max-height: 90vh;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-container);
+  box-shadow: var(--shadow-lg);
+}
+
+.settings-overlay-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--r-input);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.12s var(--ease-out),
+    color 0.12s var(--ease-out);
+}
+
+.settings-overlay-close:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}

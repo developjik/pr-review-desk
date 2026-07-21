@@ -1,0 +1,15 @@
+# Internal / runtime state (must never be reformatted)
+.git
+.gjc
+.omc
+
+# Build output & dependencies
+dist
+node_modules
+src-tauri
+spikes
+
+# Generated lockfile & binaries
+*.lock
+package-lock.json
+src-tauri/binaries

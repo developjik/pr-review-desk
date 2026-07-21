@@ -1,0 +1,12 @@
+{
+  "name": "@pr-review/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared IPC contract types for the PR Review app",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "echo \"shared build: no-op (types only)\" && exit 0"
+  }
+}

@@ -1,0 +1,209 @@
+/* ---- forms --------------------------------------------------------------- */
+
+.form-group {
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 16px;
+  margin-bottom: 16px;
+  background: var(--surface);
+}
+
+.form-group legend {
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0 0.4rem;
+}
+
+.form-group label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.form-group label:last-child {
+  margin-bottom: 0;
+}
+
+.form-group label.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text);
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.field-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 6px;
+  display: block;
+}
+
+.form-group input[type="text"],
+.form-group input[type="password"],
+.form-group select,
+.input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-family: inherit;
+  transition:
+    border-color 0.12s var(--ease-out),
+    box-shadow 0.12s var(--ease-out);
+}
+
+.form-group input::placeholder,
+.input::placeholder {
+  color: var(--muted-2);
+}
+
+.form-group input[type="text"]:focus,
+.form-group input[type="password"]:focus,
+.form-group select:focus,
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-faint);
+}
+
+.form-group input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.form-group input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.range-row .range-value {
+  min-width: 3.25rem;
+  text-align: center;
+  padding: 2px 8px;
+  border-radius: var(--r-input);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+/* ---- test connection row ------------------------------------------------- */
+
+.test-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 10px;
+}
+
+.test-btn {
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    background 0.12s var(--ease-out),
+    border-color 0.12s var(--ease-out);
+}
+
+.test-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--muted-2);
+}
+
+.test-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+
+/* P4: distinct "testing" affordance for the Test Connection button (Wizard +
+   Settings). Adds a CSS-only spinner via ::before so idle / testing / ok / fail
+   render as four clearly distinct states instead of just relying on the
+   opacity-0.5 disabled look. The :disabled rule above still applies; this
+   override restores full opacity and gives the spinner room. Animation is
+   transform-only (compositor-friendly) and auto-reduced by the global
+   prefers-reduced-motion neutralizer in base.css. */
+.test-btn.is-testing {
+  position: relative;
+  padding-left: 1.7rem;
+  opacity: 1;
+  cursor: progress;
+}
+
+.test-btn.is-testing::before {
+  content: "";
+  position: absolute;
+  left: 0.55rem;
+  top: 50%;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-top: -0.35rem;
+  border: 1.5px solid var(--muted);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: test-btn-spin 0.7s linear infinite;
+}
+
+@keyframes test-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.test-ok {
+  color: var(--success);
+  font-size: 0.82rem;
+}
+
+.test-fail {
+  color: var(--error);
+  font-size: 0.82rem;
+  word-break: break-word;
+}
+
+/* ---- hint / inline state ------------------------------------------------- */
+
+.hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 8px 0 0;
+  line-height: 1.45;
+}
+
+.error {
+  color: var(--error);
+  font-size: 0.85rem;
+}
+
+.ok {
+  color: var(--success);
+  font-size: 0.85rem;
+}

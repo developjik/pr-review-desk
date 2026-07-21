@@ -1,0 +1,105 @@
+/* ---- buttons ------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background 0.12s var(--ease-out),
+    border-color 0.12s var(--ease-out),
+    opacity 0.12s var(--ease-out);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn-secondary {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-family: inherit;
+  padding: 2px 6px;
+  border-radius: var(--r-input);
+  transition: background 0.12s var(--ease-out);
+}
+
+.link-btn:hover {
+  background: var(--accent-faint);
+}
+
+/* ---- .btn[data-loading] — async affordance (P5 AlertDialog + buttons slice) --
+   Mirrors the .test-btn.is-testing::before transform-only spinner pattern
+   (forms.css): a CSS-only spinner via ::before so the confirm button renders
+   a distinct "in-flight" state instead of just the opacity-0.5 disabled look.
+   The .btn:disabled rule above still applies; this keeps the button visible
+   with the spinner. Animation is transform-only (compositor-friendly) and
+   auto-reduced by the global prefers-reduced-motion neutralizer in
+   base.css (which forces animation-duration to ~0 under reduce). */
+.btn[data-loading] {
+  cursor: progress;
+  opacity: 0.85;
+}
+
+.btn[data-loading]::before {
+  content: "";
+  display: inline-block;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin-right: var(--space-2);
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  vertical-align: -0.125em;
+  animation: btn-spin 0.6s linear infinite;
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.btn[data-loading]:hover:not(:disabled) {
+  /* no-op while loading: keep progress cursor, suppress hover bg change */
+  cursor: progress;
+}
+

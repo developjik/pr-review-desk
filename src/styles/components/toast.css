@@ -1,0 +1,84 @@
+/* toast.css — Toast notification stack (P5).
+   Token-only, dark-only. The stack is a body-end portal (position: fixed
+   top-right, z-index: --z-toast=300) so toasts render above all overlays and
+   remain announced under them. Variant color is expressed as a 3px left accent
+   border; every color is OKLCH (no color-mix()). */
+
+.toast-stack {
+  position: fixed;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 360px;
+  pointer-events: none; /* the stack itself never blocks; children re-enable */
+}
+
+.toast {
+  pointer-events: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border); /* width + neutral default; variants set color */
+  border-radius: var(--r-card);
+  padding: var(--space-3) var(--space-4);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+/* variant accent stripe (color only; 3px width comes from .toast) */
+.toast--success {
+  border-left-color: var(--success);
+}
+.toast--warning {
+  border-left-color: var(--warning);
+}
+.toast--error {
+  border-left-color: var(--error);
+}
+.toast--info {
+  border-left-color: var(--info);
+}
+
+.toast-title {
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-sm);
+}
+
+.toast-desc {
+  color: var(--muted);
+  font-size: var(--fs-xs);
+}
+
+.toast-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--muted-2);
+  cursor: pointer;
+  padding: 0 var(--space-1);
+  font-size: var(--fs-sm);
+  /* inherits the global :focus-visible ring from base.css */
+}
+
+.toast-close:hover {
+  color: var(--text);
+}
+
+/* Defensive: neutralize any future paint-only transition/animation on toasts
+   under reduced-motion. (The motion/react entrance is already reduced via
+   <MotionConfig reducedMotion="user"> in main.tsx.) */
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .toast-close {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

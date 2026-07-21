@@ -1,0 +1,135 @@
+/* ---- sidebar ------------------------------------------------------------- */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 200px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 8px;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 10px 8px 14px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.sidebar-brand .brand-mark {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.sidebar-item {
+  position: relative;
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--r-input);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.12s var(--ease-out),
+    color 0.12s var(--ease-out);
+}
+
+.sidebar-item:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.sidebar-item.active {
+  background: var(--accent-faint);
+  color: var(--accent);
+}
+
+
+/* P4: 2px left accent stripe on the active nav item — gives the cockpit shell
+   a clear "you are here" affordance alongside the tinted background. Kept
+   inside the rounded corner radius (no border-radius clipping) and inset from
+   top/bottom so it reads as a deliberate bar, not a full-bleed edge. */
+.sidebar-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+}
+
+.sidebar-icon {
+  font-size: 1rem;
+  line-height: 1;
+  width: 1.25rem;
+  text-align: center;
+}
+
+.sidebar-label {
+  white-space: nowrap;
+}
+
+.sidebar-footer {
+  border-top: 1px solid var(--border-muted);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+.daemon-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted-2);
+  flex-shrink: 0;
+}
+
+.status-dot.online {
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-glow);
+}
+
+.status-dot.offline {
+  background: var(--muted-2);
+}
+
+.status-dot.error {
+  background: var(--error);
+  box-shadow: 0 0 0 3px var(--error-glow);
+}
+
+.daemon-status .status-state {
+  margin-left: auto;
+  text-transform: capitalize;
+  color: var(--text);
+}

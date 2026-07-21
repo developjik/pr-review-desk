@@ -1,0 +1,99 @@
+/* ---- slide-over ---------------------------------------------------------- */
+.slide-over {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-slide-over);
+}
+
+.slide-over-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--backdrop);
+}
+
+.slide-over-panel {
+  position: absolute;
+  top: env(safe-area-inset-top);
+  right: env(safe-area-inset-right);
+  bottom: env(safe-area-inset-bottom);
+  width: 380px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Phase 3: slide-over entrance/exit is now driven by motion/react (transform
+   x: '100%' → 0, spring stiffness 300 / damping 30) wrapped in AnimatePresence
+   in src/components/ui/Dialog.tsx. The old @keyframes slide-in has been removed;
+   .slide-over-panel keeps only its static layout/visual properties so the
+   motion.div sets transform inline and inherits the rest. */
+
+.slide-over-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-muted);
+  background: var(--surface-2);
+}
+
+.slide-over-close {
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--r-input);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.12s var(--ease-out),
+    color 0.12s var(--ease-out);
+}
+
+.slide-over-close:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.slide-over-body {
+  padding: 16px;
+  overflow: auto;
+}
+
+.detail-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 14px;
+  line-height: 1.4;
+}
+
+.detail-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.detail-key {
+  color: var(--muted);
+}
+
+.detail-val {
+  color: var(--text);
+  text-align: right;
+  word-break: break-word;
+}

@@ -1,0 +1,91 @@
+/* ---- daemon status badge (sidebar header) -------------------------------- */
+
+.daemon-status-badge {
+  padding: 12px 10px 14px;
+  border-bottom: 1px solid var(--border-muted);
+  margin-bottom: 8px;
+}
+
+.badge-title {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.badge-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+.poll-now-btn {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 2px 6px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.15s, opacity 0.15s;
+}
+.poll-now-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+.poll-now-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* status-dot base is defined above; these modifiers key color to daemon state. */
+.status-dot.dot-idle {
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-glow);
+}
+
+/* Phase 3: pulse only on the active (polling/reviewing/publishing) and error
+   dots — a steady-state dot never pulses. Animation is paused for users with
+   prefers-reduced-motion via the global neutralizer in base.css. Off-screen
+   pausing is N/A: the sidebar is a fixed, always-visible shell element in this
+   desktop app, so IntersectionObserver would always report "visible". */
+.status-dot.dot-active {
+  background: var(--warning);
+  box-shadow: 0 0 0 3px var(--warning-glow);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.status-dot.dot-error {
+  background: var(--error);
+  box-shadow: 0 0 0 3px var(--error-glow);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+.status-dot.dot-offline {
+  background: var(--muted-2);
+}
+
+.countdown {
+  margin-top: 6px;
+  padding-left: 1.3rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.badge-reviewing {
+  margin-top: 4px;
+  padding-left: 1.3rem;
+  font-size: 0.78rem;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -1,0 +1,52 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules
+
+# Build output
+dist
+dist-ssr
+*.local
+
+# Tauri / Rust
+src-tauri/target
+src-tauri/gen/schemas
+target
+
+# Local databases
+*.db
+*.db3
+*.sqlite
+*.sqlite3
+
+# Sidecar binaries: P1 ships committed stub placeholders under src-tauri/binaries/
+# (required by Tauri's externalBin codegen). In P2 these are replaced by real
+# @yao-pkg/pkg builds, which should be regenerated locally and gitignored.
+src-tauri/binaries/pr-review-daemon-aarch64-apple-darwin
+src-tauri/binaries/pr-review-daemon-x86_64-apple-darwin
+daemon/dist
+# Local release artifacts (tar.gz/DMG built by scripts/build-release.mjs)
+release/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# AI
+.gjc
+# 로컬 DB 런타임 데이터 (SQLite WAL/SHM)
+src-tauri/data/

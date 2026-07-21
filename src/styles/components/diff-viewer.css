@@ -1,0 +1,180 @@
+.finding-loc {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.finding-comment {
+  flex: 1;
+  color: var(--text);
+}
+
+/* ---- diff viewer + finding affordances ------------------------------------ */
+.diff-viewer {
+  margin: 6px 0;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--r-input);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.diff-viewer-empty {
+  padding: 10px 12px;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.diff-rows {
+  max-height: 340px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.diff-row {
+  white-space: pre;
+  padding: 0 8px;
+}
+
+.diff-ctx {
+  color: var(--text);
+}
+
+.diff-add {
+  color: var(--text);
+  background: var(--success-tint-faint);
+}
+
+.diff-del {
+  color: var(--text);
+  background: var(--error-tint-faint);
+}
+
+.diff-meta {
+  color: var(--muted);
+}
+
+.diff-line-num {
+  display: inline-block;
+  width: 3rem;
+  margin-right: 0.6rem;
+  padding-right: 0.5rem;
+  text-align: right;
+  color: var(--muted-2);
+  border-right: 1px solid var(--border-muted);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.diff-highlight {
+  background: var(--accent-faint);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.finding-code-toggle {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background 0.12s var(--ease-out),
+    color 0.12s var(--ease-out),
+    border-color 0.12s var(--ease-out);
+}
+
+.finding-code-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.finding-code-toggle[aria-pressed="true"] {
+  background: var(--accent-faint);
+  color: var(--accent);
+  border-color: transparent;
+}
+
+.finding-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 6px 0;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--r-input);
+  background: var(--surface);
+}
+
+.finding-edit label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.finding-edit-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.finding-edit-row label {
+  flex: 1;
+  min-width: 120px;
+}
+
+.finding-edit input,
+.finding-edit select,
+.finding-edit textarea {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-family: inherit;
+  transition:
+    border-color 0.12s var(--ease-out),
+    box-shadow 0.12s var(--ease-out);
+}
+
+.finding-edit textarea {
+  resize: vertical;
+  min-height: 48px;
+}
+
+.finding-edit input:focus,
+.finding-edit select:focus,
+.finding-edit textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-faint);
+}
+
+.finding-edit-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.finding-edit-actions button {
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s var(--ease-out);
+}
+
+.finding-edit-actions button:hover {
+  background: var(--surface-hover);
+}

@@ -1,0 +1,95 @@
+.state {
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  font-size: 0.75rem;
+  text-transform: capitalize;
+}
+
+.state-idle {
+  color: var(--muted);
+  background: var(--surface-2);
+}
+
+.state-polling,
+.state-reviewing,
+.state-publishing {
+  color: var(--accent);
+  background: var(--accent-faint);
+}
+
+.state-error {
+  color: var(--error);
+  background: var(--error-tint);
+}
+
+/* ---- badges -------------------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.badge-idle {
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.badge-active {
+  color: var(--accent);
+  background: var(--accent-faint);
+  border: 1px solid transparent;
+}
+
+.badge-success {
+  color: var(--success);
+  background: var(--success-tint);
+  border: 1px solid transparent;
+}
+
+.badge-error {
+  color: var(--error);
+  background: var(--error-tint);
+  border: 1px solid transparent;
+}
+
+.severity-badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+
+.sev-high {
+  color: var(--error);
+  background: var(--error-tint);
+}
+
+.sev-medium {
+  color: var(--warning);
+  background: var(--warning-tint);
+}
+
+.sev-low {
+  color: var(--accent);
+  background: var(--accent-faint);
+}
+
+.sev-info {
+  color: var(--muted);
+  background: var(--surface-2);
+}
