@@ -50,15 +50,16 @@ const prMeta: PrPromptMeta = {
 };
 
 /** Wrap a JSON string as the `choices[0].message.content` the SDK returns. */
-function llmResponse(content: string): unknown {
+function llmResponse(content: string, usage?: Record<string, unknown>): unknown {
   return {
     choices: [{ message: { content } }],
+    ...(usage ? { usage } : {}),
   };
 }
 
 /** Call reviewFile with stubbed trivial inputs and return the parsed result. */
-async function review(content: string): Promise<LlmFileReview> {
-  mocks.create.mockResolvedValueOnce(llmResponse(content));
+async function review(content: string, usage?: Record<string, unknown>): Promise<LlmFileReview> {
+  mocks.create.mockResolvedValueOnce(llmResponse(content, usage));
   return createLlmClient(makeConfig()).reviewFile("src/app.ts", "code", "", prMeta, "en");
 }
 
@@ -403,5 +404,43 @@ describe("createLlmClient — retry behavior (isRetryable)", () => {
     expect(mocks.create).toHaveBeenCalledTimes(2);
     expect(result.findings).toHaveLength(1);
     expect(result.findings[0].comment).toBe("ok");
+  });
+});
+
+describe("createLlmClient — token usage capture (#4, AC4.7)", () => {
+  beforeEach(() => mocks.create.mockReset());
+
+  const EMPTY = JSON.stringify({ findings: [], summary: "" });
+
+  it("(a) numeric usage: maps snake_case prompt_tokens/completion_tokens/total_tokens → TokenUsage", async () => {
+    const result = await review(EMPTY, {
+      prompt_tokens: 100,
+      completion_tokens: 20,
+      total_tokens: 120,
+    });
+    expect(result.usage).toEqual({ promptTokens: 100, completionTokens: 20, totalTokens: 120 });
+  });
+
+  it("(b) string usage (vLLM/Ollama compat — the reason toFiniteNumber exists): coerces numeric strings to numbers", async () => {
+    const result = await review(EMPTY, {
+      prompt_tokens: "1500",
+      completion_tokens: "300",
+      total_tokens: "1800",
+    });
+    expect(result.usage).toEqual({ promptTokens: 1500, completionTokens: 300, totalTokens: 1800 });
+  });
+
+  it("(c) non-numeric junk: coerces to 0 (never NaN — safe for SUM, SQLite INTEGER, review:summary)", async () => {
+    const result = await review(EMPTY, {
+      prompt_tokens: "abc",
+      completion_tokens: null,
+      total_tokens: undefined,
+    });
+    expect(result.usage).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
+  });
+
+  it("(d) absent resp.usage: returns null (not an empty object, not undefined)", async () => {
+    const result = await review(EMPTY);
+    expect(result.usage).toBeNull();
   });
 });

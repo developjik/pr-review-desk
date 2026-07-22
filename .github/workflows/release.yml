@@ -1,0 +1,187 @@
+name: release
+
+# Builds native installers for all supported platforms on every version tag.
+# When TAURI_SIGNING_PRIVATE_KEY is configured (repo secret), the updater
+# bundles are signed and a latest.json manifest is published for auto-update.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency: release-${{ github.ref }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.sideload_target }})
+    runs-on: ${{ matrix.os }}
+
+    # SIDECAR_TARGET is read both by the explicit build:sidecar step AND by the
+    # `prebuild` hook that fires inside `npm run tauri build` (tauri.conf.json's
+    # beforeBuildCommand → npm run build → prebuild → build:sidecar). Setting it
+    # at the job level guarantees both invocations target the same arch.
+    # The signing vars are empty until the user sets the repo secrets; tauri
+    # build then simply produces unsigned bundles (the release job skips signing).
+    env:
+      SIDECAR_TARGET: ${{ matrix.sideload_target }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            sideload_target: arm64
+            rust_target: aarch64-apple-darwin
+            artifact_glob: "*aarch64*.dmg"
+            updater_glob: "*aarch64*.app.tar.gz*"
+          - os: macos-13
+            sideload_target: x64
+            rust_target: x86_64-apple-darwin
+            artifact_glob: "*x64*.dmg"
+            updater_glob: "*x64*.app.tar.gz*"
+          - os: ubuntu-22.04
+            sideload_target: linux
+            rust_target: x86_64-unknown-linux-gnu
+            artifact_glob: "*.AppImage"
+            updater_glob: "*.AppImage.tar.gz*"
+          - os: windows-latest
+            sideload_target: win
+            rust_target: x86_64-pc-windows-msvc
+            artifact_glob: "*.msi"
+            updater_glob: "*-setup.nsis.zip*"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      # Tauri on Linux needs WebKit / GTK system libraries.
+      - name: Install Linux dependencies
+        if: matrix.sideload_target == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - run: npm ci
+
+      - name: Cache cargo + node + pkg (unix)
+        if: runner.os != 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo
+            node_modules
+            ~/.cache/pkg
+          key: ${{ runner.os }}-${{ matrix.sideload_target }}-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Cache cargo + node + pkg (windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo
+            node_modules
+            $LOCALAPPDATA\pkg-cache
+          key: ${{ runner.os }}-${{ matrix.sideload_target }}-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Build sidecar
+        run: npm run build:sidecar
+
+      # AC1.7b — fail the build if the sidecar is the 269-byte placeholder stub.
+      - name: Sidecar self-check
+        if: runner.os != 'Windows'
+        run: node scripts/sidecar-selfcheck.mjs src-tauri/binaries/pr-review-daemon-${{ matrix.rust_target }}
+
+      - name: Sidecar self-check (windows)
+        if: runner.os == 'Windows'
+        run: node scripts/sidecar-selfcheck.mjs src-tauri/binaries/pr-review-daemon-${{ matrix.rust_target }}.exe
+
+      # When TAURI_SIGNING_PRIVATE_KEY is set, `tauri build` auto-signs the
+      # updater bundles (.app.tar.gz / .AppImage.tar.gz / *-setup.nsis.zip + .sig).
+      - name: Tauri build
+        run: npm run tauri build
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-review-${{ matrix.sideload_target }}-installer
+          path: src-tauri/target/**/bundle/**/${{ matrix.artifact_glob }}
+          if-no-files-found: warn
+
+      # G003 — signed updater bundle + .sig (only when signing is configured).
+      - name: Upload updater bundle + sig
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-review-${{ matrix.sideload_target }}
+          path: src-tauri/target/**/bundle/**/${{ matrix.updater_glob }}
+          if-no-files-found: error
+
+  # G003 — assemble latest.json from the 4 signed updater bundles and publish
+  # the GitHub Release with installers + manifest. Only runs when signing is
+  # configured (no signing keys ⇒ unsigned installers only, no auto-update).
+  release:
+    name: publish release + latest.json
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ vars.ENABLE_UPDATES == 'true' }}
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download all updater bundles
+        uses: actions/download-artifact@v4
+        with:
+          path: out
+          pattern: pr-review-*
+          merge-multiple: false
+
+      - name: Download installers
+        uses: actions/download-artifact@v4
+        with:
+          path: installers
+          pattern: pr-review-*-installer
+          merge-multiple: true
+
+      - name: Read version
+        id: ver
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Build latest.json
+        run: |
+          node scripts/build-update-manifest.mjs \
+            --artifacts out \
+            --tag "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --version "${{ steps.ver.outputs.version }}" \
+            --notes RELEASE_TEMPLATE.md \
+            > latest.json
+          cat latest.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            latest.json
+            installers/*

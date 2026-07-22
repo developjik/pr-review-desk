@@ -164,3 +164,158 @@ describe("chunkFiles", () => {
     expect(skipped).toEqual([]);
   });
 });
+describe("chunkFiles — glob include/exclude (#7)", () => {
+  it("AC7.1: fileInclude skips files not matching any include pattern", () => {
+    const files = { "src/a.ts": "", "vendor/lib.js": "" };
+    const diffs = new Map([
+      ["src/a.ts", diffWithLines(1)],
+      ["vendor/lib.js", diffWithLines(1)],
+    ]);
+
+    const { reviewable, skipped } = chunkFiles(files, diffs, { fileInclude: "src/**" });
+    expect(reviewable).toEqual(["src/a.ts"]);
+    expect(reviewable).not.toContain("vendor/lib.js");
+    const v = skipped.find((s) => s.file === "vendor/lib.js");
+    expect(v).toBeDefined();
+    expect(v!.reason).toContain("fileInclude");
+  });
+
+  it("AC7.2: fileExclude skips files matching an exclude pattern", () => {
+    const files = { "x/y/gen.generated.ts": "", "src/a.ts": "" };
+    const diffs = new Map([
+      ["x/y/gen.generated.ts", diffWithLines(1)],
+      ["src/a.ts", diffWithLines(1)],
+    ]);
+
+    const { reviewable, skipped } = chunkFiles(files, diffs, { fileExclude: "**/*.generated.ts" });
+    expect(reviewable).toEqual(["src/a.ts"]);
+    expect(reviewable).not.toContain("x/y/gen.generated.ts");
+    const g = skipped.find((s) => s.file === "x/y/gen.generated.ts");
+    expect(g).toBeDefined();
+    expect(g!.reason).toContain("fileExclude");
+  });
+
+  it("AC7.2b: fileExclude `**/*.ts` skips a ROOT-LEVEL file (M1 root-level fix)", () => {
+    const files = { "app.ts": "", "README.md": "" };
+    const diffs = new Map([
+      ["app.ts", diffWithLines(1)],
+      ["README.md", diffWithLines(1)],
+    ]);
+
+    const { reviewable, skipped } = chunkFiles(files, diffs, { fileExclude: "**/*.ts" });
+    expect(reviewable).toEqual(["README.md"]);
+    expect(reviewable).not.toContain("app.ts");
+    const app = skipped.find((s) => s.file === "app.ts");
+    expect(app).toBeDefined();
+    expect(app!.reason).toContain("fileExclude");
+  });
+
+  it("AC7.3: empty fileInclude/fileExclude ⇒ identical reviewable set to a no-opts call", () => {
+    const files: Record<string, string> = {};
+    const diffs = new Map<string, string>();
+    for (const p of ["src/a.ts", "src/b.ts", "vendor/lib.js", "docs/c.md"]) {
+      files[p] = "";
+      diffs.set(p, diffWithLines(5));
+    }
+
+    const baseline = chunkFiles(files, diffs);
+    const filtered = chunkFiles(files, diffs, { fileInclude: "", fileExclude: "" });
+    expect([...filtered.reviewable].sort()).toEqual([...baseline.reviewable].sort());
+    expect(filtered.skipped).toEqual(baseline.skipped);
+  });
+
+  it("AC7.4: globbed-out files are excluded BEFORE the file budget (60 files, 55 excluded, all 5 reviewed)", () => {
+    const files: Record<string, string> = {};
+    const diffs = new Map<string, string>();
+    for (let i = 0; i < 55; i++) {
+      const p = `docs/note${i}.md`;
+      files[p] = "";
+      diffs.set(p, diffWithLines(1));
+    }
+    for (let i = 0; i < 5; i++) {
+      const p = `src/file${i}.ts`;
+      files[p] = "";
+      diffs.set(p, diffWithLines(1));
+    }
+
+    // 60 files total; default maxFiles=50. With fileExclude=`**/*.md`, the 55
+    // .md files are excluded before the budget, leaving 5 ≤ 50 (no trim).
+    const { reviewable, skipped } = chunkFiles(files, diffs, { fileExclude: "**/*.md" });
+    expect(reviewable).toHaveLength(5);
+    for (let i = 0; i < 5; i++) expect(reviewable).toContain(`src/file${i}.ts`);
+    const excluded = skipped.filter((s) => s.reason.includes("fileExclude"));
+    expect(excluded).toHaveLength(55);
+    expect(skipped.some((s) => s.reason.includes("budget"))).toBe(false);
+  });
+});
+
+describe("chunkFiles — diff threshold + budget config (#5)", () => {
+  it("AC5.1: maxDiffLines=2000 skips a 2501-line diff file (reason cites 2501 > 2000)", () => {
+    const files = { "src/big.ts": "", "src/ok.ts": "" };
+    const diffs = new Map([
+      ["src/big.ts", diffWithLines(2501)],
+      ["src/ok.ts", diffWithLines(1)],
+    ]);
+
+    const { reviewable, skipped } = chunkFiles(files, diffs, { maxDiffLines: 2000 });
+    expect(reviewable).toEqual(["src/ok.ts"]);
+    const big = skipped.find((s) => s.file === "src/big.ts");
+    expect(big).toBeDefined();
+    expect(big!.reason).toContain("diff too large");
+    expect(big!.reason).toContain("2501");
+    expect(big!.reason).toContain("2000");
+  });
+
+  it("AC5.2: maxFiles=5 with 10 source files ⇒ 5 reviewed, 5 trimmed (reason cites budget)", () => {
+    const files: Record<string, string> = {};
+    const diffs = new Map<string, string>();
+    for (let i = 0; i < 10; i++) {
+      const p = `src/file${i}.ts`;
+      files[p] = "";
+      diffs.set(p, diffWithLines(1));
+    }
+
+    const { reviewable, skipped } = chunkFiles(files, diffs, { maxFiles: 5 });
+    expect(reviewable).toHaveLength(5);
+    expect(skipped).toHaveLength(5);
+    expect(skipped.every((s) => s.reason.includes("budget"))).toBe(true);
+    const all = new Set([...reviewable, ...skipped.map((s) => s.file)]);
+    expect(all.size).toBe(10);
+  });
+
+  it('AC5.3: largePrPolicy="abort" + 6 files (maxFiles=5) ⇒ 0 reviewed, all 6 skipped (largePrPolicy=abort)', () => {
+    const files: Record<string, string> = {};
+    const diffs = new Map<string, string>();
+    for (let i = 0; i < 6; i++) {
+      const p = `src/file${i}.ts`;
+      files[p] = "";
+      diffs.set(p, diffWithLines(1));
+    }
+
+    const { reviewable, skipped } = chunkFiles(files, diffs, { maxFiles: 5, largePrPolicy: "abort" });
+    expect(reviewable).toEqual([]);
+    expect(skipped).toHaveLength(6);
+    expect(skipped.every((s) => s.reason.includes("largePrPolicy=abort"))).toBe(true);
+  });
+
+  it("AC5.4: defaults (no opts) ⇒ identical to a call with all defaults explicit", () => {
+    const files: Record<string, string> = {};
+    const diffs = new Map<string, string>();
+    for (let i = 0; i < 3; i++) {
+      const p = `src/file${i}.ts`;
+      files[p] = "";
+      diffs.set(p, diffWithLines(10));
+    }
+
+    const baseline = chunkFiles(files, diffs);
+    const explicit = chunkFiles(files, diffs, {
+      maxDiffLines: 5000,
+      maxFiles: 50,
+      largePrPolicy: "trim",
+      fileInclude: "",
+      fileExclude: "",
+    });
+    expect([...explicit.reviewable].sort()).toEqual([...baseline.reviewable].sort());
+    expect(explicit.skipped).toEqual(baseline.skipped);
+  });
+});

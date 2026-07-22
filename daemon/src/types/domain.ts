@@ -86,6 +86,22 @@ export interface Finding {
   suggestion?: string;
 }
 
+/**
+ * Token usage reported by the LLM provider for a single review (or aggregated
+ * across a file / PR). The canonical home for this type; `FileUsage` (below)
+ * and the DB layer re-export / extend it.
+ */
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+/** Token usage tagged with the file it was billed against (`null` = aggregate). */
+export interface FileUsage extends TokenUsage {
+  file: string | null;
+}
+
 /** A file the chunker decided not to send to the LLM. */
 export interface SkippedFile {
   file: string;
@@ -97,6 +113,7 @@ export interface FileReview {
   file: string;
   findings: Finding[];
   summary: string;
+  usage?: TokenUsage | null;
 }
 
 /** Tally of findings by severity. */
@@ -109,6 +126,8 @@ export interface ReviewResult {
   summary: string;
   severityCounts: SeverityCounts;
   skipped: SkippedFile[];
+  usage: TokenUsage;
+  fileUsage: FileUsage[];
 }
 
 /**

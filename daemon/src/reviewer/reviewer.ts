@@ -19,8 +19,10 @@
 import type { Config } from "../config/schema";
 import type {
   FileReview,
+  FileUsage,
   ReviewContext,
   ReviewResult,
+  TokenUsage,
 } from "../types/domain";
 import type { ReviewFileStatus } from "@pr-review/shared";
 import { getLogger } from "../logging/logger";
@@ -44,7 +46,13 @@ export async function reviewPR(ctx: ReviewContext, config: Config): Promise<Revi
 
   // (1) Split diff by file → chunker decides what to review.
   const fileDiffs = splitDiffByFile(ctx.diff);
-  const { reviewable, skipped } = chunkFiles(ctx.files, fileDiffs);
+  const { reviewable, skipped } = chunkFiles(ctx.files, fileDiffs, {
+    maxDiffLines: config.maxDiffLines,
+    maxFiles: config.maxFiles,
+    largePrPolicy: config.largePrPolicy,
+    fileInclude: config.fileInclude,
+    fileExclude: config.fileExclude,
+  });
   for (const s of skipped) {
     log.info({ code: "review_skip", prId: ctx.prId, file: s.file, reason: s.reason }, "skipping file");
     await emitFileEvent(ctx.prId, s.file, "skipped", 0);
@@ -60,16 +68,31 @@ export async function reviewPR(ctx: ReviewContext, config: Config): Promise<Revi
   };
   const rules = ctx.reviewRules ?? "";
 
+  // Per-file usage accumulators feed the PR aggregate (usageAcc) + a per-file
+  // row (fileUsage). ALWAYS initialized so a fully-failed PR still yields a
+  // zero-aggregate + empty-array ReviewResult (the #4 guarantee holds even
+  // when no LLM call succeeds).
+  const usageAcc: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+  const fileUsage: FileUsage[] = [];
+
   const fileReviews: FileReview[] = [];
   for (const file of reviewable) {
     const content = ctx.files[file] ?? "";
     const diffHunks = fileDiffs.get(file) ?? "";
-    const review = await reviewSingleFile(llm, ctx.prId, file, content, diffHunks, prMeta, language, rules);
-    if (review) fileReviews.push(review);
+    // Per-file accumulator: mutated by reviewSingleFile as each chunk succeeds.
+    // A chunk that throws contributes 0; a fully-failed file stays {0,0,0} and
+    // is NOT recorded (null return ⇒ no fileUsage row, AC4.2b).
+    const fileAcc: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    const review = await reviewSingleFile(llm, ctx.prId, file, content, diffHunks, prMeta, language, rules, fileAcc);
+    if (review) {
+      fileReviews.push(review);
+      fileUsage.push({ file, ...fileAcc });
+      addUsage(usageAcc, fileAcc);
+    }
   }
 
-  // (3) Aggregate + emit review:summary.
-  const agg = aggregate(fileReviews, ctx.prId);
+  // (3) Aggregate + emit review:summary (carries the PR-aggregate usage).
+  const agg = aggregate(fileReviews, ctx.prId, usageAcc);
 
   return {
     prId: ctx.prId,
@@ -77,9 +100,10 @@ export async function reviewPR(ctx: ReviewContext, config: Config): Promise<Revi
     summary: agg.summary,
     severityCounts: agg.severityCounts,
     skipped,
+    usage: usageAcc,
+    fileUsage,
   };
 }
-
 /**
  * Review a single file. Returns null on failure (the file is skipped, R19).
  * The LLM client's own retry loop (MAX_RETRIES) handles transient errors;
@@ -94,6 +118,7 @@ async function reviewSingleFile(
   prMeta: PrPromptMeta,
   language: string,
   rules: string,
+  fileAcc: TokenUsage,
 ): Promise<FileReview | null> {
   try {
     const chunks = splitFileIntoChunks(diffHunks, MAX_CHUNK_DIFF_LINES);
@@ -102,6 +127,7 @@ async function reviewSingleFile(
     if (chunks.length === 1) {
       // FAST PATH == today: full content + whole diffHunks (byte-identical).
       result = await llm.reviewFile(file, content, diffHunks, prMeta, language, rules);
+      addUsage(fileAcc, result.usage);
     } else {
       // Multi-chunk: per-chunk try/catch; full content is sent on EVERY call
       // (user override — quality over cost). A thrown chunk is logged + skipped;
@@ -111,6 +137,9 @@ async function reviewSingleFile(
       for (let i = 0; i < chunks.length; i++) {
         try {
           const chunkResult = await llm.reviewFile(file, content, chunks[i], prMeta, language, rules);
+          // Accumulate usage BEFORE mergeChunkResults (which folds only
+          // findings/summary). A chunk that throws never reaches here ⇒ 0.
+          addUsage(fileAcc, chunkResult.usage);
           successes.push(chunkResult);
         } catch (err) {
           lastErr = err;
@@ -128,7 +157,7 @@ async function reviewSingleFile(
 
     const status: ReviewFileStatus = result.findings.length > 0 ? "findings" : "ok";
     await emitFileEvent(prId, file, status, result.findings.length);
-    return { file, findings: result.findings, summary: result.summary };
+    return { file, findings: result.findings, summary: result.summary, usage: fileAcc };
   } catch (err) {
     getLogger().error(
       { code: "review_failed", prId, file },
@@ -154,4 +183,14 @@ async function emitFileEvent(
     status,
     findings,
   });
+}
+/**
+ * Add a (possibly null/absent) per-chunk usage into an accumulator in place.
+ * A null/undefined contribution (no `resp.usage`, or a chunk that threw before
+ * `resp` existed) adds zero — usage is never fabricated, never NaN.
+ */
+function addUsage(acc: TokenUsage, usage: TokenUsage | null | undefined): void {
+  acc.promptTokens += usage?.promptTokens ?? 0;
+  acc.completionTokens += usage?.completionTokens ?? 0;
+  acc.totalTokens += usage?.totalTokens ?? 0;
 }

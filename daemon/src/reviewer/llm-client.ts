@@ -12,7 +12,7 @@
  */
 import OpenAI from "openai";
 import type { Config } from "../config/schema";
-import type { Area, Finding, Severity } from "../types/domain";
+import type { Area, Finding, Severity, TokenUsage } from "../types/domain";
 import { buildSystemPrompt, buildUserPrompt, type PrPromptMeta } from "./prompts";
 import { isTransientError } from "../util/retry";
 
@@ -25,6 +25,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 export interface LlmFileReview {
   findings: Finding[];
   summary: string;
+  usage?: TokenUsage | null;
 }
 
 export interface LlmClient {
@@ -66,7 +67,19 @@ export function createLlmClient(config: Config): LlmClient {
             ...(config.llmJsonMode ? { response_format: { type: "json_object" as const } } : {}),
           });
           const content = resp.choices[0]?.message?.content ?? "{}";
-          return parseReviewResponse(content, fileName);
+          // Capture provider usage (coerced to finite numbers — vLLM/Ollama may
+          // return string tokens). usage is present on every 200 response that
+          // carries .usage; null only when the provider omits it. On a transient
+          // retry error the await above throws before `resp` exists, so usage is
+          // genuinely unrecoverable for that attempt.
+          const usage: TokenUsage | null = resp.usage
+            ? {
+                promptTokens: toFiniteNumber((resp.usage as any).prompt_tokens),
+                completionTokens: toFiniteNumber((resp.usage as any).completion_tokens),
+                totalTokens: toFiniteNumber((resp.usage as any).total_tokens),
+              }
+            : null;
+          return { ...parseReviewResponse(content, fileName), usage };
         } catch (err) {
           lastError = err;
           if (!isTransientError(err) || attempt === MAX_RETRIES - 1) break;
@@ -82,6 +95,17 @@ export function createLlmClient(config: Config): LlmClient {
 }
 
 // --------------------------------------------------------------------------- internals
+
+/**
+ * Coerce a provider-reported token value to a finite number. Some OpenAI-
+ * compatible servers (vLLM, LM Studio, Ollama) return token counts as STRINGS;
+ * a non-numeric/undefined value falls back to 0 (never NaN — safe for SUM,
+ * SQLite INTEGER columns, and the review:summary wire event).
+ */
+function toFiniteNumber(v: unknown): number {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
 
 /**
  * Parse and normalize the LLM's JSON response into typed findings.

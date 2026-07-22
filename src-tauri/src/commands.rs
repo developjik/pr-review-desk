@@ -4,7 +4,8 @@
 //! command to the daemon via its stdin (see `sidecar::send_command`).
 
 use serde_json::Value;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_updater::UpdaterExt;
 
 use crate::config_store;
 use crate::sidecar;
@@ -36,8 +37,13 @@ pub async fn save_config(app: AppHandle, mut config: Value) -> Result<(), String
                     Ok(()) => {
                         obj.remove("githubPat");
                         obj.insert("githubPatStored".to_string(), Value::Bool(true));
+                        obj.remove("githubPatInsecureFallback");
                     }
-                    Err(e) => log::warn!("Failed to store GitHub PAT to keychain: {e}"),
+                    Err(e) => {
+                        log::warn!("Failed to store GitHub PAT to keychain: {e}");
+                        obj.insert("githubPatInsecureFallback".to_string(), Value::Bool(true));
+                        eprintln!("credential:insecure-fallback secret=github_pat err={e}");
+                    }
                 }
             }
         }
@@ -47,8 +53,13 @@ pub async fn save_config(app: AppHandle, mut config: Value) -> Result<(), String
                     Ok(()) => {
                         obj.remove("llmApiKey");
                         obj.insert("llmApiKeyStored".to_string(), Value::Bool(true));
+                        obj.remove("llmApiKeyInsecureFallback");
                     }
-                    Err(e) => log::warn!("Failed to store LLM API key to keychain: {e}"),
+                    Err(e) => {
+                        log::warn!("Failed to store LLM API key to keychain: {e}");
+                        obj.insert("llmApiKeyInsecureFallback".to_string(), Value::Bool(true));
+                        eprintln!("credential:insecure-fallback secret=llm_api_key err={e}");
+                    }
                 }
             }
         }
@@ -127,6 +138,42 @@ pub async fn daemon_status(app: AppHandle) -> Result<Value, String> {
     Ok(serde_json::json!({ "online": snap.online, "state": snap.state }))
 }
 
+// ---- auto-update (G003: tauri-plugin-updater, Rust-driven) ------------------
+
+/// Check for an available app update via tauri-plugin-updater.
+///
+/// Returns a status string: `"up-to-date"` or `"update-available: <version>"`.
+/// Status check only — it does NOT download or install. The UI asks the user to
+/// confirm, then calls [`install_update`].
+#[tauri::command]
+pub async fn check_for_updates(app: AppHandle) -> Result<String, String> {
+    let updater = app.updater().map_err(|e| format!("Updater error: {e}"))?;
+    match updater.check().await {
+        Ok(Some(update)) => Ok(format!("update-available: {}", update.version)),
+        Ok(None) => Ok("up-to-date".to_string()),
+        Err(e) => Err(format!("Failed to check for updates: {e}")),
+    }
+}
+
+/// Download + install the latest update (if any), then restart the app.
+///
+/// Performs a fresh check, so calling this without a prior [`check_for_updates`]
+/// is safe — it errors with "No update available" when there is nothing to install.
+#[tauri::command]
+pub async fn install_update(app: AppHandle) -> Result<(), String> {
+    let updater = app.updater().map_err(|e| format!("Updater error: {e}"))?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| format!("Failed to check for updates: {e}"))?
+        .ok_or_else(|| "No update available".to_string())?;
+    update
+        .download_and_install(|_len, _total| {}, || {})
+        .await
+        .map_err(|e| format!("Failed to install update: {e}"))?;
+    app.restart()
+}
+
 // ---- shared implementation (also used by the tray menu) ----------------------
 
 /// Send `poll:now` to the daemon. Public so the tray menu can reuse it.
@@ -150,6 +197,17 @@ pub async fn do_safe_quit(app: &AppHandle) {
     // Give the supervisor a moment to observe the clean exit.
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     app.exit(0);
+}
+
+/// Tray "Check for Updates…" entry point: runs the check (reusing the
+/// [`check_for_updates`] command) and emits `daemon://update:status` with the
+/// result so the frontend can surface it. Errors are folded into the payload as
+/// `"error: …"` so the tray click never surfaces a raw panic to the user.
+pub async fn do_check_for_updates(app: &AppHandle) {
+    let status = check_for_updates(app.clone())
+        .await
+        .unwrap_or_else(|e| format!("error: {e}"));
+    let _ = app.emit("daemon://update:status", status);
 }
 
 /// Test GitHub PAT by calling GET /user. Returns the login username on success.

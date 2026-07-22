@@ -27,14 +27,14 @@ function baseParams(overrides: Partial<InsertPendingParams> = {}): InsertPending
   };
 }
 
-/** Fresh in-memory DB migrated to the latest schema (v5). */
+/** Fresh in-memory DB migrated to the latest schema (v6). */
 function freshDb(): DatabaseSync {
   const db = new DatabaseSync(":memory:");
   runMigrations(db);
   return db;
 }
 
-describe("pending-reviews — diff storage (v5)", () => {
+describe("pending-reviews — diff storage (v6)", () => {
   it("insert WITH diff round-trips through getPendingReview and listPendingReviews", () => {
     const db = freshDb();
     const diff: Record<string, string> = {
@@ -130,12 +130,12 @@ describe("pending-reviews — diff storage (v5)", () => {
       return db;
     }
 
-    it("upgrades user_version to 5 and adds a nullable diff_json column", () => {
+    it("upgrades user_version to the latest and adds a nullable diff_json column", () => {
       const db = seedV4();
       runMigrations(db);
 
       const version = (db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-      expect(version).toBe(5);
+      expect(version).toBe(6);
 
       // The column now exists and is nullable.
       const cols = db
@@ -174,16 +174,16 @@ describe("pending-reviews — diff storage (v5)", () => {
   });
 
   describe("migration idempotency (AC1.5)", () => {
-    it("running runMigrations twice on a fresh DB keeps user_version at 5 with no error", () => {
+    it("running runMigrations twice on a fresh DB keeps user_version at the latest with no error", () => {
       const db = new DatabaseSync(":memory:");
       runMigrations(db);
       expect(() => runMigrations(db)).not.toThrow();
 
       const version = (db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-      expect(version).toBe(5);
+      expect(version).toBe(6);
     });
 
-    it("running runMigrations again on an upgraded v5 DB is a no-op", () => {
+    it("running runMigrations again on an upgraded v6 DB is a no-op", () => {
       const db = new DatabaseSync(":memory:");
       runMigrations(db);
       runMigrations(db);

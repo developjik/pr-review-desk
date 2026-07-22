@@ -16,12 +16,25 @@
  * iterates the reviewable set and looks up content/diff from its own maps.
  */
 import type { SkippedFile } from "../types/domain";
+import { matchAnyPath } from "../util/glob";
+import { splitLines } from "../poller/filter";
 
-/** Legacy maximum diff lines per file (R8); kept as a per-chunk budget reference. */
+/**
+ * Legacy maximum diff lines per file (R8); kept as a per-chunk budget reference.
+ * @deprecated use {@link ChunkOptions.maxDiffLines}; kept for backward-compat imports.
+ */
 export const MAX_DIFF_LINES = 500;
-/** Maximum reviewable files per PR before lower-priority files are trimmed (R8). */
+/**
+ * Maximum reviewable files per PR before lower-priority files are trimmed (R8).
+ * The default source for {@link ChunkOptions.maxFiles} — `chunkFiles` reads it
+ * directly when the caller omits the override.
+ */
 export const MAX_FILES = 50;
-/** Hard-skip ceiling: only diffs larger than this many lines are skipped (R8). */
+/**
+ * Hard-skip ceiling: only diffs larger than this many lines are skipped (R8).
+ * The default source for {@link ChunkOptions.maxDiffLines} — `chunkFiles` reads
+ * it directly when the caller omits the override.
+ */
 export const ABSOLUTE_MAX_DIFF_LINES = 5000;
 /**
  * Per-chunk diff-line budget used when splitting a large file's diff across
@@ -62,30 +75,75 @@ export interface ChunkResult {
 }
 
 /**
+ * Per-call overrides for {@link chunkFiles}. All fields optional; omitted
+ * fields fall back to defaults equal to the prior hardcoded behavior
+ * (`maxDiffLines=5000`, `maxFiles=50`, `largePrPolicy="trim"`, empty globs).
+ */
+export interface ChunkOptions {
+  /** Per-file diff-line skip ceiling (default: {@link ABSOLUTE_MAX_DIFF_LINES}). */
+  maxDiffLines?: number;
+  /** Reviewable-files budget before trim/abort (default: {@link MAX_FILES}). */
+  maxFiles?: number;
+  /** Over-budget policy: `"trim"` (drop lowest-priority) or `"abort"` (skip all). */
+  largePrPolicy?: "trim" | "abort";
+  /** Newline-separated glob include list (empty ⇒ include everything). */
+  fileInclude?: string;
+  /** Newline-separated glob exclude list (empty ⇒ exclude nothing). */
+  fileExclude?: string;
+}
+
+/**
  * Filter and prioritize files for review.
+ *
+ * Three ordered stages:
+ *   0. **Glob include/exclude** — user globs (`fileInclude`/`fileExclude`); a
+ *      file failing the include list or matching the exclude list is skipped
+ *      with a `fileInclude`/`fileExclude` reason. Runs FIRST so excluded files
+ *      never burn a review slot or an LLM call.
+ *   1. **Diff-size** — files whose diff exceeds `maxDiffLines` are skipped.
+ *   2. **File-budget** — when more than `maxFiles` candidates survive, either
+ *      trim lowest-priority files (`largePrPolicy="trim"`) or skip all
+ *      candidates (`largePrPolicy="abort"`).
  *
  * @param files   path → full file content (the set of changed files).
  * @param diffs   path → per-file diff text (from {@link splitDiffByFile}).
+ * @param opts    optional per-call overrides; omitted ⇒ today's defaults.
  */
 export function chunkFiles(
   files: Record<string, string>,
   diffs: Map<string, string>,
+  opts: ChunkOptions = {},
 ): ChunkResult {
+  const maxDiffLines = opts.maxDiffLines ?? ABSOLUTE_MAX_DIFF_LINES;
+  const maxFiles = opts.maxFiles ?? MAX_FILES;
+  const largePrPolicy = opts.largePrPolicy ?? "trim";
+  const includePatterns = splitLines(opts.fileInclude ?? "");
+  const excludePatterns = splitLines(opts.fileExclude ?? "");
   const skipped: SkippedFile[] = [];
   const candidates: string[] = [];
 
-  // (1) Diff-size filter: skip files whose diff exceeds the line limit.
+  // (0) Glob include/exclude filter — runs FIRST, before size/budget.
+  // (1) Diff-size filter: skip files with no diff or whose diff exceeds the
+  //     per-file line limit.
   for (const path of Object.keys(files)) {
+    if (includePatterns.length > 0 && !matchAnyPath(path, includePatterns)) {
+      skipped.push({ file: path, reason: "excluded by fileInclude (no pattern match)" });
+      continue;
+    }
+    if (excludePatterns.length > 0 && matchAnyPath(path, excludePatterns)) {
+      skipped.push({ file: path, reason: "excluded by fileExclude (pattern matched)" });
+      continue;
+    }
     const diffText = diffs.get(path);
     if (!diffText) {
       skipped.push({ file: path, reason: "no diff available (binary or unchanged)" });
       continue;
     }
     const lineCount = countDiffLines(diffText);
-    if (lineCount > ABSOLUTE_MAX_DIFF_LINES) {
+    if (lineCount > maxDiffLines) {
       skipped.push({
         file: path,
-        reason: `diff too large (${lineCount} > ${ABSOLUTE_MAX_DIFF_LINES} lines)`,
+        reason: `diff too large (${lineCount} > ${maxDiffLines} lines)`,
       });
       continue;
     }
@@ -93,8 +151,15 @@ export function chunkFiles(
   }
 
   // (2) File-budget filter: if over the limit, keep highest-priority files.
-  if (candidates.length <= MAX_FILES) {
+  if (candidates.length <= maxFiles) {
     return { reviewable: candidates, skipped };
+  }
+
+  if (largePrPolicy === "abort") {
+    for (const path of candidates) {
+      skipped.push({ file: path, reason: `largePrPolicy=abort (PR exceeds ${maxFiles}-file budget)` });
+    }
+    return { reviewable: [], skipped };
   }
 
   candidates.sort((a, b) => {
@@ -103,9 +168,9 @@ export function chunkFiles(
     return pa !== pb ? pa - pb : a.localeCompare(b);
   });
 
-  const reviewable = candidates.slice(0, MAX_FILES);
-  for (const path of candidates.slice(MAX_FILES)) {
-    skipped.push({ file: path, reason: "PR exceeds 50-file budget (lower priority)" });
+  const reviewable = candidates.slice(0, maxFiles);
+  for (const path of candidates.slice(maxFiles)) {
+    skipped.push({ file: path, reason: `PR exceeds ${maxFiles}-file budget (lower priority)` });
   }
   return { reviewable, skipped };
 }

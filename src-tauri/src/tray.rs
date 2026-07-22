@@ -23,8 +23,9 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let start = MenuItem::with_id(app, "start", "Start daemon", true, None::<&str>)?;
     let stop = MenuItem::with_id(app, "stop", "Stop daemon", true, None::<&str>)?;
     let poll = MenuItem::with_id(app, "poll", "Poll now", true, None::<&str>)?;
+    let check_updates = MenuItem::with_id(app, "check_updates", "Check for Updates…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &start, &stop, &poll, &quit])?;
+    let menu = Menu::with_items(app, &[&show, &start, &stop, &poll, &check_updates, &quit])?;
 
     let _tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(solid_icon(TrayColor::Offline))
@@ -49,6 +50,13 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
                     commands::do_poll_now(&app).await;
+                });
+            }
+            "check_updates" => {
+                show_window(app);
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    commands::do_check_for_updates(&app).await;
                 });
             }
             "quit" => {

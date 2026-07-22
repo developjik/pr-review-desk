@@ -13,14 +13,22 @@ missing.
 
 ## Current state
 
-| File (base + target triple) | Platform | Status |
-| --- | --- | --- |
-| `pr-review-daemon-aarch64-apple-darwin` | macOS (Apple Silicon) | **Real** — compiled by `npm run build:sidecar` (gitignored, regenerated locally) |
-| `pr-review-daemon-x86_64-apple-darwin` | macOS (Intel) | Stub placeholder |
-| `pr-review-daemon-x86_64-unknown-linux-gnu` | Linux (x86_64) | Stub placeholder |
-| `pr-review-daemon-x86_64-pc-windows-msvc.exe` | Windows (x86_64) | Stub placeholder |
+| File (base + target triple) | Platform | Local | CI |
+| --- | --- | --- | --- |
+| `pr-review-daemon-aarch64-apple-darwin` | macOS (Apple Silicon) | **Real** — `npm run build:sidecar` (`SIDECAR_TARGET=arm64`) | Real (macos-14) |
+| `pr-review-daemon-x86_64-apple-darwin` | macOS (Intel) | **Real** — `node scripts/build-release.mjs` (dual-arch) | Real (macos-13) |
+| `pr-review-daemon-x86_64-unknown-linux-gnu` | Linux (x86_64) | Stub | **Real** — CI (`SIDECAR_TARGET=linux`, ubuntu-22.04) |
+| `pr-review-daemon-x86_64-pc-windows-msvc.exe` | Windows (x86_64) | Stub | **Real** — CI (`SIDECAR_TARGET=win`, windows-latest) |
 
-The real binary is produced by [`@yao-pkg/pkg`](https://github.com/yao-pkg/pkg)
-targeting `node22-macos-arm64`; see `daemon/package.json` → `build:sidecar`.
-The non-native stubs remain so `cargo build` / `tauri dev` succeed until
-cross-compilation is wired up.
+All four targets are compiled by [`@yao-pkg/pkg`](https://github.com/yao-pkg/pkg)
+(see `daemon/build-sidecar.mjs`). Because pkg downloads prebuilt Node binaries,
+the Linux and Windows cross targets build on any host — no cross-compiler
+needed.
+
+The non-native **stubs** (a 269-byte `#!/bin/sh` / `.bat` no-op) exist so that
+`cargo build` and `tauri dev` succeed on a developer machine: Tauri validates
+that every `externalBin` entry exists at codegen time, so a file must be
+present even before a real cross build runs. CI overwrites them with a genuine
+binary (see `.github/workflows/release.yml`); the
+`scripts/sidecar-selfcheck.mjs` guard fails the CI build if a stub is still in
+place.

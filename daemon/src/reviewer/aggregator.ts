@@ -9,6 +9,7 @@ import type {
   FileReview,
   Finding,
   SeverityCounts,
+  TokenUsage,
 } from "../types/domain";
 import { transport } from "../ipc/transport";
 
@@ -16,6 +17,7 @@ export interface AggregateResult {
   findings: Finding[];
   summary: string;
   severityCounts: SeverityCounts;
+  usage: TokenUsage;
 }
 
 /**
@@ -24,7 +26,11 @@ export interface AggregateResult {
  * @param fileReviews  One {@link FileReview} per successfully-reviewed file.
  * @param prId         The PR surrogate id (for the wire event).
  */
-export function aggregate(fileReviews: FileReview[], prId: number): AggregateResult {
+export function aggregate(
+  fileReviews: FileReview[],
+  prId: number,
+  usage: TokenUsage,
+): AggregateResult {
   const findings: Finding[] = [];
   const counts = emptyCounts();
 
@@ -45,9 +51,10 @@ export function aggregate(fileReviews: FileReview[], prId: number): AggregateRes
     summary,
     findings: findings.length,
     severityCounts: counts,
+    usage,
   });
 
-  return { findings, summary, severityCounts: counts };
+  return { findings, summary, severityCounts: counts, usage };
 }
 
 /** Create a zero-initialized severity tally covering all {@link Severity} values. */

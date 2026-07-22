@@ -58,6 +58,7 @@ pub fn run() {
             None,
         ))
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .on_window_event(|window, event| {
             // Safe shutdown: intercept window close, send shutdown to the
             // daemon, wait briefly, then exit the app.
@@ -106,6 +107,8 @@ pub fn run() {
             commands::test_github_connection,
             commands::test_llm_connection,
             commands::list_llm_models,
+            commands::check_for_updates,
+            commands::install_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

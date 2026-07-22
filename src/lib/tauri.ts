@@ -22,6 +22,7 @@ import type {
   PollSkippedEvent,
   PublishReviewEvent,
   ReviewFileEvent,
+  UsageSummary,
 } from "@pr-review/shared";
 
 // ---------------------------------------------------------------------------
@@ -47,6 +48,18 @@ export interface UiConfig {
   repoExclude: string;
   triggerLabels: string;
   skipLabels: string;
+  fileInclude: string;
+  fileExclude: string;
+  maxDiffLines: number;
+  maxFiles: number;
+  largePrPolicy: "trim" | "abort";
+  llmPricing: string;
+  defaultPer1M: number;
+  monthlyBudgetUsd: number;
+  /** True when the OS keyring was unavailable and the secret is stored in
+   *  plaintext config.json (Linux without Secret Service). Set by the host. */
+  githubPatInsecureFallback: boolean;
+  llmApiKeyInsecureFallback: boolean;
 }
 
 /** Response shape of `daemon_status()`. */
@@ -106,6 +119,22 @@ export const rejectReview = (reviewId: number): Promise<void> =>
 
 export const listPendingReviews = (): Promise<void> =>
   invoke("list_pending_reviews");
+
+// ---- cost & budget commands ----
+
+export const getUsage = (): Promise<UsageSummary> =>
+  invoke("get_usage");
+
+// ---- auto-update commands (G003) ----
+
+/** Check for an available app update. Returns "up-to-date" or
+ *  "update-available: <version>" (or throws on error). Status only. */
+export const checkForUpdates = (): Promise<string> =>
+  invoke("check_for_updates");
+
+/** Download + install the latest update (if any), then restart the app. */
+export const installUpdate = (): Promise<void> =>
+  invoke("install_update");
 
 
 // ---------------------------------------------------------------------------
@@ -214,6 +243,26 @@ export function onPendingResolved(
   );
 }
 
+// ---- usage summary listener (G001) ----------------------------------------
+
+export function onUsageSummary(
+  cb: (summary: UsageSummary) => void,
+): Promise<UnlistenFn> {
+  return listen<{ summary: UsageSummary }>(
+    "daemon://usage:summary",
+    (e) => cb(e.payload.summary),
+  );
+}
+
+// ---- auto-update status listener (G003) ------------------------------------
+
+/** Listen for tray-triggered update checks. Payload is the same status string
+ *  returned by `checkForUpdates` ("up-to-date" / "update-available: <v>" /
+ *  "error: …"). */
+export function onUpdateStatus(cb: (status: string) => void): Promise<UnlistenFn> {
+  return listen<string>("daemon://update:status", (e) => cb(e.payload));
+}
+
 // ---------------------------------------------------------------------------
 // Config helpers
 // ---------------------------------------------------------------------------
@@ -247,6 +296,16 @@ export const DEFAULT_CONFIG: UiConfig = {
   repoExclude: "",
   triggerLabels: "",
   skipLabels: "",
+  fileInclude: "",
+  fileExclude: "",
+  maxDiffLines: 5000,
+  maxFiles: 50,
+  largePrPolicy: "trim",
+  llmPricing: "",
+  defaultPer1M: 0,
+  monthlyBudgetUsd: 0,
+  githubPatInsecureFallback: false,
+  llmApiKeyInsecureFallback: false,
 };
 
 /**
@@ -287,6 +346,38 @@ export function normalizeConfig(raw: unknown): UiConfig {
     repoExclude: typeof obj.repoExclude === "string" ? obj.repoExclude : "",
     triggerLabels: typeof obj.triggerLabels === "string" ? obj.triggerLabels : "",
     skipLabels: typeof obj.skipLabels === "string" ? obj.skipLabels : "",
+    fileInclude: typeof obj.fileInclude === "string" ? obj.fileInclude : "",
+    fileExclude: typeof obj.fileExclude === "string" ? obj.fileExclude : "",
+    maxDiffLines:
+      typeof obj.maxDiffLines === "number"
+        ? obj.maxDiffLines
+        : DEFAULT_CONFIG.maxDiffLines,
+    maxFiles:
+      typeof obj.maxFiles === "number"
+        ? obj.maxFiles
+        : DEFAULT_CONFIG.maxFiles,
+    largePrPolicy:
+      typeof obj.largePrPolicy === "string" &&
+      ["trim", "abort"].includes(obj.largePrPolicy)
+        ? (obj.largePrPolicy as "trim" | "abort")
+        : DEFAULT_CONFIG.largePrPolicy,
+    llmPricing: typeof obj.llmPricing === "string" ? obj.llmPricing : "",
+    defaultPer1M:
+      typeof obj.defaultPer1M === "number"
+        ? obj.defaultPer1M
+        : DEFAULT_CONFIG.defaultPer1M,
+    monthlyBudgetUsd:
+      typeof obj.monthlyBudgetUsd === "number"
+        ? obj.monthlyBudgetUsd
+        : DEFAULT_CONFIG.monthlyBudgetUsd,
+    githubPatInsecureFallback:
+      typeof obj.githubPatInsecureFallback === "boolean"
+        ? obj.githubPatInsecureFallback
+        : false,
+    llmApiKeyInsecureFallback:
+      typeof obj.llmApiKeyInsecureFallback === "boolean"
+        ? obj.llmApiKeyInsecureFallback
+        : false,
   };
 }
 
@@ -302,4 +393,4 @@ export function isConfigComplete(config: UiConfig | null): boolean {
 }
 
 // Re-export shared types for convenience.
-export type { ConfigPayload, DaemonState };
+export type { ConfigPayload, DaemonState, UsageSummary };

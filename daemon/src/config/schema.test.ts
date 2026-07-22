@@ -117,3 +117,98 @@ describe("parseConfig — repo/label filters (AC-Empty back-compat + round-trip 
     expect(configAffectsRuntime(a, b)).toBe(true);
   });
 });
+
+describe("parseConfig — review-quality cluster defaults + configAffectsRuntime (AC5.4 / AC5.5)", () => {
+  it("AC5.4: the 5 review-quality fields default when omitted", () => {
+    const cfg = parseConfig({ ...minimal });
+    expect(cfg.fileInclude).toBe("");
+    expect(cfg.fileExclude).toBe("");
+    expect(cfg.maxDiffLines).toBe(5000);
+    expect(cfg.maxFiles).toBe(50);
+    expect(cfg.largePrPolicy).toBe("trim");
+  });
+
+  it("AC5.4: the 5 fields default even when explicitly undefined", () => {
+    const cfg = parseConfig({
+      ...minimal,
+      fileInclude: undefined,
+      fileExclude: undefined,
+      maxDiffLines: undefined,
+      maxFiles: undefined,
+      largePrPolicy: undefined,
+    });
+    expect(cfg.fileInclude).toBe("");
+    expect(cfg.fileExclude).toBe("");
+    expect(cfg.maxDiffLines).toBe(5000);
+    expect(cfg.maxFiles).toBe(50);
+    expect(cfg.largePrPolicy).toBe("trim");
+  });
+
+  it("AC5.5: configAffectsRuntime is false when ONLY one of the 5 new fields differs (no reschedule)", () => {
+    const a = parseConfig({ ...minimal });
+    // Each of the 5 new fields changed in isolation against an otherwise-equal
+    // config (mirrors how the existing configAffectsRuntime tests diff a single
+    // filter field like repoInclude a→b).
+    expect(configAffectsRuntime(a, parseConfig({ ...minimal, fileInclude: "*.ts" }))).toBe(false);
+    expect(configAffectsRuntime(a, parseConfig({ ...minimal, fileExclude: "*.snap" }))).toBe(false);
+    expect(configAffectsRuntime(a, parseConfig({ ...minimal, maxDiffLines: 1000 }))).toBe(false);
+    expect(configAffectsRuntime(a, parseConfig({ ...minimal, maxFiles: 10 }))).toBe(false);
+    expect(configAffectsRuntime(a, parseConfig({ ...minimal, largePrPolicy: "abort" }))).toBe(false);
+  });
+});
+
+describe("parseConfig — cost & budget fields defaults + configAffectsRuntime (AC4.6–AC4.9)", () => {
+  it("AC4.6: the 3 cost/budget fields default when omitted", () => {
+    const cfg = parseConfig({ ...minimal });
+    expect(cfg.llmPricing).toBe("");
+    expect(cfg.defaultPer1M).toBe(0);
+    expect(cfg.monthlyBudgetUsd).toBe(0);
+  });
+
+  it("AC4.6: the 3 fields default even when explicitly undefined", () => {
+    const cfg = parseConfig({
+      ...minimal,
+      llmPricing: undefined,
+      defaultPer1M: undefined,
+      monthlyBudgetUsd: undefined,
+    });
+    expect(cfg.llmPricing).toBe("");
+    expect(cfg.defaultPer1M).toBe(0);
+    expect(cfg.monthlyBudgetUsd).toBe(0);
+  });
+
+  it("AC4.6: provided values round-trip through parseConfig", () => {
+    const cfg = parseConfig({
+      ...minimal,
+      llmPricing: "gpt-4o:2.50,10.00\nglm-5.2:0.50,1.50",
+      defaultPer1M: 1.5,
+      monthlyBudgetUsd: 50,
+    });
+    expect(cfg.llmPricing).toBe("gpt-4o:2.50,10.00\nglm-5.2:0.50,1.50");
+    expect(cfg.defaultPer1M).toBe(1.5);
+    expect(cfg.monthlyBudgetUsd).toBe(50);
+  });
+
+  it("AC4.6: rejects negative defaultPer1M / monthlyBudgetUsd (zod .nonnegative)", () => {
+    expect(() => parseConfig({ ...minimal, defaultPer1M: -1 })).toThrow();
+    expect(() => parseConfig({ ...minimal, monthlyBudgetUsd: -5 })).toThrow();
+  });
+
+  it("AC4.9-display: configAffectsRuntime is FALSE when ONLY llmPricing differs", () => {
+    const a = parseConfig({ ...minimal, llmPricing: "gpt-4o:2.50,10.00" });
+    const b = parseConfig({ ...minimal, llmPricing: "glm-5.2:0.50,1.50" });
+    expect(configAffectsRuntime(a, b)).toBe(false);
+  });
+
+  it("AC4.9-display: configAffectsRuntime is FALSE when ONLY defaultPer1M differs", () => {
+    const a = parseConfig({ ...minimal, defaultPer1M: 1 });
+    const b = parseConfig({ ...minimal, defaultPer1M: 5 });
+    expect(configAffectsRuntime(a, b)).toBe(false);
+  });
+
+  it("AC4.7-runtime: configAffectsRuntime is TRUE when monthlyBudgetUsd differs", () => {
+    const a = parseConfig({ ...minimal, monthlyBudgetUsd: 10 });
+    const b = parseConfig({ ...minimal, monthlyBudgetUsd: 50 });
+    expect(configAffectsRuntime(a, b)).toBe(true);
+  });
+});

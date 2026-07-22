@@ -48,5 +48,7 @@ release/
 
 # AI
 .gjc
+# Verification artifacts (ultragoal test/build transcripts)
+artifacts/
 # 로컬 DB 런타임 데이터 (SQLite WAL/SHM)
 src-tauri/data/

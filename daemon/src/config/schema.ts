@@ -30,6 +30,23 @@ export const configSchema = z.object({
   repoExclude: z.string().default(""),
   triggerLabels: z.string().default(""),
   skipLabels: z.string().default(""),
+  // --- Review-quality feature cluster (defaults = prior hardcoded behavior) ---
+  // Newline-separated glob include/exclude (mirrors repoInclude/repoExclude).
+  fileInclude: z.string().default(""),
+  fileExclude: z.string().default(""),
+  // Per-file diff-line skip ceiling (was ABSOLUTE_MAX_DIFF_LINES).
+  maxDiffLines: z.number().int().positive().default(5000),
+  // Reviewable-files budget before trim/abort (was MAX_FILES).
+  maxFiles: z.number().int().positive().default(50),
+  // Over-budget policy: "trim" (drop lowest-priority) or "abort" (skip all).
+  largePrPolicy: z.enum(["trim", "abort"]).default("trim"),
+  // --- Cost & budget feature cluster (G001) ---
+  // Newline-separated "model:promptPer1M,completionPer1M" pricing lines.
+  llmPricing: z.string().default(""),
+  // Blended fallback $/1M tokens (0 = free/unknown).
+  defaultPer1M: z.number().nonnegative().default(0),
+  // Monthly LLM spend ceiling; 0 = unlimited. Exceeding pauses reviews.
+  monthlyBudgetUsd: z.number().nonnegative().default(0),
   dbPath: z.string().min(1),
   logDir: z.string().min(1),
 });
@@ -53,6 +70,7 @@ export function configAffectsRuntime(a: Config, b: Config): boolean {
     a.githubPat !== b.githubPat ||
     a.llmBaseUrl !== b.llmBaseUrl ||
     a.llmApiKey !== b.llmApiKey ||
-    a.llmModel !== b.llmModel
+    a.llmModel !== b.llmModel ||
+    a.monthlyBudgetUsd !== b.monthlyBudgetUsd
   );
 }

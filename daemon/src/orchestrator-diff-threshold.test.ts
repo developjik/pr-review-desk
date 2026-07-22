@@ -157,6 +157,8 @@ describe("AC3.4 — diff_json_large warn (>256 KiB)", () => {
       summary: "S",
       severityCounts: { info: 0, low: 0, medium: 0, high: 1, critical: 0 },
       skipped: [],
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      fileUsage: [],
     });
     mocks.createPendingReview.mockResolvedValue({ reviewId: 999, posted: 1, degraded: 0, retried: 0 });
 
@@ -196,6 +198,8 @@ describe("AC3.4 — diff_json_large warn (>256 KiB)", () => {
       summary: "S",
       severityCounts: { info: 0, low: 1, medium: 0, high: 0, critical: 0 },
       skipped: [],
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      fileUsage: [],
     });
     mocks.createPendingReview.mockResolvedValue({ reviewId: 1, posted: 1, degraded: 0, retried: 0 });
 

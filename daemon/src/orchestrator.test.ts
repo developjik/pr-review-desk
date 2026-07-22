@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { runMigrations } from "./db/migrations";
 import { insertPendingReview, type InsertPendingParams } from "./db/pending-reviews";
-import { Orchestrator, applyEdits, decideApproval } from "./orchestrator";
+import { getUsageByPr, insertUsage } from "./db/review-usage";
+import { Orchestrator, applyEdits, decideApproval, getMonthlyCostSummary } from "./orchestrator";
 import type { Transport } from "./ipc/transport";
 import type { Config } from "./config/schema";
 import type { Finding } from "./types/domain";
@@ -132,6 +133,9 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     osNotify: false,
     reviewMode: "pending",
     reviewRules: "",
+  llmPricing: "",
+  defaultPer1M: 0,
+  monthlyBudgetUsd: 0,
     dbPath: ":memory:",
     logDir: "/tmp/logs",
     ...overrides,
@@ -356,6 +360,8 @@ describe("orchestrator — pending diff snapshot + approve edits (integration)",
       summary: "SUMMARY",
       severityCounts: { info: 0, low: 0, medium: 0, high: 1, critical: 0 },
       skipped: [],
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      fileUsage: [],
     });
     mocks.createPendingReview.mockResolvedValue({ reviewId: 999, posted: 1, degraded: 0, retried: 0 });
 
@@ -498,5 +504,268 @@ describe("orchestrator — pending diff snapshot + approve edits (integration)",
     expect(mapped.inline[0].line).toBe(99999);
     // Full approval → summary preserved despite the forced republish.
     expect(mapped.summary).toBe("ORIGINAL SUMMARY");
+  });
+});
+
+// ===========================================================================
+// Token usage persistence (AC4.4) — orchestrator-level integration.
+// reviewQueueItem persists result.fileUsage as review_usage rows BEFORE the
+// reviewMode branch, and insertUsage dedupes on (pr_id, head_sha, file, model).
+// ===========================================================================
+describe("token usage persistence (AC4.4)", () => {
+  /**
+   * Happy-path fixture mirroring the AC1.6 reviewQueueItem test: an open PR with
+   * a two-file diff where src/a.ts carries a finding + per-file token usage.
+   * `mockResolvedValue` (not `…Once`) so the same return serves a retry re-run.
+   */
+  function mockHappyReviewPR(): void {
+    mocks.fetchPRContext.mockResolvedValue({
+      title: "PR",
+      body: "",
+      headSha: "abc",
+      baseSha: "def",
+      merged: false,
+      state: "open",
+      author: "o",
+      url: "u",
+      diff: TWO_FILE_DIFF,
+      files: { "src/a.ts": "content", "src/other.ts": "other" },
+    });
+    mocks.fetchFileContent.mockResolvedValue(null);
+    mocks.reviewPR.mockResolvedValue({
+      prId: 1,
+      findings: [{ file: "src/a.ts", line: 2, severity: "high", area: "bug", comment: "issue" }],
+      summary: "SUMMARY",
+      severityCounts: { info: 0, low: 0, medium: 0, high: 1, critical: 0 },
+      skipped: [],
+      usage: { promptTokens: 100, completionTokens: 20, totalTokens: 120 },
+      fileUsage: [{ file: "src/a.ts", promptTokens: 100, completionTokens: 20, totalTokens: 120 }],
+    });
+  }
+
+  const ROW: QueueRowLike = { id: 1, pr_id: 1, repo: "owner/repo", head_sha: "abc", number: 42, retry_count: 0 };
+
+  it("AUTO mode: result.fileUsage is persisted as a review_usage row BEFORE the reviewMode branch", async () => {
+    mockHappyReviewPR();
+    mocks.publishReview.mockResolvedValue({ posted: 1, degraded: 0, retried: 0 });
+
+    const cfg = makeConfig({ reviewMode: "auto" });
+    await handle.reviewQueueItem(cfg, ROW);
+
+    // Exactly one row per file; getUsageByPr returns FileUsage (file + 3 counts, no model).
+    const rows = getUsageByPr(handle.db!, ROW.pr_id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual({
+      file: "src/a.ts",
+      promptTokens: 100,
+      completionTokens: 20,
+      totalTokens: 120,
+    });
+
+    // review-usage rows ALSO store the model (cfg.llmModel); getUsageByPr omits
+    // it, so assert via the raw column.
+    const stored = handle
+      .db!.prepare("SELECT model FROM review_usage WHERE pr_id = ?")
+      .get(ROW.pr_id) as { model: string };
+    expect(stored.model).toBe(cfg.llmModel);
+  });
+
+  it("PENDING mode: the usage row is written BEFORE the reviewMode branch (insertUsage runs regardless of mode)", async () => {
+    mockHappyReviewPR();
+    mocks.createPendingReview.mockResolvedValue({ reviewId: 999, posted: 1, degraded: 0, retried: 0 });
+
+    const cfg = makeConfig({ reviewMode: "pending" });
+    await handle.reviewQueueItem(cfg, ROW);
+
+    expect(getUsageByPr(handle.db!, ROW.pr_id)).toHaveLength(1);
+    expect(getUsageByPr(handle.db!, ROW.pr_id)[0].file).toBe("src/a.ts");
+  });
+
+  it("RETRY-DEDUP (AC4.4): re-running reviewQueueItem on the SAME (pr_id, head_sha, file, model) does NOT double-count", async () => {
+    mockHappyReviewPR();
+    mocks.publishReview.mockResolvedValue({ posted: 1, degraded: 0, retried: 0 });
+
+    const cfg = makeConfig({ reviewMode: "auto" });
+
+    // First run inserts the usage row.
+    await handle.reviewQueueItem(cfg, ROW);
+    // Queue-retry: reviewPR re-runs for the SAME pr_id + head_sha (simulating a
+    // transient publisher failure that re-queues the item). The
+    // INSERT...ON CONFLICT(pr_id, head_sha, file, model) DO NOTHING inside
+    // insertUsage must prevent a second row for the same file.
+    await handle.reviewQueueItem(cfg, ROW);
+
+    // Still exactly ONE row per file — no double-count.
+    const rows = getUsageByPr(handle.db!, ROW.pr_id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].file).toBe("src/a.ts");
+    expect(rows[0].totalTokens).toBe(120);
+  });
+});
+
+// ===========================================================================
+// Budget gate + cost summary (AC4.6 / AC4.7)
+// ===========================================================================
+describe("budget gate + monthly cost summary (AC4.6 / AC4.7)", () => {
+  const ROW: QueueRowLike = { id: 1, pr_id: 1, repo: "owner/repo", head_sha: "abc", number: 42, retry_count: 0 };
+
+  /** Seed a usage row for the current month so the budget gate sees it. */
+  function seedUsage(model: string, promptTokens: number, completionTokens: number): void {
+    insertUsage(db, {
+      prId: 99,
+      prNumber: 100,
+      repo: "owner/repo",
+      headSha: "seed",
+      file: `seed-${model}.ts`,
+      model,
+      usage: { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens },
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  it("AC4.7: budget exceeded → reviewQueueItem skips reviewPR and emits budget:exceeded", async () => {
+    // Pre-seed enough usage to exceed a $10 budget at defaultPer1M = $5/1M.
+    // 3M prompt tokens × $5/1M = $15 > $10.
+    seedUsage("expensive-model", 3_000_000, 0);
+
+    mocks.fetchPRContext.mockResolvedValue({
+      title: "PR",
+      body: "",
+      headSha: "abc",
+      baseSha: "def",
+      merged: false,
+      state: "open",
+      author: "o",
+      url: "u",
+      diff: TWO_FILE_DIFF,
+      files: { "src/a.ts": "content", "src/other.ts": "other" },
+    });
+    mocks.fetchFileContent.mockResolvedValue(null);
+    mocks.reviewPR.mockResolvedValue({
+      prId: 1,
+      findings: [],
+      summary: "",
+      severityCounts: { info: 0, low: 0, medium: 0, high: 0, critical: 0 },
+      skipped: [],
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      fileUsage: [],
+    });
+
+    const cfg = makeConfig({ reviewMode: "auto", monthlyBudgetUsd: 10, defaultPer1M: 5 });
+    await handle.reviewQueueItem(cfg, ROW);
+
+    // reviewPR was NOT called — the budget gate skipped before reaching it.
+    expect(mocks.reviewPR).not.toHaveBeenCalled();
+    // budget:exceeded event was emitted.
+    const evt = transport.events.find((e) => e.event === "budget:exceeded");
+    expect(evt).toBeDefined();
+    // usage:summary was also emitted (the gate emits it for live UI updates).
+    expect(transport.events.some((e) => e.event === "usage:summary")).toBe(true);
+  });
+
+  it("AC4.7: budget NOT exceeded → reviewQueueItem proceeds normally (reviewPR called)", async () => {
+    // Small usage that stays well under a $100 budget.
+    seedUsage("cheap-model", 1_000, 0);
+
+    mocks.fetchPRContext.mockResolvedValue({
+      title: "PR",
+      body: "",
+      headSha: "abc",
+      baseSha: "def",
+      merged: false,
+      state: "open",
+      author: "o",
+      url: "u",
+      diff: TWO_FILE_DIFF,
+      files: { "src/a.ts": "content" },
+    });
+    mocks.fetchFileContent.mockResolvedValue(null);
+    mocks.reviewPR.mockResolvedValue({
+      prId: 1,
+      findings: [],
+      summary: "",
+      severityCounts: { info: 0, low: 0, medium: 0, high: 0, critical: 0 },
+      skipped: [],
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      fileUsage: [],
+    });
+    mocks.publishReview.mockResolvedValue({ posted: 0, degraded: 0, retried: 0 });
+
+    const cfg = makeConfig({ reviewMode: "auto", monthlyBudgetUsd: 100, defaultPer1M: 5 });
+    await handle.reviewQueueItem(cfg, ROW);
+
+    // reviewPR WAS called — budget was not exceeded.
+    expect(mocks.reviewPR).toHaveBeenCalledTimes(1);
+    // No budget:exceeded event.
+    expect(transport.events.some((e) => e.event === "budget:exceeded")).toBe(false);
+    // usage:summary was emitted after the review.
+    expect(transport.events.some((e) => e.event === "usage:summary")).toBe(true);
+  });
+
+  it("AC4.7: no budget set (monthlyBudgetUsd = 0) → never emits budget:exceeded even with high usage", async () => {
+    seedUsage("expensive-model", 10_000_000, 0);
+
+    mocks.fetchPRContext.mockResolvedValue({
+      title: "PR",
+      body: "",
+      headSha: "abc",
+      baseSha: "def",
+      merged: false,
+      state: "open",
+      author: "o",
+      url: "u",
+      diff: TWO_FILE_DIFF,
+      files: { "src/a.ts": "content" },
+    });
+    mocks.fetchFileContent.mockResolvedValue(null);
+    mocks.reviewPR.mockResolvedValue({
+      prId: 1,
+      findings: [],
+      summary: "",
+      severityCounts: { info: 0, low: 0, medium: 0, high: 0, critical: 0 },
+      skipped: [],
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      fileUsage: [],
+    });
+    mocks.publishReview.mockResolvedValue({ posted: 0, degraded: 0, retried: 0 });
+
+    const cfg = makeConfig({ reviewMode: "auto", monthlyBudgetUsd: 0, defaultPer1M: 5 });
+    await handle.reviewQueueItem(cfg, ROW);
+
+    expect(mocks.reviewPR).toHaveBeenCalledTimes(1);
+    expect(transport.events.some((e) => e.event === "budget:exceeded")).toBe(false);
+  });
+
+  it("AC4.6: getMonthlyCostSummary sums per-model cost for 2 models", () => {
+    const cfg = makeConfig({
+      llmPricing: "gpt-4o:2.50,10.00\nglm-5.2:0.50,1.50",
+      defaultPer1M: 1,
+      monthlyBudgetUsd: 100,
+    });
+    // gpt-4o: 1M prompt × $2.50 + 0 completion = $2.50
+    seedUsage("gpt-4o", 1_000_000, 0);
+    // glm-5.2: 1M prompt × $0.50 + 0 completion = $0.50
+    seedUsage("glm-5.2", 1_000_000, 0);
+
+    const summary = getMonthlyCostSummary(db, cfg);
+    expect(summary.monthlyCost).toBeCloseTo(3.0, 6);
+    expect(summary.tokensThisMonth).toBe(2_000_000);
+    expect(summary.paused).toBe(false);
+    expect(Object.keys(summary.byModel).sort()).toEqual(["glm-5.2", "gpt-4o"]);
+    expect(summary.byModel["gpt-4o"].cost).toBeCloseTo(2.5, 6);
+    expect(summary.byModel["glm-5.2"].cost).toBeCloseTo(0.5, 6);
+  });
+
+  it("AC4.6: getMonthlyCostSummary reports paused=true when budget exceeded", () => {
+    const cfg = makeConfig({
+      llmPricing: "gpt-4o:2.50,10.00",
+      monthlyBudgetUsd: 1, // very low budget
+    });
+    // gpt-4o: 1M prompt × $2.50 = $2.50 > $1 budget
+    seedUsage("gpt-4o", 1_000_000, 0);
+
+    const summary = getMonthlyCostSummary(db, cfg);
+    expect(summary.monthlyCost).toBeCloseTo(2.5, 6);
+    expect(summary.paused).toBe(true);
   });
 });

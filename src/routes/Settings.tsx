@@ -16,10 +16,289 @@ import {
   saveConfig,
   testGithubConnection,
   testLlmConnection,
+  getUsage,
+  onUsageSummary,
+  type UsageSummary,
+  checkForUpdates,
+  installUpdate,
+  onUpdateStatus,
 } from "../lib/tauri";
 import { useToast } from "../components/ui/Toast";
 import { Icon } from "../components/ui/Icon";
 
+
+/**
+ * CostBudgetCard — shows monthly LLM spend + cost inputs (G001).
+ *
+ * Fetches usage on mount via getUsage() and subscribes to the usage:summary event
+ * for live updates. Config inputs (budget / pricing / default rate) use the
+ * parent Settings `update()` helper so they persist with the rest of the form.
+ */
+function CostBudgetCard({
+  config,
+  update,
+}: {
+  config: UiConfig;
+  update: <K extends keyof UiConfig>(key: K, value: UiConfig[K]) => void;
+}) {
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    getUsage()
+      .then(setUsage)
+      .catch(() => undefined);
+    onUsageSummary(setUsage).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  const budget = config.monthlyBudgetUsd;
+  const cost = usage?.monthlyCost ?? 0;
+  const tokens = usage?.tokensThisMonth ?? 0;
+  const paused = usage?.paused ?? false;
+  const pct = budget > 0 ? Math.min(100, (cost / budget) * 100) : 100;
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <span className="card-icon"><Icon name="bar-chart-2" /></span>
+        <h3>Cost &amp; Budget</h3>
+      </div>
+      <div className="card-body">
+        <div className="field">
+          <span className="field-label">This month</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+            <span>
+              This month: ${cost.toFixed(2)} /{" "}
+              {budget > 0 ? `$${budget}` : "unlimited"}{" "}
+              ({tokens.toLocaleString()} tokens)
+            </span>
+            {paused && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.25rem",
+                  padding: "0.125rem 0.5rem",
+                  borderRadius: "999px",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  background: "var(--danger, #ef4444)",
+                  color: "#fff",
+                }}
+              >
+                <Icon name="pause" size="sm" /> Budget exceeded — reviews paused
+              </span>
+            )}
+          </div>
+          {/* Inline progress bar */}
+          <svg
+            width="100%"
+            height="8"
+            viewBox="0 0 100 8"
+            preserveAspectRatio="none"
+            style={{ display: "block", marginTop: "0.5rem", borderRadius: "4px" }}
+          >
+            <rect x="0" y="0" width="100" height="8" rx="4" fill="var(--surface-border, #e5e7eb)" />
+            <rect
+              x="0"
+              y="0"
+              width={pct}
+              height="8"
+              rx="4"
+              fill={paused ? "var(--danger, #ef4444)" : "var(--primary, #3b82f6)"}
+            />
+          </svg>
+        </div>
+
+        <div className="field">
+          <span className="field-label">Monthly budget (USD)</span>
+          <input
+            type="number"
+            className="input"
+            min={0}
+            value={config.monthlyBudgetUsd}
+            onChange={(e) =>
+              update("monthlyBudgetUsd", Number(e.target.value) || DEFAULT_CONFIG.monthlyBudgetUsd)
+            }
+          />
+          <p className="hint">
+            Maximum monthly LLM spend. 0 = unlimited. When exceeded, new reviews
+            are paused until next month.
+          </p>
+        </div>
+
+        <div className="field">
+          <span className="field-label">Default rate ($/1M tokens)</span>
+          <input
+            type="number"
+            className="input"
+            min={0}
+            step="0.1"
+            value={config.defaultPer1M}
+            onChange={(e) =>
+              update("defaultPer1M", Number(e.target.value) || DEFAULT_CONFIG.defaultPer1M)
+            }
+          />
+          <p className="hint">
+            Blended fallback $/1M tokens for models not listed below. 0 =
+            free/unknown.
+          </p>
+        </div>
+
+        <div className="field">
+          <span className="field-label">Per-model pricing</span>
+          <textarea
+            className="input"
+            rows={6}
+            value={config.llmPricing}
+            onChange={(e) => update("llmPricing", e.target.value)}
+            placeholder={"Newline-separated model:promptPer1M,completionPer1M, e.g.\ngpt-4o:2.50,10.00\nglm-5.2:0.50,1.50\nEmpty = use the default rate above for all models."}
+            style={{
+              fontFamily: '"SF Mono", ui-monospace, monospace',
+              resize: "vertical",
+            }}
+          />
+          <p className="hint">
+            Newline-separated{" "}
+            <code>model:promptPer1M,completionPer1M</code> rates. Unknown models
+            fall back to the default rate. Changes apply on the next review.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * UpdateCard — manual "Check for updates" trigger (G003, Rust-driven).
+ *
+ * Calls the `check_for_updates` command and shows the status text. When an
+ * update is available it offers a confirm → install path (`install_update`
+ * downloads, verifies the signature, and restarts). Also subscribes to
+ * `daemon://update:status` so tray "Check for Updates…" clicks surface here.
+ */
+function UpdateCard() {
+  type UpdateState =
+    | "idle"
+    | "checking"
+    | "up-to-date"
+    | "available"
+    | "installing"
+    | "error";
+  const [state, setState] = useState<UpdateState>("idle");
+  const [version, setVersion] = useState("");
+  const [msg, setMsg] = useState("");
+  const toast = useToast();
+
+  useEffect(() => {
+    // Surface tray-triggered update checks in this card.
+    const unlistenP = onUpdateStatus((status) => {
+      if (status.startsWith("update-available:")) {
+        setVersion(status.slice("update-available:".length).trim());
+        setState("available");
+      } else if (status === "up-to-date") {
+        setState("up-to-date");
+      } else if (status.startsWith("error:")) {
+        setMsg(status);
+        setState("error");
+      }
+    });
+    return () => {
+      unlistenP.then((fn) => fn());
+    };
+  }, []);
+
+  const handleCheck = async () => {
+    setState("checking");
+    setMsg("");
+    try {
+      const status = await checkForUpdates();
+      if (status.startsWith("update-available:")) {
+        setVersion(status.slice("update-available:".length).trim());
+        setState("available");
+      } else {
+        setState("up-to-date");
+      }
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+      setState("error");
+    }
+  };
+
+  const handleInstall = async () => {
+    setState("installing");
+    setMsg("");
+    try {
+      await installUpdate();
+      // install_update() restarts the app on success — unreachable on success.
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      setMsg(m);
+      setState("error");
+      toast.error("업데이트 설치에 실패했어요.", m);
+    }
+  };
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <span className="card-icon"><Icon name="refresh-cw" /></span>
+        <h3>About &amp; Updates</h3>
+      </div>
+      <div className="card-body">
+        <div className="field">
+          <span className="field-label">Application updates</span>
+          <div className="test-row">
+            <button
+              type="button"
+              className={`test-btn ${state === "checking" ? "is-testing" : ""}`}
+              disabled={state === "checking" || state === "installing"}
+              onClick={handleCheck}
+            >
+              {state === "checking" ? "Checking…" : "Check for updates"}
+            </button>
+            {state === "up-to-date" && (
+              <span className="test-ok">✓ You're up to date</span>
+            )}
+            {state === "available" && (
+              <span className="test-ok">↻ Update available: {version}</span>
+            )}
+            {state === "error" && (
+              <span className="test-fail">✕ {msg}</span>
+            )}
+          </div>
+          {(state === "available" || state === "installing") && (
+            <div className="field" style={{ marginTop: "0.75rem" }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={state === "installing"}
+                data-loading={state === "installing"}
+                onClick={handleInstall}
+              >
+                {state === "installing" ? "Installing…" : "Install & restart"}
+              </button>
+              <p className="hint">
+                Downloads the update, verifies its signature, and restarts the
+                app.
+              </p>
+            </div>
+          )}
+          <p className="hint">
+            Checks the release feed for a newer signed build. Auto-update
+            requires the signing key to be configured (see the README's
+            "Auto-update signing" section).
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 interface SettingsProps {
   onSaved?: () => void;
   onOpenInstallHelp?: () => void;
@@ -157,6 +436,12 @@ export default function Settings({ onSaved, onOpenInstallHelp }: SettingsProps) 
               placeholder="ghp_…"
             />
           </div>
+          {config.githubPatInsecureFallback && (
+            <p className="hint" style={{ color: "var(--warning)" }}>
+              ⚠ Stored insecurely — no OS keyring on this system. The token is
+              saved in plaintext in config.json.
+            </p>
+          )}
           <div className="test-row">
             <button
               type="button"
@@ -220,6 +505,12 @@ export default function Settings({ onSaved, onOpenInstallHelp }: SettingsProps) 
               placeholder="sk-…"
             />
           </div>
+          {config.llmApiKeyInsecureFallback && (
+            <p className="hint" style={{ color: "var(--warning)" }}>
+              ⚠ Stored insecurely — no OS keyring on this system. The key is
+              saved in plaintext in config.json.
+            </p>
+          )}
           <div className="field">
             <span className="field-label">Model</span>
             <input
@@ -424,6 +715,106 @@ export default function Settings({ onSaved, onOpenInstallHelp }: SettingsProps) 
           </p>
         </div>
       </div>
+
+      {/* File filters & review budgets */}
+      <div className="card">
+        <div className="card-header">
+          <span className="card-icon"><Icon name="file-text" /></span>
+          <h3>File Filters &amp; Review Budgets</h3>
+        </div>
+        <div className="card-body">
+          <div className="field">
+            <span className="field-label">File include patterns</span>
+            <textarea
+              className="input"
+              rows={6}
+              value={config.fileInclude}
+              onChange={(e) => update("fileInclude", e.target.value)}
+              placeholder={"Newline-separated globs of files to review, e.g.\nsrc/**\n*.ts\nEmpty = review all matching files."}
+              style={{
+                fontFamily: '"SF Mono", ui-monospace, monospace',
+                resize: "vertical",
+              }}
+            />
+            <p className="hint">
+              Newline-separated globs of files to review (e.g.{" "}
+              <code>src/**</code>). Empty = review all matching files.
+            </p>
+          </div>
+          <div className="field">
+            <span className="field-label">File exclude patterns</span>
+            <textarea
+              className="input"
+              rows={6}
+              value={config.fileExclude}
+              onChange={(e) => update("fileExclude", e.target.value)}
+              placeholder={"Newline-separated globs to skip, e.g.\n**/*.generated.ts\nvendor/**\ndist/\nEmpty = exclude none."}
+              style={{
+                fontFamily: '"SF Mono", ui-monospace, monospace',
+                resize: "vertical",
+              }}
+            />
+            <p className="hint">
+              Newline-separated globs to skip (e.g.{" "}
+              <code>**/*.generated.ts</code>, <code>vendor/**</code>,{" "}
+              <code>dist/</code>). Empty = exclude none.
+            </p>
+          </div>
+          <div className="field">
+            <span className="field-label">Max diff lines per file</span>
+            <input
+              type="number"
+              className="input"
+              min={1}
+              value={config.maxDiffLines}
+              onChange={(e) =>
+                update("maxDiffLines", Number(e.target.value) || DEFAULT_CONFIG.maxDiffLines)
+              }
+            />
+            <p className="hint">
+              Skip files whose diff exceeds this many lines (default 5000).
+            </p>
+          </div>
+          <div className="field">
+            <span className="field-label">Max files per PR</span>
+            <input
+              type="number"
+              className="input"
+              min={1}
+              value={config.maxFiles}
+              onChange={(e) =>
+                update("maxFiles", Number(e.target.value) || DEFAULT_CONFIG.maxFiles)
+              }
+            />
+            <p className="hint">
+              Max files reviewed per PR; lower-priority files trimmed beyond this
+              (default 50).
+            </p>
+          </div>
+          <div className="field">
+            <span className="field-label">Large PR policy</span>
+            <select
+              value={config.largePrPolicy}
+              onChange={(e) =>
+                update("largePrPolicy", e.target.value as "trim" | "abort")
+              }
+            >
+              <option value="trim">Trim to budget</option>
+              <option value="abort">Abort review (skip all)</option>
+            </select>
+            <p className="hint">
+              When a PR exceeds the file budget: trim lower-priority files, or
+              abort the review entirely.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Cost & budget (G001) */}
+      <CostBudgetCard config={config} update={update} />
+
+      {/* Auto-update (G003) */}
+      <UpdateCard />
 
       <div className="settings-actions">
         {saveState === "saved" && <span className="ok">Saved ✓</span>}

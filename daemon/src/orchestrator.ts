@@ -17,13 +17,14 @@
  *      diff-line-mapper, and emits `publish:review` as a P5 stub,
  *   4. returns to `idle`.
  */
-import type { DaemonState, PendingFinding, FindingEdit } from "@pr-review/shared";
+import type { DaemonState, PendingFinding, FindingEdit, UsageSummary } from "@pr-review/shared";
 import type { Transport } from "./ipc/transport";
 import type { Config } from "./config/schema";
 import type { Octokit } from "@octokit/rest";
 import { closeDatabase, openDatabase } from "./db/connection";
 import { pruneQueue, prunePendingReviews } from "./db/cleanup";
 import { insertPendingReview, getPendingReview, listPendingReviews, resolvePendingReview } from "./db/pending-reviews";
+import { insertUsage, getUsageByModelSince } from "./db/review-usage";
 import type { DatabaseSync } from "node:sqlite";
 import { getLogger } from "./logging/logger";
 import { Poller } from "./poller/poller";
@@ -31,6 +32,7 @@ import { createGitHubClient, fetchAuthenticatedUser, fetchFileContent, fetchPRCo
 import { recordReview } from "./poller/dedupe";
 import { reviewPR } from "./reviewer/reviewer";
 import { composeGuidelines } from "./reviewer/prompts";
+import { parsePricing, computeCost } from "./reviewer/cost";
 import { parseDiffHunks, splitDiffByFile } from "./linemap/diff-parser";
 import { mapFindings } from "./linemap/diff-line-mapper";
 import { publishReview, createPendingReview, submitPendingReview, discardPendingReview } from "./publisher/publisher";
@@ -80,6 +82,9 @@ export class Orchestrator {
       }),
       this.transport.on("pending:list", () => {
         void this.emitPendingSnapshot();
+      }),
+      this.transport.on("get_usage", () => {
+        void this.emitUsageSummary();
       }),
     );
   }
@@ -270,6 +275,28 @@ export class Orchestrator {
     const db = this.db;
     if (!db) return;
 
+    // G001 budget gate: if a monthly budget is set and already exceeded, skip
+    // this review without calling reviewPR. Emits budget:exceeded so the host
+    // can surface a paused state in the UI (AC4.7).
+    if (cfg.monthlyBudgetUsd > 0) {
+      const summary = getMonthlyCostSummary(db, cfg);
+      if (summary.monthlyCost >= cfg.monthlyBudgetUsd) {
+        log.warn(
+          { code: "budget_exceeded", prId: row.pr_id, monthlyCost: summary.monthlyCost, monthlyBudgetUsd: cfg.monthlyBudgetUsd },
+          "monthly budget exceeded; skipping review",
+        );
+        await this.transport.emit({
+          type: "event",
+          event: "budget:exceeded",
+          prId: row.pr_id,
+          monthlyCost: summary.monthlyCost,
+          monthlyBudgetUsd: cfg.monthlyBudgetUsd,
+        });
+        await this.emitUsageSummary();
+        return;
+      }
+    }
+
     // Parse "owner/name" from repo.
     const slash = row.repo.indexOf("/");
     if (slash < 0) {
@@ -326,6 +353,26 @@ export class Orchestrator {
 
     // P4: Review (emits review:file per file + review:summary).
     const result = await reviewPR(ctx, cfg);
+    // Persist per-file token usage (covers BOTH auto + pending modes).
+    // Runs BEFORE the reviewMode branch so a pending-mode createPendingReview
+    // throw + queue retry is deduped by INSERT OR IGNORE (H2). result.fileUsage
+    // is always present (REQUIRED on ReviewResult).
+    for (const fu of result.fileUsage) {
+      insertUsage(db, {
+        prId: row.pr_id,
+        prNumber: row.number,
+        repo: row.repo,
+        headSha: row.head_sha,
+        file: fu.file,
+        model: cfg.llmModel,
+        usage: fu,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // G001: emit an updated usage:summary after persisting this review's usage
+    // so the host UI can update the cost bar live (AC4.8).
+    await this.emitUsageSummary();
 
     // Line-map verification: classify findings as inline or degraded.
     const validLines = parseDiffHunks(prCtx.diff);
@@ -629,10 +676,67 @@ export class Orchestrator {
     });
   }
 
+  /**
+   * Compute and emit a monthly usage:summary event (response to get_usage command
+   * + after each review / budget-exceeded). Requires an active config + DB.
+   */
+  private async emitUsageSummary(): Promise<void> {
+    const db = this.db;
+    const cfg = this.cfg;
+    if (!db || !cfg) return;
+    await this.transport.emit({
+      type: "event",
+      event: "usage:summary",
+      summary: getMonthlyCostSummary(db, cfg),
+    });
+  }
+
   private async setState(state: DaemonState): Promise<void> {
     this.state = state;
     await this.transport.status(state);
   }
+}
+
+// ---------------------------------------------------------------------------
+// G001: cost/budget helpers (extracted for testability)
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute the month-start ISO timestamp (UTC, first day of current month, 00:00).
+ * Used as the cutoff for monthly cost aggregation.
+ */
+function monthStartIso(): string {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+}
+
+/**
+ * Compute the monthly cost summary for the budget gate + usage:summary event.
+ * Aggregates per-model token usage since the start of the current (UTC) month,
+ * applies per-model pricing (falling back to defaultPer1M for unknown models),
+ * and derives a `paused` flag when the budget is set and exceeded (AC4.6).
+ */
+export function getMonthlyCostSummary(db: DatabaseSync, config: Config): UsageSummary {
+  const pricing = parsePricing(config.llmPricing, config.defaultPer1M);
+  const rows = getUsageByModelSince(db, monthStartIso());
+
+  const byModel: Record<string, { cost: number; tokens: number }> = {};
+  let monthlyCost = 0;
+  let tokensThisMonth = 0;
+  for (const row of rows) {
+    const cost = computeCost(row, row.model, pricing);
+    monthlyCost += cost;
+    tokensThisMonth += row.totalTokens;
+    byModel[row.model] = { cost, tokens: row.totalTokens };
+  }
+
+  return {
+    monthlyCost,
+    monthlyBudgetUsd: config.monthlyBudgetUsd,
+    tokensThisMonth,
+    paused: config.monthlyBudgetUsd > 0 && monthlyCost >= config.monthlyBudgetUsd,
+    byModel,
+  };
 }
 
 // ---------------------------------------------------------------------------

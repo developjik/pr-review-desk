@@ -10,6 +10,7 @@
     "shell:allow-execute",
     "store:default",
     "notification:default",
-    "autostart:default"
+    "autostart:default",
+    "updater:default"
   ]
 }

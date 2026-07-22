@@ -58,8 +58,40 @@ export interface ConfigPayload {
   repoExclude?: string;
   triggerLabels?: string;
   skipLabels?: string;
+  // --- Review-quality feature cluster (optional; daemon-side defaults) ---
+  /** Newline-separated glob include list (empty ⇒ include everything). */
+  fileInclude?: string;
+  /** Newline-separated glob exclude list (empty ⇒ exclude nothing). */
+  fileExclude?: string;
+  /** Per-file diff-line skip ceiling (default 5000). */
+  maxDiffLines?: number;
+  /** Reviewable-files budget before trim/abort (default 50). */
+  maxFiles?: number;
+  /** Over-budget policy: "trim" (drop lowest-priority) or "abort" (skip all). */
+  largePrPolicy?: "trim" | "abort";
+  // --- Cost & budget feature cluster (G001; optional; daemon-side defaults) ---
+  /** Newline-separated "model:promptPer1M,completionPer1M" pricing lines. */
+  llmPricing?: string;
+  /** Blended fallback $/1M tokens (0 = free/unknown). */
+  defaultPer1M?: number;
+  /** Monthly LLM spend ceiling; 0 = unlimited. Exceeding pauses reviews. */
+  monthlyBudgetUsd?: number;
   dbPath: string;
+  /** True when the OS keyring was unavailable and the secret lives in plaintext
+   *  config.json (Linux without Secret Service). UI-only metadata; ignored by
+   *  the daemon. */
+  githubPatInsecureFallback?: boolean;
+  llmApiKeyInsecureFallback?: boolean;
   logDir: string;
+}
+
+/** Monthly cost summary surfaced on the `usage:summary` event + `get_usage` reply. */
+export interface UsageSummary {
+  monthlyCost: number;
+  monthlyBudgetUsd: number;
+  tokensThisMonth: number;
+  paused: boolean;
+  byModel: Record<string, { cost: number; tokens: number }>;
 }
 
 /** A finding with a synthesized stable id, for pending review selection. */
@@ -114,6 +146,8 @@ export const DaemonEventName = {
   ReviewPending: "review:pending",
   PendingSnapshot: "pending:snapshot",
   PendingResolved: "pending:resolved",
+  BudgetExceeded: "budget:exceeded",
+  UsageSummary: "usage:summary",
 } as const;
 export type DaemonEventName = (typeof DaemonEventName)[keyof typeof DaemonEventName];
 
@@ -172,6 +206,8 @@ export interface ReviewSummaryEvent extends EventEnvelope {
   findings: number;
   /** Finding counts keyed by severity label (e.g. { "high": 2, "medium": 5 }). */
   severityCounts: Record<string, number>;
+  /** PR-aggregate token usage (optional; older daemons omit it). */
+  usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
 }
 
 export interface PublishReviewEvent extends EventEnvelope {
@@ -216,6 +252,20 @@ export interface PendingResolvedEvent extends EventEnvelope {
   status: "approved" | "rejected";
 }
 
+/** A review was skipped because the monthly LLM budget was exceeded (G001). */
+export interface BudgetExceededEvent extends EventEnvelope {
+  event: typeof DaemonEventName.BudgetExceeded;
+  prId: number;
+  monthlyCost: number;
+  monthlyBudgetUsd: number;
+}
+
+/** Monthly usage + cost summary (emitted after each review + as `get_usage` reply). */
+export interface UsageSummaryEvent extends EventEnvelope {
+  event: typeof DaemonEventName.UsageSummary;
+  summary: UsageSummary;
+}
+
 export type DaemonEvent =
   | DaemonReadyEvent
   | DaemonLogEvent
@@ -229,7 +279,9 @@ export type DaemonEvent =
   | DaemonErrorEvent
   | ReviewPendingEvent
   | PendingSnapshotEvent
-  | PendingResolvedEvent;
+  | PendingResolvedEvent
+  | BudgetExceededEvent
+  | UsageSummaryEvent;
 
 // ----------------------------------------------------------------------------
 // Commands (host -> daemon)
@@ -244,6 +296,7 @@ export const DaemonCommandName = {
   ApproveReview: "approve:review",
   RejectReview: "reject:review",
   ListPending: "pending:list",
+  GetUsage: "get_usage",
 } as const;
 export type DaemonCommandName = (typeof DaemonCommandName)[keyof typeof DaemonCommandName];
 
@@ -290,6 +343,10 @@ export interface ListPendingCommand extends CommandEnvelope {
   cmd: typeof DaemonCommandName.ListPending;
 }
 
+export interface GetUsageCommand extends CommandEnvelope {
+  cmd: typeof DaemonCommandName.GetUsage;
+}
+
 export type DaemonCommand =
   | ConfigCommand
   | PollNowCommand
@@ -298,7 +355,8 @@ export type DaemonCommand =
   | ShutdownCommand
   | ApproveReviewCommand
   | RejectReviewCommand
-  | ListPendingCommand;
+  | ListPendingCommand
+  | GetUsageCommand;
 
 // ----------------------------------------------------------------------------
 // Discriminated-union narrowing helpers

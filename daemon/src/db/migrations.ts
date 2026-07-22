@@ -86,6 +86,29 @@ export const MIGRATIONS: Migration[] = [
       ALTER TABLE pending_reviews ADD COLUMN diff_json TEXT;
     `,
   },
+  {
+    version: 6,
+    sql: `
+      CREATE TABLE IF NOT EXISTS review_usage (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        pr_id             INTEGER NOT NULL,
+        pr_number         INTEGER NOT NULL,
+        repo              TEXT NOT NULL,
+        head_sha          TEXT NOT NULL,
+        file              TEXT,
+        model             TEXT NOT NULL,
+        prompt_tokens     INTEGER NOT NULL DEFAULT 0,
+        completion_tokens INTEGER NOT NULL DEFAULT 0,
+        total_tokens      INTEGER NOT NULL DEFAULT 0,
+        created_at        TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS review_usage_pr_idx     ON review_usage (pr_id);
+      CREATE INDEX IF NOT EXISTS review_usage_created_idx ON review_usage (created_at);
+      -- H2 retry-dedup: per-file rows are the dedup unit. INSERT OR IGNORE in review-usage.ts.
+      CREATE UNIQUE INDEX IF NOT EXISTS review_usage_pr_file_model_uniq
+        ON review_usage (pr_id, head_sha, file, model);
+    `,
+  },
 ];
 
 /**

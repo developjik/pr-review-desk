@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Config } from "../config/schema";
-import type { Finding, ReviewContext, Severity } from "../types/domain";
+import type { Finding, ReviewContext, Severity, TokenUsage } from "../types/domain";
 import type { LlmFileReview } from "./llm-client";
 
 // Script the LLM client: `createLlmClient` returns an object whose `reviewFile`
@@ -94,8 +94,12 @@ function mkFinding(
 }
 
 /** Wrap findings as a per-chunk LLM review. */
-function review(findings: Finding[], summary = "chunk summary"): LlmFileReview {
-  return { findings, summary };
+function review(
+  findings: Finding[],
+  summary = "chunk summary",
+  usage?: TokenUsage | null,
+): LlmFileReview {
+  return { findings, summary, usage };
 }
 
 /** `review:file` events captured on the (mocked) transport. */
@@ -284,5 +288,93 @@ describe("reviewer — chunked file review (F2)", () => {
     ]);
     expect(baseline.inline.length).toBe(inline.length);
     expect(baseline.degraded.length).toBe(degraded.length);
+  });
+});
+
+describe("reviewer — token usage accumulation (#4, AC4.2 / AC4.2b)", () => {
+  beforeEach(() => {
+    mocks.reviewFile.mockReset();
+    mocks.emits.length = 0;
+  });
+
+  it("(a) single-chunk file: result.usage + the file's fileUsage row carry the chunk's usage", async () => {
+    const FILE = "src/one.ts";
+    const content = "content";
+    const diff = fileDiff(FILE, [hunk(1, 3)]); // 1 chunk (≤500 diff lines)
+    const ctx = makeCtx(diff, { [FILE]: content });
+
+    mocks.reviewFile.mockResolvedValueOnce(
+      review([mkFinding(FILE, 2, "nit")], "ok", { promptTokens: 100, completionTokens: 20, totalTokens: 120 }),
+    );
+
+    const result = await reviewPR(ctx, makeConfig());
+
+    expect(result.usage).toEqual({ promptTokens: 100, completionTokens: 20, totalTokens: 120 });
+    expect(result.fileUsage).toEqual([
+      { file: FILE, promptTokens: 100, completionTokens: 20, totalTokens: 120 },
+    ]);
+    // AC4.3: the review:summary wire event carries the PR-level usage aggregate
+    // (aggregator attaches usage===usageAcc; reviewer returns it as result.usage).
+    const summaryEvent = mocks.emits.find((e) => e.event === "review:summary");
+    expect(summaryEvent).toBeDefined();
+    expect((summaryEvent as { usage: unknown }).usage).toEqual(result.usage);
+  });
+
+  it("(b) multi-chunk file: fileUsage row + result.usage = SUM across chunks (addUsage BEFORE mergeChunkResults)", async () => {
+    const FILE = "src/big.ts";
+    const content = "content";
+    // 2 hunks × 300 lines = 600 > 500 ⇒ 2 chunks.
+    const diff = fileDiff(FILE, [hunk(1, 300), hunk(500, 300)]);
+    const ctx = makeCtx(diff, { [FILE]: content });
+
+    mocks.reviewFile
+      .mockResolvedValueOnce(review([], "chunk0", { promptTokens: 10, completionTokens: 2, totalTokens: 12 }))
+      .mockResolvedValueOnce(review([], "chunk1", { promptTokens: 20, completionTokens: 4, totalTokens: 24 }));
+
+    const result = await reviewPR(ctx, makeConfig());
+
+    expect(mocks.reviewFile).toHaveBeenCalledTimes(2);
+    expect(result.usage).toEqual({ promptTokens: 30, completionTokens: 6, totalTokens: 36 });
+    expect(result.fileUsage).toEqual([
+      { file: FILE, promptTokens: 30, completionTokens: 6, totalTokens: 36 },
+    ]);
+  });
+
+  it("(c) partial chunk failure: the failed chunk contributes 0; the surviving chunk's usage is billed", async () => {
+    const FILE = "src/partial.ts";
+    const content = "content";
+    const diff = fileDiff(FILE, [hunk(1, 300), hunk(500, 300)]); // 2 chunks
+    const ctx = makeCtx(diff, { [FILE]: content });
+
+    // Chunk 0 throws before `resp` exists ⇒ usage unrecoverable ⇒ contributes 0.
+    mocks.reviewFile
+      .mockRejectedValueOnce(new Error("chunk 0 boom"))
+      .mockResolvedValueOnce(
+        review([mkFinding(FILE, 550, "survived")], "chunk1", { promptTokens: 20, completionTokens: 4, totalTokens: 24 }),
+      );
+
+    const result = await reviewPR(ctx, makeConfig());
+
+    expect(result.findings).toHaveLength(1); // file still reviewed
+    expect(result.usage).toEqual({ promptTokens: 20, completionTokens: 4, totalTokens: 24 });
+    expect(result.fileUsage).toEqual([
+      { file: FILE, promptTokens: 20, completionTokens: 4, totalTokens: 24 },
+    ]);
+  });
+
+  it("(d) fully-failed file (AC4.2b): no fileUsage row; result.usage = {0,0,0}; result.fileUsage = []", async () => {
+    const FILE = "src/dead.ts";
+    const content = "content";
+    const diff = fileDiff(FILE, [hunk(1, 300), hunk(500, 300)]); // 2 chunks, both fail
+    const ctx = makeCtx(diff, { [FILE]: content });
+
+    mocks.reviewFile.mockRejectedValue(new Error("all boom"));
+
+    const result = await reviewPR(ctx, makeConfig());
+
+    // reviewSingleFile returns null ⇒ no fileUsage row + 0 to usageAcc (#4 guarantee).
+    expect(result.fileUsage).toEqual([]);
+    expect(result.usage).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
+    expect(result.findings).toEqual([]);
   });
 });
