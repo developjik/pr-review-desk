@@ -28,8 +28,8 @@ import { insertUsage, getUsageByModelSince } from "./db/review-usage";
 import type { DatabaseSync } from "node:sqlite";
 import { getLogger } from "./logging/logger";
 import { Poller } from "./poller/poller";
-import { createGitHubClient, fetchAuthenticatedUser, fetchFileContent, fetchPRContext, fetchPRMeta } from "./poller/github-client";
-import { recordReview } from "./poller/dedupe";
+import { createGitHubClient, fetchAuthenticatedUser, fetchFileContent, fetchPRContext, fetchPRMeta, fetchCompareDiff } from "./poller/github-client";
+import { recordReview, getPreviousSha } from "./poller/dedupe";
 import { reviewPR } from "./reviewer/reviewer";
 import { composeGuidelines } from "./reviewer/prompts";
 import { parsePricing, computeCost } from "./reviewer/cost";
@@ -334,6 +334,35 @@ export class Orchestrator {
       repoRules = await fetchFileContent(octokit, owner, name, ".prreview/rules.md", row.head_sha);
     } catch {
       repoRules = null;
+    }
+
+    // G002: incremental review — when enabled and this PR was previously reviewed
+    // at an ancestor sha, narrow the review to the previousSha..head compare diff
+    // and ONLY the changed files (fewer tokens). Falls back to the full
+    // base..head diff+files on any compare failure (force-push/rebase/404).
+    if (cfg.incrementalReview) {
+      const prevSha = this.db ? getPreviousSha(this.db, row.pr_id) : null;
+      if (prevSha && prevSha !== row.head_sha) {
+        const cmp = await fetchCompareDiff(octokit, owner, name, prevSha, row.head_sha);
+        if (cmp.status === "ahead" && cmp.diff) {
+          // Narrow: compare diff + only the changed-files' contents.
+          const narrowed: Record<string, string> = {};
+          for (const f of cmp.changedFiles) {
+            if (prCtx.files[f] !== undefined) narrowed[f] = prCtx.files[f];
+          }
+          prCtx.diff = cmp.diff;
+          prCtx.files = narrowed;
+          log.info(
+            { code: "review_incremental", prId: row.pr_id, prevSha, headSha: row.head_sha, changedFiles: cmp.changedFiles.length },
+            "incremental review: narrowed to previousSha..head",
+          );
+        } else {
+          log.info(
+            { code: "review_incremental_fallback", prId: row.pr_id, prevSha, headSha: row.head_sha, compareStatus: cmp.status },
+            "incremental review: compare not ahead, falling back to full diff",
+          );
+        }
+      }
     }
 
     const ctx: ReviewContext = {

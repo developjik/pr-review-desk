@@ -5,6 +5,7 @@ import {
   repoGlob,
   matchRepo,
   shouldFilterPR,
+  shouldSkipBotAuthor,
   type FilterInput,
 } from "./filter";
 
@@ -176,5 +177,63 @@ describe("shouldFilterPR", () => {
         }),
       ),
     ).toEqual({ filtered: true, reason: "repo:include" });
+  });
+});
+
+describe("shouldSkipBotAuthor", () => {
+  it("skips a configured bot when policy=skip", () => {
+    expect(shouldSkipBotAuthor("dependabot", "dependabot", "skip")).toBe(true);
+  });
+  it("matches case-insensitively", () => {
+    expect(shouldSkipBotAuthor("Dependabot", "dependabot", "skip")).toBe(true);
+    expect(shouldSkipBotAuthor("dependabot", "Dependabot\nRenovate", "skip")).toBe(true);
+  });
+  it("does not skip a non-bot author", () => {
+    expect(shouldSkipBotAuthor("alice", "dependabot", "skip")).toBe(false);
+  });
+  it("does not skip when policy=review", () => {
+    expect(shouldSkipBotAuthor("dependabot", "dependabot", "review")).toBe(false);
+  });
+  it("is inert when botAuthors is empty", () => {
+    expect(shouldSkipBotAuthor("dependabot", "", "skip")).toBe(false);
+    expect(shouldSkipBotAuthor("dependabot", "  \n ", "skip")).toBe(false);
+  });
+});
+
+describe("shouldFilterPR — Phase 0 bot-author skip", () => {
+  it("filters a bot author with reason author:bot when policy=skip", () => {
+    expect(
+      shouldFilterPR(
+        baseInput({ author: "dependabot", botAuthors: "dependabot", botPolicy: "skip" }),
+      ),
+    ).toEqual({ filtered: true, reason: "author:bot" });
+  });
+  it("does not filter when policy=review even if author is a bot", () => {
+    expect(
+      shouldFilterPR(
+        baseInput({ author: "dependabot", botAuthors: "dependabot", botPolicy: "review" }),
+      ),
+    ).toEqual({ filtered: false });
+  });
+  it("does not filter a non-bot author", () => {
+    expect(
+      shouldFilterPR(
+        baseInput({ author: "alice", botAuthors: "dependabot", botPolicy: "skip" }),
+      ),
+    ).toEqual({ filtered: false });
+  });
+  it("bot Phase 0 runs before repo/label phases (precedence)", () => {
+    // A bot that would ALSO match repoExclude still filters as author:bot first.
+    expect(
+      shouldFilterPR(
+        baseInput({
+          author: "renovate",
+          botAuthors: "renovate",
+          botPolicy: "skip",
+          repoExclude: "org/*",
+          repo: "org/widget",
+        }),
+      ),
+    ).toEqual({ filtered: true, reason: "author:bot" });
   });
 });

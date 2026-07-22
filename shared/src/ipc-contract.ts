@@ -76,6 +76,14 @@ export interface ConfigPayload {
   defaultPer1M?: number;
   /** Monthly LLM spend ceiling; 0 = unlimited. Exceeding pauses reviews. */
   monthlyBudgetUsd?: number;
+  /** Newline-separated bot logins to skip when botPolicy="skip". */
+  botAuthors?: string;
+  /** "skip" (bots filtered out) | "review" (bots reviewed normally). */
+  botPolicy?: "skip" | "review";
+  /** When true, re-review only the previousSha..head compare (new commits). */
+  incrementalReview?: boolean;
+  /** Comma-separated review-area subset (bug,style,structure,security). */
+  reviewAreas?: string;
   dbPath: string;
   /** True when the OS keyring was unavailable and the secret lives in plaintext
    *  config.json (Linux without Secret Service). UI-only metadata; ignored by

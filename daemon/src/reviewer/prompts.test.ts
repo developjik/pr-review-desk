@@ -166,3 +166,43 @@ describe("detectLanguage — regression (no behavior change)", () => {
     expect(detectLanguage("안녕 コード", "")).toBe("ko");
   });
 });
+
+// --- Review area toggle (G003) ---------------------------------------------
+describe("buildSystemPrompt — review areas (G003)", () => {
+  it("default areas → literal 'Review across four areas:' block (byte-identical to legacy)", () => {
+    const out = buildSystemPrompt(true, "en", "", "bug,style,structure,security");
+    expect(out).toContain("Review across four areas:");
+    expect(out).toContain("- bug:");
+    expect(out).toContain("- style:");
+    expect(out).toContain("- structure:");
+    expect(out).toContain("- security:");
+    // Byte-identical to a call with no areas arg.
+    expect(out).toBe(buildSystemPrompt(true, "en", ""));
+  });
+
+  it("empty areas → all four (inert, byte-identical)", () => {
+    expect(buildSystemPrompt(true, "en", "", "")).toBe(buildSystemPrompt(true, "en", ""));
+  });
+
+  it("subset bug,security → only those two area lines, not style/structure", () => {
+    const out = buildSystemPrompt(true, "en", "", "bug,security");
+    expect(out).toContain("Review across the following areas:");
+    expect(out).toContain("- bug:");
+    expect(out).toContain("- security:");
+    expect(out).not.toContain("- style:");
+    expect(out).not.toContain("- structure:");
+  });
+
+  it("subset preserves canonical order regardless of input order", () => {
+    const out = buildSystemPrompt(true, "en", "", "security,bug");
+    // bug should appear before security (canonical order).
+    expect(out.indexOf("- bug:")).toBeLessThan(out.indexOf("- security:"));
+  });
+
+  it("unknown areas are ignored", () => {
+    const out = buildSystemPrompt(true, "en", "", "bug,performance,security,unknown");
+    expect(out).toContain("- bug:");
+    expect(out).toContain("- security:");
+    expect(out).not.toContain("performance");
+  });
+});

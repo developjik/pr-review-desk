@@ -56,11 +56,43 @@ export interface PrPromptMeta {
   repo: string;
 }
 
+/** Canonical review areas in priority order (bug/style/structure/security). */
+const AREA_LINES: Record<string, string> = {
+  bug: "- bug: logic errors, race conditions, off-by-one, null dereferences, incorrect types, unhandled edge cases",
+  style: "- style: naming, consistency, readability, dead code",
+  structure: "- structure: duplication, tight coupling, missing abstraction, excessive complexity",
+  security: "- security: injection, hardcoded secrets, unsafe deserialization, permission issues",
+};
+const ALL_AREA_KEYS = ["bug", "style", "structure", "security"];
+
+/**
+ * Build the review-areas section of the system prompt from a comma-separated
+ * `areas` subset (e.g. "bug,security"). When all four areas are enabled (the
+ * default / empty), emits the literal "Review across four areas:" block
+ * byte-identical to the legacy prompt so existing snapshots stay green (G003).
+ * A strict subset uses "Review across the following areas:" with only the
+ * enabled lines, in canonical order. Unknown areas are ignored.
+ */
+function buildAreasSection(areas: string): string {
+  const enabled = new Set(
+    areas
+      .split(",")
+      .map((a) => a.trim().toLowerCase())
+      .filter((a) => ALL_AREA_KEYS.includes(a)),
+  );
+  const ordered = ALL_AREA_KEYS.filter((k) => enabled.has(k));
+  // Empty or all-four → the legacy byte-identical block.
+  if (ordered.length === 0 || ordered.length === 4) {
+    return "Review across four areas:\n" + ALL_AREA_KEYS.map((k) => AREA_LINES[k]).join("\n");
+  }
+  return "Review across the following areas:\n" + ordered.map((k) => AREA_LINES[k]).join("\n");
+}
+
 /**
  * Build the system prompt. `showSeverity` controls whether the model is asked
  * to assign severity labels; `language` controls the comment language.
  */
-export function buildSystemPrompt(showSeverity: boolean, language: string, rules = ""): string {
+export function buildSystemPrompt(showSeverity: boolean, language: string, rules = "", areas = "bug,style,structure,security"): string {
   const lang = languageName(language);
 
   const severityRule = showSeverity
@@ -73,13 +105,10 @@ export function buildSystemPrompt(showSeverity: boolean, language: string, rules
   const guidelinesSection = rules.trim()
     ? `\nTeam / project guidelines (apply where relevant; per-repo rules below take precedence where they conflict):\n${rules}\n`
     : "";
+  const areasSection = buildAreasSection(areas);
   return `You are a senior software engineer performing a code review on a pull request. Examine the changed file carefully.
 
-Review across four areas:
-- bug: logic errors, race conditions, off-by-one, null dereferences, incorrect types, unhandled edge cases
-- style: naming, consistency, readability, dead code
-- structure: duplication, tight coupling, missing abstraction, excessive complexity
-- security: injection, hardcoded secrets, unsafe deserialization, permission issues
+${areasSection}
 
 Rules:
 - ACCURACY IS THE TOP PRIORITY. Only report issues you are confident are real problems. If you are unsure, do not report it. Never fabricate issues. If the code is correct, return an empty findings array.

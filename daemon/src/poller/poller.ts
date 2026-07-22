@@ -37,7 +37,7 @@ import { enumerateRepos } from "./repo-enumerator";
 import { createDedupe } from "./dedupe";
 import { prId } from "./util";
 import { hasPendingReview } from "../db/pending-reviews";
-import { splitLines, matchRepo, shouldFilterPR } from "./filter";
+import { splitLines, matchRepo, shouldFilterPR, shouldSkipBotAuthor } from "./filter";
 
 export interface PollerDeps {
   transport: Transport;
@@ -165,6 +165,12 @@ export class Poller {
         continue;
       }
 
+      // Bot-author skip (Phase 0): bots never reach the expensive fetchPRMeta.
+      if (shouldSkipBotAuthor(pr.author, cfg.botAuthors, cfg.botPolicy)) {
+        log.info({ code: "filtered", reason: "author:bot", repo, number: pr.number, author: pr.author }, "pr filtered: bot author");
+        continue;
+      }
+
       // Cheap headSha fetch lets us dedupe BEFORE the expensive diff/files pull
       // (which is deferred to the reviewer, P4).
       const meta = await fetchPRMeta(octokit, pr.owner, pr.repo, pr.number).catch((err) => {
@@ -180,6 +186,9 @@ export class Poller {
         repoExclude: "",
         triggerLabels: cfg.triggerLabels,
         skipLabels: cfg.skipLabels,
+        author: meta.author,
+        botAuthors: cfg.botAuthors,
+        botPolicy: cfg.botPolicy,
       });
       if (labelResult.filtered) {
         log.info({ code: "filtered", reason: labelResult.reason, repo, number: pr.number, labels: meta.labels }, "pr filtered: label");

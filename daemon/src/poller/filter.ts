@@ -63,7 +63,21 @@ export function matchRepo(repo: string, patterns: string[]): boolean {
 }
 
 /** Why a PR was (or would be) filtered out of discovery. */
-export type FilterReason = "label:skip" | "repo:exclude" | "repo:include" | "label:trigger";
+/** Why a PR was (or would be) filtered out of discovery. */
+export type FilterReason = "label:skip" | "repo:exclude" | "repo:include" | "label:trigger" | "author:bot";
+
+/**
+ * True when `author` is a configured bot (botPolicy="skip") and should be
+ * skipped entirely — before the expensive fetchPRMeta. Case-insensitive login
+ * match against the newline-separated `botAuthors` list. Empty list = inert.
+ */
+export function shouldSkipBotAuthor(author: string, botAuthors: string, botPolicy: string): boolean {
+  if (botPolicy !== "skip") return false;
+  const bots = splitLines(botAuthors);
+  if (bots.length === 0) return false;
+  const a = author.toLowerCase();
+  return bots.some((b) => b.toLowerCase() === a);
+}
 
 /** Inputs to the full ordered filter predicate. */
 export interface FilterInput {
@@ -73,6 +87,12 @@ export interface FilterInput {
   repoExclude: string;
   triggerLabels: string;
   skipLabels: string;
+  /** PR author login (Phase 0 bot check; empty string = no author). */
+  author?: string;
+  /** Newline-separated bot logins to skip when botPolicy="skip". */
+  botAuthors?: string;
+  /** "skip" (bots filtered out) | "review" (bots reviewed normally). */
+  botPolicy?: string;
 }
 
 /** Outcome of the filter predicate. `filtered: false` carries no `reason`. */
@@ -110,6 +130,10 @@ function intersectIgnoreCase(labels: string[], rules: string[]): boolean {
  * trigger.
  */
 export function shouldFilterPR(input: FilterInput): FilterResult {
+  // Phase 0: bot-author skip (pre-meta, runs FIRST so bots never reach fetchPRMeta).
+  if (shouldSkipBotAuthor(input.author ?? "", input.botAuthors ?? "", input.botPolicy ?? "")) {
+    return { filtered: true, reason: "author:bot" };
+  }
   // Phase 1: repo filters (pre-meta).
   const exclude = splitLines(input.repoExclude);
   if (matchRepo(input.repo, exclude)) {

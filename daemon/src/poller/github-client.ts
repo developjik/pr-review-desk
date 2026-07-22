@@ -228,6 +228,51 @@ export async function fetchChangedFiles(
   }
   return files;
 }
+/**
+ * Fetch the `base..head` compare for incremental review (G002). Returns the
+ * unified diff + compare `status` ("ahead" when base is a clean ancestor of
+ * head; "diverged"/"behind" on force-push/rebase) + the changed-file list.
+ * On any failure (base not an ancestor → 404, rate limit, network) returns
+ * `{ diff: null, status: null, changedFiles: [] }` so the caller falls back to
+ * a full `base..head` review — incremental never blocks a review.
+ */
+export async function fetchCompareDiff(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  base: string,
+  head: string,
+): Promise<{ diff: string | null; status: string | null; changedFiles: string[] }> {
+  try {
+    // JSON call: status + changed-file names (determines ahead vs fallback).
+    const resp = await withRateLimitRetry(() =>
+      octokit.rest.repos.compareCommits({ owner, repo, base, head }),
+    );
+    const status = (resp.data as { status?: string }).status ?? null;
+    const files = (resp.data as { files?: { filename?: string }[] }).files ?? [];
+    const changedFiles = files.map((f) => f.filename ?? "").filter((f) => f.length > 0);
+    if (status !== "ahead") {
+      // diverged/behind (force-push/rebase) — caller falls back to full review.
+      return { diff: null, status, changedFiles };
+    }
+    // Diff call: the unified diff for the ahead compare (same format as
+    // fetchPRContext's diff).
+    const diffResp = await withRateLimitRetry(() =>
+      octokit.rest.repos.compareCommits({
+        owner,
+        repo,
+        base,
+        head,
+        headers: { accept: "application/vnd.github.v3.diff" },
+      }),
+    );
+    const diff = typeof diffResp.data === "string" ? diffResp.data : null;
+    return { diff: diff ?? "", status, changedFiles };
+  } catch {
+    // base not an ancestor (404) or transient error — fall back to full review.
+    return { diff: null, status: null, changedFiles: [] };
+  }
+}
 
 /** Fetch a single file's contents at `ref`; `null` if unavailable (404 etc). */
 export async function fetchFileContent(

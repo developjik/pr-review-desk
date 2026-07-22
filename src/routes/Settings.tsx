@@ -713,6 +713,50 @@ export default function Settings({ onSaved, onOpenInstallHelp }: SettingsProps) 
             case-insensitive. Empty filters = today's behavior (all repos, no
             label gating). Changes apply on the next poll (no restart needed).
           </p>
+        <div className="field">
+          <span className="field-label">Bot authors</span>
+          <textarea
+            rows={4}
+            value={config.botAuthors}
+            onChange={(e) => update("botAuthors", e.target.value)}
+            placeholder={"Newline-separated bot logins to skip, e.g.\ndependabot\nrenovate\nPRs by these authors are not reviewed (Skip) when Bot policy = Skip."}
+            style={{
+              fontFamily: '"SF Mono", ui-monospace, monospace',
+              resize: "vertical",
+            }}
+          />
+        </div>
+        <div className="field">
+          <span className="field-label">Bot policy</span>
+          <select
+            value={config.botPolicy}
+            onChange={(e) => update("botPolicy", e.target.value as "skip" | "review")}
+          >
+            <option value="skip">Skip (don't review bot PRs)</option>
+            <option value="review">Review normally</option>
+          </select>
+          <p className="hint">
+            When set to Skip, PRs authored by a login in <strong>Bot authors</strong>{" "}
+            are filtered out before the review fetch (saves API calls + LLM cost).
+          </p>
+        </div>
+        <div className="field">
+          <label style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={config.incrementalReview}
+              onChange={(e) => update("incrementalReview", e.target.checked)}
+            />
+            <span className="field-label" style={{ margin: 0 }}>
+              Incremental review (new commits only)
+            </span>
+          </label>
+          <p className="hint">
+            When on, a PR pushed to after review is re-reviewed against only the{" "}
+            <code>previousSha..head</code> compare (fewer tokens, lower cost). Falls back
+            to a full review on force-push/rebase. Off by default.
+          </p>
+        </div>
         </div>
       </div>
 
@@ -807,6 +851,45 @@ export default function Settings({ onSaved, onOpenInstallHelp }: SettingsProps) 
               abort the review entirely.
             </p>
           </div>
+        <div className="field">
+          <span className="field-label">Review areas</span>
+          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+            {(["bug", "style", "structure", "security"] as const).map((area) => {
+              const enabled = config.reviewAreas
+                .split(",")
+                .map((a) => a.trim().toLowerCase())
+                .includes(area);
+              const next = enabled
+                ? config.reviewAreas
+                    .split(",")
+                    .map((a) => a.trim())
+                    .filter((a) => a.toLowerCase() !== area)
+                : [...config.reviewAreas.split(",").map((a) => a.trim()).filter(Boolean), area];
+              // Empty selection = all four (inert); order canonical.
+              const ordered = ["bug", "style", "structure", "security"].filter((a) =>
+                next.map((n) => n.toLowerCase()).includes(a),
+              );
+              const value = ordered.length === 0 || ordered.length === 4
+                ? "bug,style,structure,security"
+                : ordered.join(",");
+              return (
+                <label key={area} style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={enabled}
+                    onChange={() => update("reviewAreas", value)}
+                  />
+                  {area}
+                </label>
+              );
+            })}
+          </div>
+          <p className="hint">
+            Which review areas the LLM covers. All four = default. Disabling an area
+            drops it from the review prompt (e.g. review only <code>bug</code> +{" "}
+            <code>security</code>).
+          </p>
+        </div>
         </div>
       </div>
 

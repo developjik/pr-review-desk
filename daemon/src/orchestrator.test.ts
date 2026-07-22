@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { runMigrations } from "./db/migrations";
 import { insertPendingReview, type InsertPendingParams } from "./db/pending-reviews";
 import { getUsageByPr, insertUsage } from "./db/review-usage";
+import { recordReview } from "./poller/dedupe";
 import { Orchestrator, applyEdits, decideApproval, getMonthlyCostSummary } from "./orchestrator";
 import type { Transport } from "./ipc/transport";
 import type { Config } from "./config/schema";
@@ -28,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   fetchPRContext: vi.fn(),
   fetchPRMeta: vi.fn(),
   fetchFileContent: vi.fn(),
+  fetchCompareDiff: vi.fn(),
   reviewPR: vi.fn(),
   publishReview: vi.fn(),
   createPendingReview: vi.fn(),
@@ -41,6 +43,7 @@ vi.mock("./poller/github-client", () => ({
   fetchFileContent: mocks.fetchFileContent,
   fetchPRContext: mocks.fetchPRContext,
   fetchPRMeta: mocks.fetchPRMeta,
+  fetchCompareDiff: mocks.fetchCompareDiff,
 }));
 vi.mock("./reviewer/reviewer", () => ({ reviewPR: mocks.reviewPR }));
 vi.mock("./publisher/publisher", () => ({
@@ -204,6 +207,7 @@ beforeEach(async () => {
   mocks.fetchPRContext.mockReset();
   mocks.fetchPRMeta.mockReset();
   mocks.fetchFileContent.mockReset();
+  mocks.fetchCompareDiff.mockReset();
   mocks.reviewPR.mockReset();
   mocks.publishReview.mockReset();
   mocks.createPendingReview.mockReset();
@@ -767,5 +771,102 @@ describe("budget gate + monthly cost summary (AC4.6 / AC4.7)", () => {
     const summary = getMonthlyCostSummary(db, cfg);
     expect(summary.monthlyCost).toBeCloseTo(2.5, 6);
     expect(summary.paused).toBe(true);
+  });
+});
+
+// ===========================================================================
+// Incremental review (G002) — narrows diff+files to previousSha..head compare
+// when incrementalReview is on and the PR was previously reviewed; falls back
+// to a full review on force-push/diverged; off by default (full review).
+// ===========================================================================
+describe("incremental review (G002)", () => {
+  const ROW: QueueRowLike = { id: 1, pr_id: 7, repo: "owner/repo", head_sha: "newhead", number: 42, retry_count: 0 };
+
+  function mockThreeFileContext(): void {
+    mocks.fetchPRContext.mockResolvedValue({
+      title: "PR",
+      body: "",
+      headSha: "newhead",
+      baseSha: "base",
+      merged: false,
+      state: "open",
+      author: "o",
+      url: "u",
+      diff: "FULL base..newhead diff (3 files)",
+      files: { "src/a.ts": "A", "src/b.ts": "B", "src/c.ts": "C" },
+    });
+    mocks.fetchFileContent.mockResolvedValue(null);
+    mocks.reviewPR.mockResolvedValue({
+      prId: ROW.pr_id,
+      findings: [],
+      summary: "S",
+      severityCounts: { info: 0, low: 0, medium: 0, high: 0, critical: 0 },
+      skipped: [],
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      fileUsage: [],
+    });
+    mocks.publishReview.mockResolvedValue({ posted: 0, degraded: 0, retried: 0 });
+  }
+
+  it("AC5-inc.1: incrementalReview on + ahead compare → files narrowed to changedFiles + compare diff", async () => {
+    mockThreeFileContext();
+    // Previously reviewed at "prevhead" (an ancestor of "newhead").
+    recordReview(handle.db!, ROW.pr_id, "prevhead");
+    // Compare narrows to 2 of the 3 changed files.
+    mocks.fetchCompareDiff.mockResolvedValue({
+      diff: "INCREMENTAL prevhead..newhead diff (2 files)",
+      status: "ahead",
+      changedFiles: ["src/a.ts", "src/b.ts"],
+    });
+
+    const cfg = makeConfig({ reviewMode: "auto", incrementalReview: true });
+    await handle.reviewQueueItem(cfg, ROW);
+
+    expect(mocks.fetchCompareDiff).toHaveBeenCalledTimes(1);
+    const ctx = mocks.reviewPR.mock.calls[0][0] as { diff: string; files: Record<string, string> };
+    // Files narrowed to the 2 compare files (src/c.ts dropped).
+    expect(Object.keys(ctx.files).sort()).toEqual(["src/a.ts", "src/b.ts"]);
+    expect(ctx.files).not.toHaveProperty("src/c.ts");
+    // Diff is the incremental compare diff, not the full one.
+    expect(ctx.diff).toBe("INCREMENTAL prevhead..newhead diff (2 files)");
+  });
+
+  it("AC5-inc.2: compare NOT ahead (force-push/diverged) → falls back to full diff + all files", async () => {
+    mockThreeFileContext();
+    recordReview(handle.db!, ROW.pr_id, "prevhead");
+    mocks.fetchCompareDiff.mockResolvedValue({ diff: null, status: "diverged", changedFiles: [] });
+
+    const cfg = makeConfig({ reviewMode: "auto", incrementalReview: true });
+    await handle.reviewQueueItem(cfg, ROW);
+
+    expect(mocks.fetchCompareDiff).toHaveBeenCalledTimes(1);
+    const ctx = mocks.reviewPR.mock.calls[0][0] as { diff: string; files: Record<string, string> };
+    // Full fallback: all 3 files + the original full diff.
+    expect(Object.keys(ctx.files).sort()).toEqual(["src/a.ts", "src/b.ts", "src/c.ts"]);
+    expect(ctx.diff).toBe("FULL base..newhead diff (3 files)");
+  });
+
+  it("AC5-inc.3: incrementalReview off (default) → fetchCompareDiff never called, full review", async () => {
+    mockThreeFileContext();
+    recordReview(handle.db!, ROW.pr_id, "prevhead");
+
+    const cfg = makeConfig({ reviewMode: "auto", incrementalReview: false });
+    await handle.reviewQueueItem(cfg, ROW);
+
+    expect(mocks.fetchCompareDiff).not.toHaveBeenCalled();
+    const ctx = mocks.reviewPR.mock.calls[0][0] as { files: Record<string, string> };
+    expect(Object.keys(ctx.files).sort()).toEqual(["src/a.ts", "src/b.ts", "src/c.ts"]);
+  });
+
+  it("AC5-inc: no previous review (never reviewed) → full review even with incrementalReview on", async () => {
+    mockThreeFileContext();
+    // NOTE: no recordReview — getPreviousSha returns null.
+    mocks.fetchCompareDiff.mockResolvedValue({ diff: null, status: null, changedFiles: [] });
+
+    const cfg = makeConfig({ reviewMode: "auto", incrementalReview: true });
+    await handle.reviewQueueItem(cfg, ROW);
+
+    // No previous sha → no compare fetch, full review.
+    expect(mocks.fetchCompareDiff).not.toHaveBeenCalled();
   });
 });

@@ -56,6 +56,10 @@ export interface UiConfig {
   llmPricing: string;
   defaultPer1M: number;
   monthlyBudgetUsd: number;
+  botAuthors: string;
+  botPolicy: "skip" | "review";
+  incrementalReview: boolean;
+  reviewAreas: string;
   /** True when the OS keyring was unavailable and the secret is stored in
    *  plaintext config.json (Linux without Secret Service). Set by the host. */
   githubPatInsecureFallback: boolean;
@@ -304,6 +308,10 @@ export const DEFAULT_CONFIG: UiConfig = {
   llmPricing: "",
   defaultPer1M: 0,
   monthlyBudgetUsd: 0,
+  botAuthors: "",
+  botPolicy: "skip",
+  incrementalReview: false,
+  reviewAreas: "bug,style,structure,security",
   githubPatInsecureFallback: false,
   llmApiKeyInsecureFallback: false,
 };
@@ -370,6 +378,17 @@ export function normalizeConfig(raw: unknown): UiConfig {
       typeof obj.monthlyBudgetUsd === "number"
         ? obj.monthlyBudgetUsd
         : DEFAULT_CONFIG.monthlyBudgetUsd,
+    botAuthors: typeof obj.botAuthors === "string" ? obj.botAuthors : "",
+    botPolicy:
+      typeof obj.botPolicy === "string" &&
+      ["skip", "review"].includes(obj.botPolicy)
+        ? (obj.botPolicy as "skip" | "review")
+        : DEFAULT_CONFIG.botPolicy,
+    incrementalReview:
+      typeof obj.incrementalReview === "boolean"
+        ? obj.incrementalReview
+        : DEFAULT_CONFIG.incrementalReview,
+    reviewAreas: typeof obj.reviewAreas === "string" ? obj.reviewAreas : DEFAULT_CONFIG.reviewAreas,
     githubPatInsecureFallback:
       typeof obj.githubPatInsecureFallback === "boolean"
         ? obj.githubPatInsecureFallback

@@ -47,6 +47,18 @@ export const configSchema = z.object({
   defaultPer1M: z.number().nonnegative().default(0),
   // Monthly LLM spend ceiling; 0 = unlimited. Exceeding pauses reviews.
   monthlyBudgetUsd: z.number().nonnegative().default(0),
+  // --- Bot PR policy (G001 sprint-2) ---
+  // Newline-separated bot logins (e.g. dependabot, renovate) to skip.
+  botAuthors: z.string().default(""),
+  // "skip" (bots filtered out, no review) | "review" (reviewed normally).
+  botPolicy: z.enum(["skip", "review"]).default("skip"),
+  // --- Incremental review (G002 sprint-2) ---
+  // When true, a PR with a previously-reviewed sha is re-reviewed against only
+  // the previousSha..head compare diff (new commits). Default false (full review).
+  incrementalReview: z.boolean().default(false),
+  // --- Review area toggle (G003 sprint-2) ---
+  // Comma-separated subset of bug,style,structure,security to review. Empty/all = 4.
+  reviewAreas: z.string().default("bug,style,structure,security"),
   dbPath: z.string().min(1),
   logDir: z.string().min(1),
 });
@@ -71,6 +83,8 @@ export function configAffectsRuntime(a: Config, b: Config): boolean {
     a.llmBaseUrl !== b.llmBaseUrl ||
     a.llmApiKey !== b.llmApiKey ||
     a.llmModel !== b.llmModel ||
-    a.monthlyBudgetUsd !== b.monthlyBudgetUsd
+    a.monthlyBudgetUsd !== b.monthlyBudgetUsd ||
+    a.incrementalReview !== b.incrementalReview ||
+    a.reviewAreas !== b.reviewAreas
   );
 }

@@ -52,7 +52,7 @@ export function createLlmClient(config: Config): LlmClient {
 
   return {
     async reviewFile(fileName, fileContent, diffHunks, prMeta, language, rules) {
-      const system = buildSystemPrompt(config.showSeverity, language, rules ?? "");
+      const system = buildSystemPrompt(config.showSeverity, language, rules ?? "", config.reviewAreas);
       const user = buildUserPrompt(fileName, fileContent, diffHunks, prMeta);
 
       let lastError: unknown;

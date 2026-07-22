@@ -47,3 +47,14 @@ export function recordReview(
        reviewed_at = excluded.reviewed_at`,
   ).run(prId, commitSha, reviewedAt);
 }
+
+/**
+ * The last-reviewed commit sha for a PR, or `null` when never reviewed (G002
+ * incremental review). Reads the same `review_state` row `shouldReview` checks.
+ */
+export function getPreviousSha(db: DatabaseSync, prId: number): string | null {
+  const row = db.prepare("SELECT commit_sha FROM review_state WHERE pr_id = ?").get(prId) as
+    | { commit_sha?: string }
+    | undefined;
+  return row?.commit_sha ?? null;
+}
