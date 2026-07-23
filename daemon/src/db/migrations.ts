@@ -109,6 +109,52 @@ export const MIGRATIONS: Migration[] = [
         ON review_usage (pr_id, head_sha, file, model);
     `,
   },
+  {
+    version: 7,
+    sql: `
+      CREATE TABLE IF NOT EXISTS review_history (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        pr_id             INTEGER NOT NULL,
+        pr_number         INTEGER NOT NULL,
+        repo              TEXT NOT NULL,
+        head_sha          TEXT NOT NULL,
+        title             TEXT,
+        author            TEXT,
+        review_mode       TEXT NOT NULL DEFAULT 'auto',
+        findings_total    INTEGER NOT NULL DEFAULT 0,
+        sev_high          INTEGER NOT NULL DEFAULT 0,
+        sev_medium        INTEGER NOT NULL DEFAULT 0,
+        sev_low           INTEGER NOT NULL DEFAULT 0,
+        posted            INTEGER NOT NULL DEFAULT 0,
+        degraded          INTEGER NOT NULL DEFAULT 0,
+        prompt_tokens     INTEGER NOT NULL DEFAULT 0,
+        completion_tokens INTEGER NOT NULL DEFAULT 0,
+        total_tokens      INTEGER NOT NULL DEFAULT 0,
+        cost_usd          REAL NOT NULL DEFAULT 0,
+        status            TEXT NOT NULL DEFAULT 'published',
+        reviewed_at       TEXT NOT NULL,
+        created_at        TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS review_history_repo_idx ON review_history (repo);
+      CREATE INDEX IF NOT EXISTS review_history_date_idx ON review_history (reviewed_at);
+      CREATE INDEX IF NOT EXISTS review_history_pr_idx  ON review_history (pr_id);
+
+      CREATE TABLE IF NOT EXISTS finding_feedback (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        pr_id       INTEGER NOT NULL,
+        finding_key TEXT NOT NULL,
+        file        TEXT NOT NULL,
+        line        INTEGER,
+        comment     TEXT NOT NULL,
+        area        TEXT,
+        severity    TEXT,
+        feedback    TEXT NOT NULL,
+        created_at  TEXT NOT NULL,
+        UNIQUE(pr_id, finding_key)
+      );
+      CREATE INDEX IF NOT EXISTS finding_feedback_pr_idx ON finding_feedback (pr_id);
+    `,
+  },
 ];
 
 /**

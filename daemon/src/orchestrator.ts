@@ -25,6 +25,8 @@ import { closeDatabase, openDatabase } from "./db/connection";
 import { pruneQueue, prunePendingReviews } from "./db/cleanup";
 import { insertPendingReview, getPendingReview, listPendingReviews, resolvePendingReview } from "./db/pending-reviews";
 import { insertUsage, getUsageByModelSince } from "./db/review-usage";
+import { insertReviewHistory, updateReviewHistoryStatus, getHistory, getStatsSince, getStatsByDay } from "./db/review-history";
+import { upsertFeedback } from "./db/finding-feedback";
 import type { DatabaseSync } from "node:sqlite";
 import { getLogger } from "./logging/logger";
 import { Poller } from "./poller/poller";
@@ -86,6 +88,9 @@ export class Orchestrator {
       this.transport.on("get_usage", () => {
         void this.emitUsageSummary();
       }),
+      this.transport.on("get_history", (c) => { void this.emitHistorySnapshot(c); }),
+      this.transport.on("get_stats", (c) => { void this.emitStatsSnapshot(c); }),
+      this.transport.on("mark_finding", (c) => { void this.handleMarkFinding(c); }),
     );
   }
 
@@ -411,6 +416,7 @@ export class Orchestrator {
       // R24-consistent: if no findings, record + return (no pending row for empty review)
       if (inline.length === 0 && degraded.length === 0) {
         recordReview(db, row.pr_id, row.head_sha);
+        insertReviewHistory(db, { prId: row.pr_id, prNumber: row.number, repo: row.repo, headSha: row.head_sha, title: prCtx.title, author: prCtx.author, reviewMode: "pending", findingsTotal: 0, sevHigh: 0, sevMedium: 0, sevLow: 0, posted: 0, degraded: 0, promptTokens: result.usage.promptTokens, completionTokens: result.usage.completionTokens, totalTokens: result.usage.totalTokens, costUsd: 0, status: "published", reviewedAt: new Date().toISOString(), createdAt: new Date().toISOString() });
         return;
       }
       // F1: snapshot the per-file diff subset for files-with-findings only,
@@ -448,6 +454,30 @@ export class Orchestrator {
         degraded,
         githubReviewId: pendingRes.reviewId,
         diff,
+      });
+      // G004: persist review outcome for history/stats (pending review, with findings) (#8/#11)
+      const pricingPending = parsePricing(cfg.llmPricing, cfg.defaultPer1M);
+      insertReviewHistory(db, {
+        prId: row.pr_id,
+        prNumber: row.number,
+        repo: row.repo,
+        headSha: row.head_sha,
+        title: prCtx.title,
+        author: prCtx.author,
+        reviewMode: cfg.reviewMode,
+        findingsTotal: result.findings.length,
+        sevHigh: (result.severityCounts["high"] ?? 0) + (result.severityCounts["critical"] ?? 0),
+        sevMedium: result.severityCounts["medium"] ?? 0,
+        sevLow: (result.severityCounts["low"] ?? 0) + (result.severityCounts["info"] ?? 0),
+        posted: 0,
+        degraded: 0,
+        promptTokens: result.usage.promptTokens,
+        completionTokens: result.usage.completionTokens,
+        totalTokens: result.usage.totalTokens,
+        costUsd: computeCost(result.usage, cfg.llmModel, pricingPending),
+        status: "pending",
+        reviewedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
       });
       // Emit review:pending with the full payload (get stamped findings from DB)
       const pending = getPendingReview(db, reviewId);
@@ -494,6 +524,31 @@ export class Orchestrator {
     // Record for dedupe so the next poll skips this commit (R9 / R27).
     // Only reached after a successful (or gracefully-degraded) publish.
     recordReview(db, row.pr_id, row.head_sha);
+    // G004: persist review outcome for history/stats (#8/#11)
+    const pricing = parsePricing(cfg.llmPricing, cfg.defaultPer1M);
+    const costUsd = computeCost(result.usage, cfg.llmModel, pricing);
+    insertReviewHistory(db, {
+      prId: row.pr_id,
+      prNumber: row.number,
+      repo: row.repo,
+      headSha: row.head_sha,
+      title: prCtx.title,
+      author: prCtx.author,
+      reviewMode: cfg.reviewMode,
+      findingsTotal: result.findings.length,
+      sevHigh: (result.severityCounts["high"] ?? 0) + (result.severityCounts["critical"] ?? 0),
+      sevMedium: result.severityCounts["medium"] ?? 0,
+      sevLow: (result.severityCounts["low"] ?? 0) + (result.severityCounts["info"] ?? 0),
+      posted: pubResult.posted,
+      degraded: pubResult.degraded,
+      promptTokens: result.usage.promptTokens,
+      completionTokens: result.usage.completionTokens,
+      totalTokens: result.usage.totalTokens,
+      costUsd,
+      status: "published",
+      reviewedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    });
   }
 
   /** Approve a pending review: resolve → recordReview → submit/discard on GitHub. */
@@ -509,6 +564,7 @@ export class Orchestrator {
       if (!claimed) return; // already resolved — idempotent no-op
 
       recordReview(db, claimed.prId, claimed.headSha);
+      updateReviewHistoryStatus(db, claimed.prId, claimed.headSha, "approved");
 
       const parsed = JSON.parse(claimed.findingsJson) as {
         inline: PendingFinding[];
@@ -658,6 +714,7 @@ export class Orchestrator {
       const claimed = resolvePendingReview(db, reviewId, "rejected");
       if (!claimed) return; // already resolved
       recordReview(db, claimed.prId, claimed.headSha);
+      updateReviewHistoryStatus(db, claimed.prId, claimed.headSha, "rejected");
 
       // Discard the GitHub pending review so it never becomes visible.
       if (claimed.githubReviewId) {
@@ -718,6 +775,30 @@ export class Orchestrator {
       event: "usage:summary",
       summary: getMonthlyCostSummary(db, cfg),
     });
+  }
+
+  /** Emit filtered history rows (response to get_history command). */
+  private async emitHistorySnapshot(filters: { repo?: string; since?: string; until?: string; severity?: string; author?: string; limit?: number }): Promise<void> {
+    const db = this.db;
+    if (!db) return;
+    const reviews = getHistory(db, filters);
+    await this.transport.emit({ type: "event", event: "history:snapshot", reviews });
+  }
+
+  /** Emit aggregated stats for a time window (response to get_stats command). */
+  private async emitStatsSnapshot(params: { since: string; days: number }): Promise<void> {
+    const db = this.db;
+    if (!db) return;
+    const summary = getStatsSince(db, params.since);
+    const daily = getStatsByDay(db, params.since, params.days);
+    await this.transport.emit({ type: "event", event: "stats:snapshot", summary, daily });
+  }
+
+  /** Mark a finding as useful or false-positive (response to mark_finding command). */
+  private async handleMarkFinding(params: { prId: number; findingKey: string; file: string; line: number | null; comment: string; area?: string | null; severity?: string | null; feedback: string }): Promise<void> {
+    const db = this.db;
+    if (!db) return;
+    upsertFeedback(db, { prId: params.prId, findingKey: params.findingKey, file: params.file, line: params.line, comment: params.comment, area: params.area ?? null, severity: params.severity ?? null, feedback: params.feedback, createdAt: new Date().toISOString() });
   }
 
   private async setState(state: DaemonState): Promise<void> {

@@ -14,6 +14,8 @@ import { motion } from "motion/react";
 import { Menu, MenuItem } from "@tauri-apps/api/menu";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useReviewQueue } from "../hooks/useReviewQueue";
+import { useReviewHistory } from "../hooks/useReviewHistory";
+import { useStats } from "../hooks/useStats";
 import EmptyState from "../components/EmptyState";
 import type { HistoryEntry, QueueEntry } from "../hooks/useReviewQueue";
 import Tabs, { TabList, Tab } from "../components/ui/Tabs";
@@ -21,6 +23,7 @@ import Dialog from "../components/ui/Dialog";
 import AlertDialog from "../components/ui/AlertDialog";
 import { useToast } from "../components/ui/Toast";
 import { Icon } from "../components/ui/Icon";
+import type { ReviewHistoryEntry } from "@pr-review/shared";
 type TabId = "queue" | "history";
 type Filter = "all" | "waiting" | "reviewing";
 type PrStatus = "queued" | "reviewing" | "done";
@@ -92,6 +95,8 @@ export default function Monitoring() {
   const toast = useToast();
   const { queue, history, stats, inProgressPrId, clearHistory } =
     useReviewQueue();
+  const { reviews: dbReviews, filters, setFilters, loading: historyLoading } = useReviewHistory();
+  const { summary, daily } = useStats();
   const [tab, setTab] = useState<TabId>("queue");
   const [filter, setFilter] = useState<Filter>("all");
   const [detail, setDetail] = useState<PrDetail | null>(null);
@@ -152,6 +157,43 @@ export default function Monitoring() {
           <span className="summary-label">평균 코멘트 수</span>
           <span className="summary-value">{avgFindings}</span>
         </div>
+        <div className="summary-card">
+          <span className="summary-label">이번 달 총 비용</span>
+          <span className="summary-value">{summary?.totalCostUsd.toFixed(4) ?? "0"} USD</span>
+        </div>
+        <div className="summary-card">
+          <span className="summary-label">이번 달 총 토큰</span>
+          <span className="summary-value">{summary?.totalTokens.toLocaleString() ?? "0"}</span>
+        </div>
+        <div className="summary-card">
+          <span className="summary-label">일평균 리뷰 (최근 30일)</span>
+          <span className="summary-value">
+            {(daily.reduce((s, d) => s + d.reviews, 0) / Math.max(1, daily.length)).toFixed(1)}
+          </span>
+        </div>
+        {daily.length > 0 && (
+          <div className="stats-chart">
+            <h4 className="stats-chart-title">최근 리뷰 추이</h4>
+            <svg className="daily-chart" viewBox="0 0 300 80" preserveAspectRatio="none">
+              {daily.map((d, i) => {
+                const max = Math.max(1, ...daily.map((x) => x.reviews));
+                const h = (d.reviews / max) * 70;
+                const w = 300 / daily.length;
+                return (
+                  <rect
+                    key={d.date}
+                    x={i * w}
+                    y={80 - h}
+                    width={Math.max(1, w - 1)}
+                    height={h}
+                    fill="var(--accent)"
+                    opacity={0.7}
+                  />
+                );
+              })}
+            </svg>
+          </div>
+        )}
       </div>
 
       {/* ---- Tab bar ----------------------------------------------------- */}
@@ -238,6 +280,25 @@ export default function Monitoring() {
       {/* ---- History tab ------------------------------------------------- */}
       {tab === "history" && (
         <div className="tab-panel-content">
+          <div className="history-filters">
+            <input
+              type="text"
+              className="history-search"
+              placeholder="리포 검색 (owner/repo)..."
+              value={filters.repo ?? ""}
+              onChange={(e) => setFilters({ repo: e.target.value || undefined })}
+            />
+            <select
+              className="history-severity-filter"
+              value={filters.severity ?? ""}
+              onChange={(e) => setFilters({ severity: e.target.value || undefined })}
+            >
+              <option value="">모든 심각도</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
           <div className="list-header">
             {history.length > 0 && (
               <AlertDialog
@@ -299,6 +360,26 @@ export default function Monitoring() {
                   </motion.li>
                 );
               })}
+              {historyLoading && <p className="history-loading">불러오는 중...</p>}
+              {dbReviews.length > 0 && (
+                <>
+                  <div className="history-section-divider">
+                    <span>과거 리뷰 ({dbReviews.length})</span>
+                  </div>
+                  {dbReviews.slice(0, 50).map((r: ReviewHistoryEntry) => (
+                    <li key={`db-${r.id}`} className="history-item db-history-item">
+                      <div className="history-detail">
+                        <span className="pr-title">{r.title ?? `PR #${r.prNumber}`}</span>
+                        <span className="pr-repo">{r.repo}</span>
+                      </div>
+                      <div className="history-meta">
+                        <span>{r.findingsTotal} findings</span>
+                        <time>{new Date(r.reviewedAt).toLocaleDateString()}</time>
+                      </div>
+                    </li>
+                  ))}
+                </>
+              )}
             </ul>
           )}
         </div>

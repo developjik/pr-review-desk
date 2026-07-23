@@ -136,6 +136,54 @@ export interface PendingReview {
   diff?: Record<string, string> | null;
 }
 
+/** Feedback type for a finding (#9 false-positive loop). */
+export type FindingFeedback = "useful" | "false_positive";
+
+/** A completed review's persisted outcome (#8/#11 — wire shape of review_history row). */
+export interface ReviewHistoryEntry {
+  id: number;
+  prId: number;
+  prNumber: number;
+  repo: string;
+  headSha: string;
+  title: string | null;
+  author: string | null;
+  reviewMode: string;
+  findingsTotal: number;
+  sevHigh: number;
+  sevMedium: number;
+  sevLow: number;
+  posted: number;
+  degraded: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  status: string;
+  reviewedAt: string;
+  createdAt: string;
+}
+
+/** Aggregated stats for a time slice (#8). */
+export interface StatsSummary {
+  totalReviews: number;
+  totalFindings: number;
+  totalPosted: number;
+  totalDegraded: number;
+  totalCostUsd: number;
+  totalPromptTokens: number;
+  totalCompletionTokens: number;
+  totalTokens: number;
+}
+
+/** One day's rolled-up review activity (#8 chart data). */
+export interface DailyStat {
+  date: string;
+  reviews: number;
+  findings: number;
+  costUsd: number;
+}
+
 // ----------------------------------------------------------------------------
 // Events (daemon -> host)
 // ----------------------------------------------------------------------------
@@ -156,6 +204,8 @@ export const DaemonEventName = {
   PendingResolved: "pending:resolved",
   BudgetExceeded: "budget:exceeded",
   UsageSummary: "usage:summary",
+  HistorySnapshot: "history:snapshot",
+  StatsSnapshot: "stats:snapshot",
 } as const;
 export type DaemonEventName = (typeof DaemonEventName)[keyof typeof DaemonEventName];
 
@@ -274,6 +324,19 @@ export interface UsageSummaryEvent extends EventEnvelope {
   summary: UsageSummary;
 }
 
+/** Filtered review-history rows (response to `get_history` command). */
+export interface HistorySnapshotEvent extends EventEnvelope {
+  event: typeof DaemonEventName.HistorySnapshot;
+  reviews: ReviewHistoryEntry[];
+}
+
+/** Aggregated stats for a time window (response to `get_stats` command). */
+export interface StatsSnapshotEvent extends EventEnvelope {
+  event: typeof DaemonEventName.StatsSnapshot;
+  summary: StatsSummary;
+  daily: DailyStat[];
+}
+
 export type DaemonEvent =
   | DaemonReadyEvent
   | DaemonLogEvent
@@ -289,7 +352,9 @@ export type DaemonEvent =
   | PendingSnapshotEvent
   | PendingResolvedEvent
   | BudgetExceededEvent
-  | UsageSummaryEvent;
+  | UsageSummaryEvent
+  | HistorySnapshotEvent
+  | StatsSnapshotEvent;
 
 // ----------------------------------------------------------------------------
 // Commands (host -> daemon)
@@ -305,6 +370,9 @@ export const DaemonCommandName = {
   RejectReview: "reject:review",
   ListPending: "pending:list",
   GetUsage: "get_usage",
+  GetHistory: "get_history",
+  GetStats: "get_stats",
+  MarkFinding: "mark_finding",
 } as const;
 export type DaemonCommandName = (typeof DaemonCommandName)[keyof typeof DaemonCommandName];
 
@@ -355,6 +423,37 @@ export interface GetUsageCommand extends CommandEnvelope {
   cmd: typeof DaemonCommandName.GetUsage;
 }
 
+/** Request filtered review-history rows (daemon replies with `history:snapshot`). */
+export interface GetHistoryCommand extends CommandEnvelope {
+  cmd: typeof DaemonCommandName.GetHistory;
+  repo?: string;
+  since?: string;
+  until?: string;
+  severity?: string;
+  author?: string;
+  limit?: number;
+}
+
+/** Request aggregated stats for a time window (daemon replies with `stats:snapshot`). */
+export interface GetStatsCommand extends CommandEnvelope {
+  cmd: typeof DaemonCommandName.GetStats;
+  since: string;
+  days: number;
+}
+
+/** Mark a finding as useful or false-positive (#9). */
+export interface MarkFindingCommand extends CommandEnvelope {
+  cmd: typeof DaemonCommandName.MarkFinding;
+  prId: number;
+  findingKey: string;
+  file: string;
+  line: number | null;
+  comment: string;
+  area?: string | null;
+  severity?: string | null;
+  feedback: FindingFeedback;
+}
+
 export type DaemonCommand =
   | ConfigCommand
   | PollNowCommand
@@ -364,7 +463,10 @@ export type DaemonCommand =
   | ApproveReviewCommand
   | RejectReviewCommand
   | ListPendingCommand
-  | GetUsageCommand;
+  | GetUsageCommand
+  | GetHistoryCommand
+  | GetStatsCommand
+  | MarkFindingCommand;
 
 // ----------------------------------------------------------------------------
 // Discriminated-union narrowing helpers

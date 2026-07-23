@@ -135,7 +135,7 @@ describe("pending-reviews — diff storage (v6)", () => {
       runMigrations(db);
 
       const version = (db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-      expect(version).toBe(6);
+      expect(version).toBe(7);
 
       // The column now exists and is nullable.
       const cols = db
@@ -180,7 +180,7 @@ describe("pending-reviews — diff storage (v6)", () => {
       expect(() => runMigrations(db)).not.toThrow();
 
       const version = (db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-      expect(version).toBe(6);
+      expect(version).toBe(7);
     });
 
     it("running runMigrations again on an upgraded v6 DB is a no-op", () => {

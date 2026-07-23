@@ -23,6 +23,10 @@ import type {
   PublishReviewEvent,
   ReviewFileEvent,
   UsageSummary,
+  ReviewHistoryEntry,
+  StatsSummary,
+  DailyStat,
+  FindingFeedback,
 } from "@pr-review/shared";
 
 // ---------------------------------------------------------------------------
@@ -128,6 +132,32 @@ export const listPendingReviews = (): Promise<void> =>
 
 export const getUsage = (): Promise<UsageSummary> =>
   invoke("get_usage");
+
+// ---- history & stats commands (#8/#11) ----
+
+export const getHistory = (filters?: {
+  repo?: string;
+  since?: string;
+  until?: string;
+  severity?: string;
+  author?: string;
+  limit?: number;
+}): Promise<void> => invoke("get_history", filters ?? {});
+
+export const getStats = (since: string, days: number): Promise<void> =>
+  invoke("get_stats", { since, days });
+
+export const markFinding = (
+  prId: number,
+  findingKey: string,
+  file: string,
+  line: number | null,
+  comment: string,
+  area: string | null,
+  severity: string | null,
+  feedback: FindingFeedback,
+): Promise<void> =>
+  invoke("mark_finding", { prId, findingKey, file, line, comment, area, severity, feedback });
 
 // ---- auto-update commands (G003) ----
 
@@ -255,6 +285,26 @@ export function onUsageSummary(
   return listen<{ summary: UsageSummary }>(
     "daemon://usage:summary",
     (e) => cb(e.payload.summary),
+  );
+}
+
+// ---- history & stats listeners (#8/#11) ------------------------------------
+
+export function onHistorySnapshot(
+  cb: (reviews: ReviewHistoryEntry[]) => void,
+): Promise<UnlistenFn> {
+  return listen<{ reviews: ReviewHistoryEntry[]}>(
+    "daemon://history:snapshot",
+    (e) => cb(e.payload.reviews),
+  );
+}
+
+export function onStatsSnapshot(
+  cb: (summary: StatsSummary, daily: DailyStat[]) => void,
+): Promise<UnlistenFn> {
+  return listen<{ summary: StatsSummary; daily: DailyStat[]}>(
+    "daemon://stats:snapshot",
+    (e) => cb(e.payload.summary, e.payload.daily),
   );
 }
 

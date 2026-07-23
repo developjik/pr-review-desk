@@ -18,7 +18,13 @@ import EmptyState from "../components/EmptyState";
 import DiffViewer from "../components/DiffViewer";
 import AlertDialog from "../components/ui/AlertDialog";
 import { useToast } from "../components/ui/Toast";
-import type { FindingEdit, PendingReview, PendingFinding } from "@pr-review/shared";
+import { markFinding } from "../lib/tauri";
+import type {
+  FindingEdit,
+  FindingFeedback,
+  PendingReview,
+  PendingFinding,
+} from "@pr-review/shared";
 
 const SEVERITY_CLASS: Record<string, string> = {
   high: "sev-high",
@@ -42,6 +48,8 @@ export default function Pending() {
   const [edits, setEdits] = useState<
     Record<number, Record<string, FindingEdit>>
   >({});
+  // reviewId → findingId → feedback ('useful' | 'false_positive')
+  const [feedback, setFeedback] = useState<Record<number, Record<string, FindingFeedback>>>({});
   // reviewId whose Reject AlertDialog is currently open (only one at a time).
   const [rejectOpenFor, setRejectOpenFor] = useState<number | null>(null);
 
@@ -107,6 +115,27 @@ export default function Pending() {
       delete next[findingId];
       return { ...prev, [reviewId]: next };
     });
+  };
+  const handleFeedback = (
+    reviewId: number,
+    finding: PendingFinding,
+    fb: FindingFeedback,
+  ) => {
+    setFeedback((prev) => ({
+      ...prev,
+      [reviewId]: { ...prev[reviewId], [finding.id]: fb },
+    }));
+    void markFinding(
+      reviewId,
+      finding.id,
+      finding.file,
+      finding.line,
+      finding.comment,
+      finding.area,
+      finding.severity,
+      fb,
+    );
+    toast.success(fb === "useful" ? "유용한 리뷰로 표시했어요." : "오탐으로 표시했어요.");
   };
 
   return (
@@ -185,6 +214,24 @@ export default function Pending() {
                               편집
                             </button>
                           </span>
+                          <div className="finding-feedback">
+                            <button
+                              type="button"
+                              className={`feedback-btn ${feedback[review.reviewId]?.[f.id] === "useful" ? "active" : ""}`}
+                              onClick={() => handleFeedback(review.reviewId, f, "useful")}
+                              aria-label="유용"
+                            >
+                              👍
+                            </button>
+                            <button
+                              type="button"
+                              className={`feedback-btn ${feedback[review.reviewId]?.[f.id] === "false_positive" ? "active" : ""}`}
+                              onClick={() => handleFeedback(review.reviewId, f, "false_positive")}
+                              aria-label="오탐"
+                            >
+                              👎
+                            </button>
+                          </div>
                         </div>
                         {codeOpen && (
                           <DiffViewer

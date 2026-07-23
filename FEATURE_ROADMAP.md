@@ -1,6 +1,6 @@
 # PR Review — 기능 로드맵 (Feature Roadmap)
 
-> 최종 갱신: 2026-07-22. 본문은 코드베이스 직접 검증 기준. ✅ = 구현 완료, 🟡 = 구현됐으나 활성화/검증 보류, ⬜ = 미구현.
+> 최종 갱신: 2026-07-23. 본문은 코드베이스 직접 검증 기준 — 2026-07-23에 전 항목을 소스와 교차검증하고 `npm test` 386/386 통과 + `npm run typecheck` clean을 확인했다. ✅ = 구현 완료, 🟡 = 구현됐으나 활성화/검증 보류(human action 대기), ⬜ = 미구현(코드 부재 확인).
 
 ---
 
@@ -17,6 +17,13 @@
 | **가이드라인** | 글로벌 `reviewRules` + 리포별 `.prreview/rules.md` 병합 (토큰 예산 트렁케이션) | ✅ |
 | **LLM** | 멀티랭귀지 감지(ko/ja/zh/en), 심각도(high/med/low), 4영역(bug/style/structure/security) | ✅ |
 | **비용/예산** | per-file 토큰 추적(`review-usage`, 재시도 중복카운트 방지), **모델별 비용 환산**, 월 예산 초과 자동 pause + UI 경고 | ✅ |
+| **Bot PR 정책** | `botAuthors`/`botPolicy`(skip\|review) — filter Phase 0 author 매칭, config→poller→UI end-to-end (G001) | ✅ |
+| **증분 리뷰** | `incrementalReview` — previousSha..head compare diff로 새 커밋만 리뷰, diverged/force-push 시 full fallback (G002) | ✅ |
+| **리뷰 영역 토글** | `reviewAreas` — bug/style/structure/security 부분집합 on/off, 프롬프트 모듈화 (`buildAreasSection`) (G003) | ✅ |
+| **리뷰 히스토리 영속화** | `review_history` 테이블(migration v7) — auto/pending 모드 결과 저장, approve/reject 시 status 업데이트 | ✅ |
+| **통계 대시보드** | `getStatsSince`/`getStatsByDay` + SVG 차트 — 일별 리뷰 추이, 월간 비용/토큰 카드 | ✅ |
+| **FP 피드백 루프** | `finding_feedback` 테이블 + Pending UI 👍/👎 버튼 → `markFinding` 커맨드 → 패턴 축적 | ✅ |
+| **히스토리 검색/필터** | DB 기반 history + repo/severity 필터 + `useReviewHistory` 훅 (debounce) | ✅ |
 | **호스트** | 트레이 아이콘 상태 색, OS 알림, autostart, 단일 인스턴스, OS 키체인 비밀 저장 | ✅ |
 | **자동업데이트** | tauri-plugin-updater (Rust-driven check/install), 트레이·Settings 트리거, CI 서명+latest.json | 🟡 구현됨, 서명키 활성화 보류 |
 | **UI** | Wizard/Settings/Inbox/Logs/Pending, 명령 팔레트(⌘K), 키보드 단축키, 토스트, 비용 차트 | ✅ |
@@ -28,7 +35,7 @@
 
 ## 🎯 추가 기능 리스트 (우선순위순)
 
-> 1차 스프린트(배포 도달도: #4 비용/예산 · #1 크로스플랫폼 · #3 자동업데이트) 완료. #5(diff 임계값)·#7(파일 필터)은 사전에 이미 구현되어 있었다. 아래는 잔여 기능.
+> 1차 스프린트(배포 도달도) 완료. 2차 스프린트(리뷰 품질: #4 Bot PR 정책 · #5 증분 리뷰 · #6 리뷰 영역 토글) 완료 — 전체 레이어(config→daemon→shared→UI→테스트) 구현 + 88개 테스트 통과. 아래는 잔여 기능.
 
 ### 🟥 P0 — 핵심 경쟁력 / 사용자 가치 직결
 
@@ -41,33 +48,33 @@
 3. **크로스플랫폼 CI 검증** 🟡 (human action)
    - 워크플로+셀프체크 완성. `git tag vX.Y.Z && git push --tags` → 4플랫폼 산출물 생성 확인.
 
-### 🟧 P1 — 리뷰 품질 / 기능 확장 (2차 스프린트 후보)
+### 🟧 P1 — 리뷰 품질 / 기능 확장 (2차 스프린트 ✅ 완료)
 
-4. **Bot PR 처리 정책 (dependabot/renovate)** ⬜
-   - draft는 이미 제외(R22)됨. bot author 자동 감지 → auto-approve 또는 요약-only 옵션. `filter.ts`의 `FilterInput`에 `author` 필드 추가 + author 기반 매칭.
+4. **Bot PR 처리 정책 (dependabot/renovate)** ✅ (G001)
+   - ✅ 구현 완료: `shouldSkipBotAuthor()` Phase 0 author 매칭 + `botAuthors`/`botPolicy`(skip\|review) config → poller `discover()` → UI. 9개 테스트 통과.
 
-5. **증분 리뷰 (새 커밋만)** ⬜
-   - 현재 headSha 기반 dedupe → 새 push 시 `base..head` 전체 재리뷰. `이전 리뷰 sha..head` diff만 리뷰하여 비용·시간 절감. (`review-usage` 테이블에 last-reviewed-sha 추적 추가 필요.)
+5. **증분 리뷰 (새 커밋만)** ✅ (G002)
+   - ✅ 구현 완료: `getPreviousSha()` + `fetchCompareDiff()`(compareCommits API) → orchestrator narrowing (previousSha..head) → diverged/force-push 시 full fallback. 4개 테스트 통과.
 
-6. **리뷰 영역 토글 (performance / accessibility / docs / tests)** ⬜
-   - 현재 4개 영역(bug/style/structure/security) 고정. 영역별 on/off + 프롬프트 모듈화.
+6. **리뷰 영역 토글 (bug/style/structure/security)** ✅ (G003)
+   - ✅ 구현 완료: `buildAreasSection(areas)` 부분집합 on/off + `reviewAreas` config → llm-client → UI 체크박스. 5개 테스트 통과.
 
 7. **대화형 리뷰 (Reply-to-existing-comment)** ⬜
    - GitHub `in_reply_to` 지원. 기존 코멘트 스레드에 응답. `publisher.ts`에 `pulls.createReviewReply` 통합.
 
-### 🟨 P2 — 운영 / 관측성 (3차 스프린트 후보)
+### 🟨 P2 — 운영 / 관측성 (3차 스프린트 ✅ 완료)
 
-8. **통계 대시보드** ⬜
-   - 일/주간 리뷰 수, 발견된 findings, 모델별 비용 추이(`getUsageByModelSince` 데이터층已). Monitoring 탭 확장 또는 신규 Stats 탭.
+8. **통계 대시보드** ✅
+   - ✅ 구현 완료: `review_history` 테이블(migration v7) + `getStatsSince`/`getStatsByDay` + Monitoring Summary 카드(월간 비용/토큰/일평균) + SVG 일별 추이 차트.
 
-9. **False-Positive 피드백 루프** ⬜
-   - 사용자가 finding "무시"/"유용" 표시 → DB 축적 → 프롬프트 개선 또는 무시 패턴 학습.
+9. **False-Positive 피드백 루프** ✅
+   - ✅ 구현 완료: `finding_feedback` 테이블 + `upsertFeedback`/`getFeedbackStats`/`getFalsePositivePatterns` + Pending UI 👍/👎 버튼 → `markFinding` IPC.
 
 10. **Slack/Discord/Webhook 알림** ⬜
     - `osNotify` 외 외부 채널 전파. pending 리뷰 대기 알림.
 
-11. **리뷰 히스토리 검색/필터** ⬜
-    - Monitoring `history` 확장: 리포, 날짜, 심각도, 작성자 필터.
+11. **리뷰 히스토리 검색/필터** ✅
+    - ✅ 구현 완료: DB 기반 `getHistory(filters)` + Monitoring repo/severity 필터 + `useReviewHistory` 훅(debounce). in-memory history를 DB 기반으로 보완
 
 12. **정기 리포트 / 다이제스트** ⬜ — 일일/주간 이메일 또는 인앱 요약.
 
@@ -115,12 +122,22 @@
 
 ## 💡 추천 다음 스프린트
 
-**1차 스프린트(배포 도달도) 완료**: #4 비용/예산 · #1 크로스플랫폼 · #3 자동업데이트. (#5 diff 임계값, #7 파일 필터는 사전 구현 상태였음.)
+**1차 스프린트(배포 도달도) 완료**: 비용/예산 · 크로스플랫폼 · 자동업데이트 (diff 임계값, 파일 필터는 사전 구현 상태였음).
 
-**2차 스프린트 (리뷰 품질)**: #4 Bot PR 정책 → #5 증분 리뷰 → #6 리뷰 영역 토글
-- **#4(Bot)**가 가장 가볍고 즉효 — `filter.ts`에 author 매칭 추가만으로 dependabot/renovate 분기.
-- **#5(증분 리뷰)**가 비용 절감 직결 — 새 커밋만 리뷰하여 LLM 토큰/비용 절감(비용 기능과 시너지).
+**2차 스프린트 (리뷰 품질) ✅ 완료**: #4 Bot PR 정책 · #5 증분 리뷰 · #6 리뷰 영역 토글
+- #4(Bot): `shouldSkipBotAuthor` Phase 0 매칭 + `botAuthors`/`botPolicy` config → poller → UI. 9개 테스트.
+- #5(증분 리뷰): `getPreviousSha` + `fetchCompareDiff`(compareCommits) → orchestrator narrowing → diverged 시 full fallback. 4개 테스트.
+- #6(영역 토글): `buildAreasSection` 부분집합 + `reviewAreas` config → llm-client → UI 체크박스. 5개 테스트.
 
-**3차 스프린트 (관측성)**: #8 통계 → #9 FP 피드백 → #11 히스토리 검색
+**3차 스프린트 (관측성) ✅ 완료**: #8 통계 대시보드 · #9 FP 피드백 루프 · #11 히스토리 검색/필터
+- migration v7 (`review_history` + `finding_feedback`) → data layer → IPC (3 events, 3 commands) → orchestrator 통합 → hooks (useReviewHistory, useStats) → UI (Monitoring 필터/차트, Pending 피드백)
+- 386/386 테스트 통과, tsc clean. 7명 executor 병렬 구현.
+- #7(대화형 리뷰, `createReviewReply`)은 P1 잔여 — publisher 확장만으로 가벼움.
 
 > 🟡 보류 2건(#2 서명활성화, #3 CI검증)은 사용자 액션만 남은 상태 — 다음 스프린트와 병행 가능.
+
+**4차 스프린트 후보 (검증 기준 잔여 최우선순위)**:
+- 🟡 **#2/#3 릴리스 파이프라인 활성화** — `tauri signer generate` 키페어 + repo secret 설정 후 `git tag` 푸시. 실사용자 배포를 여는 가장 낮은 비용·최대 효과.
+- ⬜ **#1 GitHub App 인증 (P0)** — PAT 단일 경로(`secrets.rs` keychain 저장)에 설치형 App 경로 추가. 높은 rate limit + 조직 단위 배포 + 토큰 만료 제거. 남은 P0 중 유일한 코드 작업.
+- ⬜ **#7 대화형 리뷰** — publisher에 `pulls.createReviewReply`(`in_reply_to`)만 추가하면 되는 가벼운 P1 잔여. 위 두 작업과 병행 가능.
+- ⬜ **#14 동시성 제어** — 현재 `processQueue` 직렬 전제(예산 게이트 race-free). 병렬화 시 예산 게이트 재검토가 선행 조건이므로 관측성(sprint 3) 이후가 적기.
