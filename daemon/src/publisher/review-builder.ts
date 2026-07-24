@@ -36,6 +36,11 @@ export interface ReviewPayload {
 export interface ReviewBuilderConfig {
   /** Prefix comment bodies with `[SEVERITY]` when true. */
   showSeverity: boolean;
+  /**
+   * When true (auto mode only), dedupe-matched inline findings are posted as
+   * replies to the existing comment thread instead of being silently dropped.
+   */
+  replyToThreads: boolean;
 }
 
 /** The line-mapped shape consumed by the builder. */

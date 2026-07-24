@@ -8,11 +8,15 @@
  */
 import type { Octokit } from "@octokit/rest";
 
-/** Minimal shape of an existing review comment, for dedupe comparison. */
+/** Minimal shape of an existing review comment, for dedupe + reply routing. */
 export interface ExistingComment {
   path: string;
   line: number | null;
   body: string;
+  /** GitHub review-comment id (used as `comment_id` for replies). */
+  id: number;
+  /** Owning review id (used as `review_id` for replies); null when unknown. */
+  pull_request_review_id: number | null;
 }
 
 /** New-comment shape used for dedupe (mirrors {@link ReviewCommentPayload}). */
@@ -59,6 +63,8 @@ export async function fetchExistingComments(
     path: c.path ?? "",
     line: c.line ?? c.original_line ?? null,
     body: c.body ?? "",
+    id: c.id,
+    pull_request_review_id: c.pull_request_review_id ?? null,
   }));
 }
 
@@ -73,4 +79,31 @@ export function filterDuplicates(
 ): NewComment[] {
   const keys = new Set(existing.map(commentKey));
   return newComments.filter((c) => !keys.has(commentKey(c)));
+}
+/**
+ * Partition new comments into those with no existing match (`keep`) and those
+ * that match an existing comment (`reply`), carrying the matched existing
+ * comment so the publisher can reply into the original thread.
+ *
+ * Stable first-match tie-break: when several existing comments share a key, the
+ * FIRST one (in `existing` order) is chosen as the reply target. Each new
+ * comment is routed independently — two new comments matching the same thread
+ * each produce their own reply.
+ *
+ * @returns `keep` posts as a fresh review; `reply` are sent via
+ * `octokit.rest.pulls.createReviewReply`.
+ */
+export function partitionByExisting(
+  existing: ExistingComment[],
+  newComments: NewComment[],
+): { keep: NewComment[]; reply: { new: NewComment; target: ExistingComment }[] } {
+  const keep: NewComment[] = [];
+  const reply: { new: NewComment; target: ExistingComment }[] = [];
+  for (const nc of newComments) {
+    const key = commentKey(nc);
+    const target = existing.find((e) => commentKey(e) === key);
+    if (target) reply.push({ new: nc, target });
+    else keep.push(nc);
+  }
+  return { keep, reply };
 }

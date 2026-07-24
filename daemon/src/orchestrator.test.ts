@@ -5,6 +5,7 @@ import { insertPendingReview, type InsertPendingParams } from "./db/pending-revi
 import { getUsageByPr, insertUsage } from "./db/review-usage";
 import { recordReview } from "./poller/dedupe";
 import { Orchestrator, applyEdits, decideApproval, getMonthlyCostSummary } from "./orchestrator";
+import { getLogger } from "./logging/logger";
 import type { Transport } from "./ipc/transport";
 import type { Config } from "./config/schema";
 import type { Finding } from "./types/domain";
@@ -120,6 +121,8 @@ interface OrchestratorHandle {
   db: DatabaseSync | null;
   cfg: Config | null;
   approveReview: ApproveFn;
+  /** Drain the queue (the #14 bounded worker pool). Real private method. */
+  processQueue: () => Promise<void>;
   reviewQueueItem: (cfg: Config, row: QueueRowLike) => Promise<void>;
 }
 
@@ -139,6 +142,8 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
   llmPricing: "",
   defaultPer1M: 0,
   monthlyBudgetUsd: 0,
+  replyToThreads: false,
+  maxConcurrentReviews: 1,
     dbPath: ":memory:",
     logDir: "/tmp/logs",
     ...overrides,
@@ -201,6 +206,40 @@ function seedPending(overrides: Partial<InsertPendingParams> = {}): number {
     diff: { "src/a.ts": "@@ -1,3 +1,4 @@\n ctx\n+add\n", "src/b.ts": "@@ hunk b @@" },
     ...overrides,
   });
+}
+
+/**
+ * Seed `count` distinct pending queue rows (pr_id/head_sha unique) and return
+ * their ids in insertion order. Used by the #14 concurrency tests to drive the
+ * real processQueue drain.
+ */
+function seedQueueRows(count: number): number[] {
+  const ids: number[] = [];
+  const insert = db.prepare(
+    `INSERT INTO queue (pr_id, repo, head_sha, number, enqueued_at) VALUES (?, ?, ?, ?, ?)`,
+  );
+  for (let i = 0; i < count; i++) {
+    const res = insert.run(i + 1, "owner/repo", `sha${i}`, 100 + i, new Date().toISOString());
+    ids.push(Number(res.lastInsertRowid));
+  }
+  return ids;
+}
+
+/** Read a queue row by id (status/retry_count/next_attempt_at for assertions). */
+function queueRow(id: number): {
+  status: string;
+  retry_count: number;
+  next_attempt_at: string | null;
+  fail_reason: string | null;
+} {
+  return db
+    .prepare("SELECT status, retry_count, next_attempt_at, fail_reason FROM queue WHERE id = ?")
+    .get(id) as {
+    status: string;
+    retry_count: number;
+    next_attempt_at: string | null;
+    fail_reason: string | null;
+  };
 }
 
 beforeEach(async () => {
@@ -459,7 +498,7 @@ describe("orchestrator — pending diff snapshot + approve edits (integration)",
       string,
       number,
       { inline: Finding[]; degraded: Finding[]; summary: string },
-      { showSeverity: boolean },
+      { showSeverity: boolean; replyToThreads: boolean },
     ];
     expect(owner).toBe("owner");
     expect(name).toBe("repo");
@@ -604,6 +643,18 @@ describe("token usage persistence (AC4.4)", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].file).toBe("src/a.ts");
     expect(rows[0].totalTokens).toBe(120);
+  });
+
+  it("AUTO mode: forwards publisher `replied` count onto the publish:review event (#7)", async () => {
+    mockHappyReviewPR();
+    mocks.publishReview.mockResolvedValue({ posted: 1, degraded: 0, retried: 0, replied: 3 });
+
+    const cfg = makeConfig({ reviewMode: "auto", replyToThreads: true });
+    await handle.reviewQueueItem(cfg, ROW);
+
+    const evt = transport.events.find((e) => e.event === "publish:review");
+    expect(evt).toBeDefined();
+    expect(evt).toMatchObject({ replied: 3 });
   });
 });
 
@@ -868,5 +919,156 @@ describe("incremental review (G002)", () => {
 
     // No previous sha → no compare fetch, full review.
     expect(mocks.fetchCompareDiff).not.toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
+// Concurrency control (#14) — bounded worker pool driven by processQueue.
+// claimNext is atomic (UPDATE…RETURNING), so workers race safely. At N=1 the
+// pool is byte-identical to the prior serial drain (AC3.1).
+// ===========================================================================
+describe("concurrency control (#14) — bounded worker pool", () => {
+  it("AC3.1 — N=1 is byte-identical to serial: strict ascending id order, ≤1 concurrent", async () => {
+    const ids = seedQueueRows(5);
+    const order: number[] = [];
+    let active = 0;
+    let maxActive = 0;
+    handle.reviewQueueItem = (vi.fn(async (_cfg, row) => {
+      active += 1;
+      if (active > maxActive) maxActive = active;
+      order.push(row.id);
+      await Promise.resolve();
+      active -= 1;
+    }) as unknown) as typeof handle.reviewQueueItem;
+
+    await handle.processQueue();
+
+    expect(order).toEqual(ids); // strictly ascending by queue.id (serial drain order)
+    expect(maxActive).toBe(1); // never more than one review in flight at a time
+    for (const id of ids) expect(queueRow(id).status).toBe("done");
+  });
+
+  it("AC3.2 — N=3 bounded concurrency: ≤3 concurrent and the cap is realized (not serial)", async () => {
+    handle.cfg = makeConfig({ maxConcurrentReviews: 3 });
+    const ids = seedQueueRows(6);
+    let active = 0;
+    let maxActive = 0;
+    handle.reviewQueueItem = (vi.fn(async () => {
+      active += 1;
+      if (active > maxActive) maxActive = active;
+      // Deterministic yield (no real timers): lets peers start, exposing any
+      // concurrency. A serial drain would leave maxActive at 1.
+      await Promise.resolve();
+      active -= 1;
+    }) as unknown) as typeof handle.reviewQueueItem;
+
+    await handle.processQueue();
+
+    expect(maxActive).toBeLessThanOrEqual(3); // bound respected
+    expect(maxActive).toBe(3); // parallelism realized (serial would be 1)
+    for (const id of ids) expect(queueRow(id).status).toBe("done");
+  });
+
+  it("AC3.3 — a reviewQueueItem rejection is isolated: that item retries, others done, pool does not reject", async () => {
+    const ids = seedQueueRows(3); // [id1, id2, id3]
+    handle.reviewQueueItem = (vi.fn(async (_cfg, row) => {
+      if (row.id === ids[1]) throw new Error("boom"); // middle item fails
+    }) as unknown) as typeof handle.reviewQueueItem;
+
+    await expect(handle.processQueue()).resolves.toBeUndefined(); // Promise.all never rejects
+
+    expect(queueRow(ids[0]).status).toBe("done");
+    expect(queueRow(ids[2]).status).toBe("done");
+    const retried = queueRow(ids[1]);
+    expect(retried.status).toBe("pending"); // re-queued with backoff
+    expect(retried.retry_count).toBe(1);
+    expect(retried.next_attempt_at).not.toBeNull();
+    expect(new Date(retried.next_attempt_at as string).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("AC3.4 — no double-claim under N=4: every id reviewed exactly once", async () => {
+    handle.cfg = makeConfig({ maxConcurrentReviews: 4 });
+    const ids = seedQueueRows(4);
+    const seen: number[] = [];
+    handle.reviewQueueItem = (vi.fn(async (_cfg, row) => {
+      seen.push(row.id);
+      await Promise.resolve();
+    }) as unknown) as typeof handle.reviewQueueItem;
+
+    await handle.processQueue();
+
+    expect(seen).toHaveLength(4);
+    expect(new Set(seen).size).toBe(4); // no duplicates
+    expect([...seen].sort((a, b) => a - b)).toEqual(ids);
+    for (const id of ids) expect(queueRow(id).status).toBe("done");
+  });
+
+  it("AC3.9 — a claim error breaks the worker cleanly; processQueue does not reject (P2)", async () => {
+    handle.cfg = makeConfig({ maxConcurrentReviews: 3 });
+    seedQueueRows(2); // rows present so the pending-count gate passes
+    // Controllable stub of the claim: force the atomic claim statement's .get()
+    // to throw while leaving the COUNT / mark* statements real. This exercises
+    // the REAL runOne claim try/catch (the catch that logs + breaks).
+    const realPrepare = db.prepare.bind(db);
+    const prepareSpy = vi
+      .spyOn(db, "prepare")
+      .mockImplementation((sql: string) => {
+        if (sql.includes("RETURNING id, pr_id, repo")) {
+          return {
+            get: () => {
+              throw new Error("claim boom");
+            },
+            run: () => undefined,
+          } as unknown as ReturnType<DatabaseSync["prepare"]>;
+        }
+        return realPrepare(sql);
+      });
+    const reviewed = vi.fn();
+    handle.reviewQueueItem = reviewed as unknown as typeof handle.reviewQueueItem;
+    const errorSpy = vi.spyOn(getLogger(), "error");
+
+    await expect(handle.processQueue()).resolves.toBeUndefined(); // P2: never rejects
+    expect(reviewed).not.toHaveBeenCalled(); // workers exited before any review
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "claim_failed" }),
+      expect.any(String),
+    );
+
+    prepareSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it("warns budget_concurrency_soft_limit once when N>1 and a monthly budget is set", async () => {
+    handle.cfg = makeConfig({ maxConcurrentReviews: 3, monthlyBudgetUsd: 10 });
+    seedQueueRows(1);
+    handle.reviewQueueItem = (vi.fn(async () => {}) as unknown) as typeof handle.reviewQueueItem;
+    const warnSpy = vi.spyOn(getLogger(), "warn");
+
+    await handle.processQueue();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "budget_concurrency_soft_limit",
+        maxConcurrentReviews: 3,
+        monthlyBudgetUsd: 10,
+      }),
+      expect.stringContaining("soft cap"),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("does NOT warn budget_concurrency_soft_limit at N=1 even with a budget", async () => {
+    handle.cfg = makeConfig({ maxConcurrentReviews: 1, monthlyBudgetUsd: 10 });
+    seedQueueRows(1);
+    handle.reviewQueueItem = (vi.fn(async () => {}) as unknown) as typeof handle.reviewQueueItem;
+    const warnSpy = vi.spyOn(getLogger(), "warn");
+
+    await handle.processQueue();
+
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "budget_concurrency_soft_limit" }),
+      expect.any(String),
+    );
+    warnSpy.mockRestore();
   });
 });

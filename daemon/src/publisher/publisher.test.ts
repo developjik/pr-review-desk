@@ -15,7 +15,8 @@ vi.mock("../logging/logger", () => ({
   }),
 }));
 
-const config: PublisherConfig = { showSeverity: false };
+const config: PublisherConfig = { showSeverity: false, replyToThreads: false };
+const replyConfig: PublisherConfig = { showSeverity: false, replyToThreads: true };
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -39,6 +40,30 @@ function makeFindings(n: number): Finding[] {
   );
 }
 
+/** Build an existing review-comment shape (as returned by listReviewComments). */
+function makeExisting(overrides: {
+  path?: string;
+  line?: number;
+  body?: string;
+  id?: number;
+  pull_request_review_id?: number | null;
+} = {}): {
+  path: string;
+  line: number;
+  body: string;
+  id: number;
+  pull_request_review_id: number | null;
+} {
+  return {
+    path: "src/a.ts",
+    line: 10,
+    body: "fix this",
+    id: 42,
+    pull_request_review_id: 7,
+    ...overrides,
+  };
+}
+
 type MockFn = ReturnType<typeof vi.fn>;
 
 interface MockOctokit {
@@ -48,6 +73,7 @@ interface MockOctokit {
       listReviewComments: MockFn;
       submitReview: MockFn;
       deletePendingReview: MockFn;
+      createReplyForReviewComment: MockFn;
     };
     issues: {
       createComment: MockFn;
@@ -63,6 +89,7 @@ function makeMockOctokit(): MockOctokit {
         listReviewComments: vi.fn().mockResolvedValue({ data: [] }),
         submitReview: vi.fn().mockResolvedValue({ data: { id: 1 } }),
         deletePendingReview: vi.fn().mockResolvedValue({ data: {} }),
+        createReplyForReviewComment: vi.fn().mockResolvedValue({ data: { id: 100 } }),
       },
       issues: {
         createComment: vi.fn().mockResolvedValue({ data: { id: 2 } }),
@@ -104,7 +131,7 @@ describe("publisher / publishReview", () => {
       config,
     );
 
-    expect(result).toEqual({ posted: 0, degraded: 0, retried: 0 });
+    expect(result).toEqual({ posted: 0, degraded: 0, retried: 0, replied: 0 });
     expect(octokit.rest.pulls.createReview).not.toHaveBeenCalled();
     expect(octokit.rest.pulls.listReviewComments).not.toHaveBeenCalled();
     expect(octokit.rest.issues.createComment).not.toHaveBeenCalled();
@@ -123,7 +150,7 @@ describe("publisher / publishReview", () => {
       config,
     );
 
-    expect(result).toEqual({ posted: 3, degraded: 0, retried: 0 });
+    expect(result).toEqual({ posted: 3, degraded: 0, retried: 0, replied: 0 });
     expect(octokit.rest.pulls.createReview).toHaveBeenCalledTimes(1);
 
     // No degraded findings → no standalone issue comment.
@@ -146,7 +173,7 @@ describe("publisher / publishReview", () => {
       config,
     );
 
-    expect(result).toEqual({ posted: 1, degraded: 2, retried: 0 });
+    expect(result).toEqual({ posted: 1, degraded: 2, retried: 0, replied: 0 });
     expect(octokit.rest.issues.createComment).toHaveBeenCalledTimes(1);
 
     const issueCall = octokit.rest.issues.createComment.mock.calls[0][0];
@@ -173,7 +200,7 @@ describe("publisher / publishReview", () => {
     );
 
     // 1 of 2 posted inline; 1 trimmed to degraded; 1 trim round.
-    expect(result).toEqual({ posted: 1, degraded: 1, retried: 1 });
+    expect(result).toEqual({ posted: 1, degraded: 1, retried: 1, replied: 0 });
     expect(octokit.rest.pulls.createReview).toHaveBeenCalledTimes(2);
 
     // The second POST should carry only the kept (front-half) finding.
@@ -201,7 +228,7 @@ describe("publisher / publishReview", () => {
     );
 
     // Round 1: keep 2, trim 2.  Round 2: keep 1, trim 1.  Round 3: trim last 1.
-    expect(result).toEqual({ posted: 0, degraded: 4, retried: 3 });
+    expect(result).toEqual({ posted: 0, degraded: 4, retried: 3, replied: 0 });
     expect(octokit.rest.issues.createComment).toHaveBeenCalledTimes(1);
   });
 
@@ -227,7 +254,7 @@ describe("publisher / publishReview", () => {
     );
 
     // Only the offending comment (line 10) is trimmed; the good one is posted.
-    expect(result).toEqual({ posted: 1, degraded: 1, retried: 1 });
+    expect(result).toEqual({ posted: 1, degraded: 1, retried: 1, replied: 0 });
 
     const secondCall = octokit.rest.pulls.createReview.mock.calls[1][0];
     expect(secondCall.comments).toHaveLength(1);
@@ -277,7 +304,7 @@ describe("publisher / publishReview", () => {
       config,
     );
 
-    expect(result).toEqual({ posted: 1, degraded: 0, retried: 0 });
+    expect(result).toEqual({ posted: 1, degraded: 0, retried: 0, replied: 0 });
 
     const reviewCall = octokit.rest.pulls.createReview.mock.calls[0][0];
     expect(reviewCall.comments).toHaveLength(1);
@@ -307,7 +334,7 @@ describe("publisher / publishReview", () => {
     );
 
     // No inline posted (deduped), but degraded posted as issue comment.
-    expect(result).toEqual({ posted: 0, degraded: 1, retried: 0 });
+    expect(result).toEqual({ posted: 0, degraded: 1, retried: 0, replied: 0 });
 
     // createReview called once (summary-only, empty comments array).
     expect(octokit.rest.pulls.createReview).toHaveBeenCalledTimes(1);
@@ -335,6 +362,117 @@ describe("publisher / publishReview", () => {
     expect(result.degraded).toBe(1);
     expect(result.retried).toBe(0);
     expect(octokit.rest.issues.createComment).toHaveBeenCalledTimes(1);
+  });
+
+  // -- #7 reply-to-threads: replyToThreads=false (golden) -------------------
+
+  it("AC2.1: replyToThreads=false makes no createReplyForReviewComment calls (silent-drop preserved)", async () => {
+    const dup = makeFinding({ file: "src/a.ts", line: 10, comment: "fix this" });
+    const unique = makeFinding({ file: "src/b.ts", line: 20, comment: "another" });
+
+    octokit.rest.pulls.listReviewComments.mockResolvedValueOnce({
+      data: [makeExisting()],
+    });
+
+    const result = await publishReview(
+      asOctokit(octokit), "owner", "repo", 1,
+      { inline: [dup, unique], degraded: [], summary: "Summary" }, config,
+    );
+
+    // Today's behavior: dup dropped, unique posted, no replies.
+    expect(result).toEqual({ posted: 1, degraded: 0, retried: 0, replied: 0 });
+    expect(octokit.rest.pulls.createReplyForReviewComment).not.toHaveBeenCalled();
+
+    const reviewCall = octokit.rest.pulls.createReview.mock.calls[0][0];
+    expect(reviewCall.comments).toHaveLength(1);
+    expect(reviewCall.comments[0].path).toBe("src/b.ts");
+  });
+
+  // -- #7 reply-to-threads: matched findings reply into existing threads ----
+
+  it("AC2.2: replyToThreads=true replies matched findings; non-matched post in the review", async () => {
+    const dup = makeFinding({ file: "src/a.ts", line: 10, comment: "fix this" });
+    const unique = makeFinding({ file: "src/b.ts", line: 20, comment: "another" });
+
+    octokit.rest.pulls.listReviewComments.mockResolvedValueOnce({
+      data: [makeExisting()],
+    });
+
+    const result = await publishReview(
+      asOctokit(octokit), "owner", "repo", 1,
+      { inline: [dup, unique], degraded: [], summary: "Summary" }, replyConfig,
+    );
+
+    // One reply into the existing thread; the unique finding posts in the review.
+    expect(result).toEqual({ posted: 1, degraded: 0, retried: 0, replied: 1 });
+    expect(octokit.rest.pulls.createReplyForReviewComment).toHaveBeenCalledTimes(1);
+
+    const replyCall = octokit.rest.pulls.createReplyForReviewComment.mock.calls[0][0];
+    expect(replyCall.owner).toBe("owner");
+    expect(replyCall.repo).toBe("repo");
+    expect(replyCall.pull_number).toBe(1);
+    expect(replyCall.comment_id).toBe(42);
+    // Reply body == the matched finding's rendered body (showSeverity off).
+    expect(replyCall.body).toBe("fix this");
+
+    const reviewCall = octokit.rest.pulls.createReview.mock.calls[0][0];
+    expect(reviewCall.comments).toHaveLength(1);
+    expect(reviewCall.comments[0].path).toBe("src/b.ts");
+  });
+
+  // -- #7 reply-to-threads: null review_id → finding dropped, others reply ---
+
+  it("AC2.3: matched existing comment with null review_id is dropped; others still reply", async () => {
+    const nullDup = makeFinding({ file: "src/n.ts", line: 5, comment: "no review id" });
+    const goodDup = makeFinding({ file: "src/a.ts", line: 10, comment: "fix this" });
+
+    octokit.rest.pulls.listReviewComments.mockResolvedValueOnce({
+      data: [
+        makeExisting({ pull_request_review_id: null, id: 99, path: "src/n.ts", line: 5, body: "no review id" }),
+        makeExisting(),
+      ],
+    });
+
+    const result = await publishReview(
+      asOctokit(octokit), "owner", "repo", 1,
+      { inline: [nullDup, goodDup], degraded: [], summary: "Summary" }, replyConfig,
+    );
+
+    // Only the non-null review_id comment is replied; the null one is dropped.
+    expect(result).toEqual({ posted: 0, degraded: 0, retried: 0, replied: 1 });
+    expect(octokit.rest.pulls.createReplyForReviewComment).toHaveBeenCalledTimes(1);
+    const replyCall = octokit.rest.pulls.createReplyForReviewComment.mock.calls[0][0];
+    expect(replyCall.comment_id).toBe(42); // replied into goodDup's thread, not the null one
+
+    // Both findings matched existing threads → nothing posts in a fresh review.
+    expect(octokit.rest.pulls.createReview).not.toHaveBeenCalled();
+  });
+
+  // -- #7 reply-to-threads: reply failures are best-effort ------------------
+
+  it("AC2.5: createReplyForReviewComment rejecting is logged; review still posts; replied counts successes only", async () => {
+    const failDup = makeFinding({ file: "src/f.ts", line: 1, comment: "will fail" });
+    const okDup = makeFinding({ file: "src/a.ts", line: 10, comment: "fix this" });
+
+    octokit.rest.pulls.listReviewComments.mockResolvedValueOnce({
+      data: [
+        makeExisting({ pull_request_review_id: 8, id: 50, path: "src/f.ts", line: 1, body: "will fail" }),
+        makeExisting(),
+      ],
+    });
+    octokit.rest.pulls.createReplyForReviewComment
+      .mockRejectedValueOnce(err422())
+      .mockResolvedValueOnce({ data: { id: 200 } });
+
+    // No throw: the failed reply is caught and logged; publishReview resolves.
+    const result = await publishReview(
+      asOctokit(octokit), "owner", "repo", 1,
+      { inline: [failDup, okDup], degraded: [], summary: "Summary" }, replyConfig,
+    );
+
+    // First reply failed (replied stays 0), second succeeded → replied=1.
+    expect(result).toEqual({ posted: 0, degraded: 0, retried: 0, replied: 1 });
+    expect(octokit.rest.pulls.createReplyForReviewComment).toHaveBeenCalledTimes(2);
   });
 });
 // ---------------------------------------------------------------------------
@@ -434,6 +572,30 @@ describe("publisher / createPendingReview", () => {
     expect(result.posted).toBe(1);
     expect(result.degraded).toBe(1);
     expect(octokit.rest.issues.createComment).not.toHaveBeenCalled();
+  });
+
+  // -- #7 reply-to-threads: pending path NEVER replies (drop retained) -------
+
+  it("AC2.4: createPendingReview with replyToThreads=true still drops dedupe matches (no replies)", async () => {
+    const dup = makeFinding({ file: "src/a.ts", line: 10, comment: "fix this" });
+    const unique = makeFinding({ file: "src/b.ts", line: 20, comment: "another" });
+
+    octokit.rest.pulls.listReviewComments.mockResolvedValueOnce({
+      data: [makeExisting()],
+    });
+
+    const result = await createPendingReview(
+      asOctokit(octokit), "owner", "repo", 1,
+      { inline: [dup, unique], degraded: [], summary: "S" }, replyConfig,
+    );
+
+    // Pending invariant: nothing visible until approved — drop dedupe matches,
+    // NEVER reply (createReplyForReviewComment would be immediately visible).
+    expect(octokit.rest.pulls.createReplyForReviewComment).not.toHaveBeenCalled();
+    expect(result.posted).toBe(1); // only the unique finding survives dedupe
+    const call = octokit.rest.pulls.createReview.mock.calls[0][0];
+    expect(call.comments).toHaveLength(1);
+    expect(call.comments[0].path).toBe("src/b.ts");
   });
 });
 

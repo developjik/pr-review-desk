@@ -757,6 +757,40 @@ export default function Settings({ onSaved, onOpenInstallHelp }: SettingsProps) 
             to a full review on force-push/rebase. Off by default.
           </p>
         </div>
+        <div className="field">
+          <label style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={config.replyToThreads}
+              onChange={(e) => update("replyToThreads", e.target.checked)}
+            />
+            <span className="field-label" style={{ margin: 0 }}>
+              Reply to existing comment threads
+            </span>
+          </label>
+          <p className="hint">
+            When on, a re-review whose finding matches an existing comment
+            replies in that thread instead of staying silent (auto mode only;
+            pending mode still holds for approval). Off by default.
+          </p>
+        </div>
+        <div className="field">
+          <span className="field-label">Max concurrent reviews</span>
+          <input
+            type="number"
+            className="input"
+            min={1}
+            value={config.maxConcurrentReviews}
+            onChange={(e) =>
+              update("maxConcurrentReviews", Math.max(1, Number(e.target.value) || DEFAULT_CONFIG.maxConcurrentReviews))
+            }
+          />
+          <p className="hint">
+            Max PRs reviewed in parallel (overlaps LLM latency). Default 1 = one
+            at a time. With a monthly budget set, N&gt;1 makes the budget a soft
+            cap that may overshoot by up to N reviews before pausing.
+          </p>
+        </div>
         </div>
       </div>
 

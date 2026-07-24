@@ -212,3 +212,43 @@ describe("parseConfig — cost & budget fields defaults + configAffectsRuntime (
     expect(configAffectsRuntime(a, b)).toBe(true);
   });
 });
+
+describe("parseConfig — sprint-4 config (replyToThreads + maxConcurrentReviews)", () => {
+  it("replyToThreads omitted ⇒ false (today's silent-drop default)", () => {
+    const cfg = parseConfig({ ...minimal });
+    expect(cfg.replyToThreads).toBe(false);
+  });
+
+  it("replyToThreads round-trips", () => {
+    const cfg = parseConfig({ ...minimal, replyToThreads: true });
+    expect(cfg.replyToThreads).toBe(true);
+  });
+
+  it("maxConcurrentReviews omitted ⇒ 1 (today's serial default)", () => {
+    const cfg = parseConfig({ ...minimal });
+    expect(cfg.maxConcurrentReviews).toBe(1);
+  });
+
+  it("maxConcurrentReviews round-trips", () => {
+    const cfg = parseConfig({ ...minimal, maxConcurrentReviews: 4 });
+    expect(cfg.maxConcurrentReviews).toBe(4);
+  });
+
+  it("rejects non-positive / non-integer maxConcurrentReviews", () => {
+    expect(() => parseConfig({ ...minimal, maxConcurrentReviews: 0 })).toThrow();
+    expect(() => parseConfig({ ...minimal, maxConcurrentReviews: -1 })).toThrow();
+    expect(() => parseConfig({ ...minimal, maxConcurrentReviews: 1.5 })).toThrow();
+  });
+
+  it("configAffectsRuntime is FALSE when ONLY replyToThreads differs (per-review, not scheduling)", () => {
+    const a = parseConfig({ ...minimal, replyToThreads: false });
+    const b = parseConfig({ ...minimal, replyToThreads: true });
+    expect(configAffectsRuntime(a, b)).toBe(false);
+  });
+
+  it("configAffectsRuntime is TRUE when maxConcurrentReviews differs", () => {
+    const a = parseConfig({ ...minimal, maxConcurrentReviews: 1 });
+    const b = parseConfig({ ...minimal, maxConcurrentReviews: 3 });
+    expect(configAffectsRuntime(a, b)).toBe(true);
+  });
+});

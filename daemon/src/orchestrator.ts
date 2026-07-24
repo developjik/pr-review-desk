@@ -3,7 +3,7 @@
  *
  * Responsibilities:
  *   - Maintain the {@link DaemonState} machine surfaced on the wire.
- *   - Own the queue-processing loop (sequential review of enqueued PRs).
+ *   - Own the queue-processing loop (bounded-concurrent review of enqueued PRs; up to `maxConcurrentReviews` in flight, default 1 = serial).
  *   - Wire `poll:now` / `pause` / `resume` commands.
  *   - Own the {@link DatabaseSync} handle (opened from `config.dbPath`).
  *
@@ -12,7 +12,7 @@
  *   1. transitions to `polling` and emits `poll:started`,
  *   2. runs `poller.discover()` (search → enumerate → dedupe → enqueue,
  *      emitting `poll:found` per new PR),
- *   3. drains the queue sequentially: for each PR it fetches the full context
+ *   3. drains the queue (bounded-concurrently up to `maxConcurrentReviews`): for each PR it fetches the full context
  *      (diff + files), runs the reviewer (P4), classifies findings via the
  *      diff-line-mapper, and emits `publish:review` as a P5 stub,
  *   4. returns to `idle`.
@@ -39,6 +39,7 @@ import { parseDiffHunks, splitDiffByFile } from "./linemap/diff-parser";
 import { mapFindings } from "./linemap/diff-line-mapper";
 import { publishReview, createPendingReview, submitPendingReview, discardPendingReview } from "./publisher/publisher";
 import type { ReviewContext } from "./types/domain";
+import pLimit from "p-limit";
 
 interface QueueRow {
   id: number;
@@ -206,7 +207,12 @@ export class Orchestrator {
   }
 
   /**
-   * Drain the queue sequentially. For each pending PR:
+   * Drain the queue with a bounded worker pool (cfg.maxConcurrentReviews, min 1).
+   * Each worker loops claim → review → mark until no rows remain; claimNext is an
+   * atomic UPDATE…RETURNING so workers race safely (each row claimed exactly once).
+   * A claim error breaks its worker cleanly; a reviewQueueItem rejection is caught
+   * per-item and retried/failed exactly as the prior serial drain — Promise.all
+   * never rejects on a single item failure. For each pending PR:
    *   1. Fetch the full PR context (metadata + diff + file contents) from GitHub.
    *   2. Run the reviewer (P4): per-file LLM review → findings + summary.
    *   3. Classify findings via the diff-line-mapper (inline vs. degraded).
@@ -249,27 +255,67 @@ export class Orchestrator {
     const now = () => new Date().toISOString();
     const backoffDelays = [60000, 300000, 900000]; // 1min, 5min, 15min
 
-    for (;;) {
-      const row = claimNext.get(now(), now()) as QueueRow | undefined;
-      if (!row) break;
-      try {
-        await this.reviewQueueItem(cfg, row);
-        markDone.run(row.id);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (row.retry_count < MAX_QUEUE_RETRIES) {
-          const delay = backoffDelays[row.retry_count] ?? 900000;
-          const nextAttempt = new Date(Date.now() + delay).toISOString();
-          markRetry.run(nextAttempt, message, row.id);
-        } else {
-          markFailed.run(message, row.id);
-          getLogger().error(
-            { code: "queue_item_dead_letter", prId: row.pr_id, attempts: row.retry_count + 1 },
-            message,
-          );
+    // #14 Concurrency control: drain the queue with a bounded worker pool of N.
+    // claimNext is atomic (UPDATE ... RETURNING), so workers race safely on the
+    // same prepared statement — each row is claimed by exactly one worker.
+    const N = Math.max(1, cfg.maxConcurrentReviews);
+    const lim = pLimit(N);
+
+    // With N>1 AND a monthly budget set, the budget is a soft cap: up to N
+    // reviews may overshoot before the next drain pauses (read-before-LLM gate
+    // cannot pre-flight in-flight peers). Warn once per drain.
+    if (N > 1 && cfg.monthlyBudgetUsd > 0) {
+      getLogger().warn(
+        {
+          code: "budget_concurrency_soft_limit",
+          maxConcurrentReviews: N,
+          monthlyBudgetUsd: cfg.monthlyBudgetUsd,
+        },
+        "concurrency N>1 with a monthly budget: the budget is a soft cap and may overshoot by up to N reviews before pausing",
+      );
+    }
+
+    // A single worker: loop claim → review → mark until no rows remain.
+    // NEVER rejects — a claim error breaks cleanly (P2), a reviewQueueItem
+    // rejection is caught per-item and retried/failed exactly as serial
+    // (AC3.3), so Promise.all never rejects on a single item failure.
+    const runOne = async (): Promise<void> => {
+      for (;;) {
+        // claimNext is OUTSIDE the per-item review try/catch but has its OWN
+        // try/catch: a claim error logs and breaks the worker (clean exit).
+        let row: QueueRow | undefined;
+        try {
+          row = claimNext.get(now(), now()) as QueueRow | undefined;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          getLogger().error({ code: "claim_failed" }, message);
+          break;
+        }
+        if (!row) break; // no more rows → worker exits cleanly
+
+        try {
+          await this.reviewQueueItem(cfg, row);
+          markDone.run(row.id);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          if (row.retry_count < MAX_QUEUE_RETRIES) {
+            const delay = backoffDelays[row.retry_count] ?? 900000;
+            const nextAttempt = new Date(Date.now() + delay).toISOString();
+            markRetry.run(nextAttempt, message, row.id);
+          } else {
+            markFailed.run(message, row.id);
+            getLogger().error(
+              { code: "queue_item_dead_letter", prId: row.pr_id, attempts: row.retry_count + 1 },
+              message,
+            );
+          }
         }
       }
-    }
+    };
+
+    // At N=1 this is byte-identical to the prior serial claim→review→mark drain
+    // (AC3.1): one worker, one claim at a time, strict id ordering.
+    await Promise.all(Array.from({ length: N }, () => lim(runOne)));
   }
 
   /**
@@ -441,7 +487,7 @@ export class Orchestrator {
         name,
         row.number,
         { inline, degraded, summary: result.summary },
-        { showSeverity: cfg.showSeverity },
+        { showSeverity: cfg.showSeverity, replyToThreads: cfg.replyToThreads },
       );
       const reviewId = insertPendingReview(db, {
         prId: row.pr_id,
@@ -509,7 +555,7 @@ export class Orchestrator {
       name,
       row.number,
       { inline, degraded, summary: result.summary },
-      { showSeverity: cfg.showSeverity },
+      { showSeverity: cfg.showSeverity, replyToThreads: cfg.replyToThreads },
     );
 
     await this.transport.emit({
@@ -519,6 +565,7 @@ export class Orchestrator {
       posted: pubResult.posted,
       degraded: pubResult.degraded,
       retried: pubResult.retried,
+      replied: pubResult.replied,
     });
 
     // Record for dedupe so the next poll skips this commit (R9 / R27).
@@ -650,6 +697,7 @@ export class Orchestrator {
       let posted = 0;
       let pubDegraded = 0;
       let retried = 0;
+      let replied = 0;
       if (useSubmitPath) {
         await submitPendingReview(octokit, owner, name, claimed.prNumber, claimed.githubReviewId!);
         posted = parsed.inline.length;
@@ -666,11 +714,12 @@ export class Orchestrator {
             degraded: keepDegraded as any,
             summary: isSelectionComplete ? claimed.summary : "",
           },
-          { showSeverity: cfg.showSeverity },
+          { showSeverity: cfg.showSeverity, replyToThreads: cfg.replyToThreads },
         );
         posted = pubResult.posted;
         pubDegraded = pubResult.degraded;
         retried = pubResult.retried;
+        replied = pubResult.replied;
       }
 
       await this.transport.emit({
@@ -680,6 +729,7 @@ export class Orchestrator {
         posted,
         degraded: pubDegraded,
         retried,
+        replied,
       });
       await this.transport.emit({
         type: "event",

@@ -64,6 +64,8 @@ export interface UiConfig {
   botPolicy: "skip" | "review";
   incrementalReview: boolean;
   reviewAreas: string;
+  replyToThreads: boolean;
+  maxConcurrentReviews: number;
   /** True when the OS keyring was unavailable and the secret is stored in
    *  plaintext config.json (Linux without Secret Service). Set by the host. */
   githubPatInsecureFallback: boolean;
@@ -362,6 +364,8 @@ export const DEFAULT_CONFIG: UiConfig = {
   botPolicy: "skip",
   incrementalReview: false,
   reviewAreas: "bug,style,structure,security",
+  replyToThreads: false,
+  maxConcurrentReviews: 1,
   githubPatInsecureFallback: false,
   llmApiKeyInsecureFallback: false,
 };
@@ -439,6 +443,14 @@ export function normalizeConfig(raw: unknown): UiConfig {
         ? obj.incrementalReview
         : DEFAULT_CONFIG.incrementalReview,
     reviewAreas: typeof obj.reviewAreas === "string" ? obj.reviewAreas : DEFAULT_CONFIG.reviewAreas,
+    replyToThreads:
+      typeof obj.replyToThreads === "boolean"
+        ? obj.replyToThreads
+        : DEFAULT_CONFIG.replyToThreads,
+    maxConcurrentReviews:
+      typeof obj.maxConcurrentReviews === "number"
+        ? obj.maxConcurrentReviews
+        : DEFAULT_CONFIG.maxConcurrentReviews,
     githubPatInsecureFallback:
       typeof obj.githubPatInsecureFallback === "boolean"
         ? obj.githubPatInsecureFallback

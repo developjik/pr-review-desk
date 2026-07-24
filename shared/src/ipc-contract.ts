@@ -84,6 +84,10 @@ export interface ConfigPayload {
   incrementalReview?: boolean;
   /** Comma-separated review-area subset (bug,style,structure,security). */
   reviewAreas?: string;
+  /** When true, reply to existing comment threads on re-review (auto mode only). */
+  replyToThreads?: boolean;
+  /** Max PRs reviewed concurrently (default 1 = serial behavior). */
+  maxConcurrentReviews?: number;
   dbPath: string;
   /** True when the OS keyring was unavailable and the secret lives in plaintext
    *  config.json (Linux without Secret Service). UI-only metadata; ignored by
@@ -274,6 +278,8 @@ export interface PublishReviewEvent extends EventEnvelope {
   posted: number;
   degraded: number;
   retried: number;
+  /** Dedupe-matched findings posted as replies to existing threads (optional; older daemons omit it). */
+  replied?: number;
 }
 
 export interface DaemonErrorEvent extends EventEnvelope {

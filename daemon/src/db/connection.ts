@@ -10,7 +10,7 @@
  *                    reviewed commit wins. Dedupe (R9) reads this.
  *   - review_run     one row per review execution (P4 writes; P5 rolls up).
  *   - review_finding one row per LLM finding belonging to a run.
- *   - queue          PRs awaiting sequential review processing (R23).
+ *   - queue          PRs awaiting review processing (R23; drained bounded-concurrently up to maxConcurrentReviews).
  *
  * `pr_id` is a stable surrogate derived from `repo#number` (see
  * `poller/util.ts` `prId`); it has no GitHub-global integer equivalent, so we

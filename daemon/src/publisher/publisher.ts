@@ -30,7 +30,7 @@ import {
   type ReviewBuilderConfig,
   type ReviewPayload,
 } from "./review-builder";
-import { commentKey, fetchExistingComments } from "./dedupe";
+import { commentKey, fetchExistingComments, partitionByExisting } from "./dedupe";
 import { withReviewRetry } from "./retry";
 
 /** Progressive trim is bounded so a pathological payload can't loop forever. */
@@ -45,6 +45,8 @@ export interface PublishResult {
   degraded: number;
   /** Number of progressive-trim rounds performed (422 recovery). */
   retried: number;
+  /** Dedupe-matched findings posted as replies to existing threads (auto mode). */
+  replied: number;
 }
 /** Result of {@link createPendingReview}. */
 export interface PendingReviewResult {
@@ -86,23 +88,93 @@ export async function publishReview(
 
   // R24 — nothing to say, say nothing.
   if (mapped.inline.length === 0 && mapped.degraded.length === 0) {
-    return { posted: 0, degraded: 0, retried: 0 };
+    return { posted: 0, degraded: 0, retried: 0, replied: 0 };
   }
 
   // Dedupe inline findings against existing review comments (R16). A failed
   // fetch is non-fatal — treat as "no existing comments" (duplicates are
   // annoying, not corrupting).
   let inline: Finding[];
+  let replied = 0;
   try {
     const existing = await fetchExistingComments(octokit, owner, repo, prNumber);
-    const existingKeys = new Set(existing.map(commentKey));
-    inline = mapped.inline.filter((f) => {
-      const comment = buildInlineComment(f, config);
-      return !existingKeys.has(commentKey(comment));
-    });
+
+    if (config.replyToThreads) {
+      // #7 — instead of dropping dedupe-matched inline findings, reply to them
+      // in their existing comment thread. Partition at the comment level (each
+      // finding is rendered to its NewComment body), then route matches to
+      // `createReplyForReviewComment` and post the rest (`keep`) as a fresh review.
+      const pairs = mapped.inline.map((f) => ({
+        finding: f,
+        comment: buildInlineComment(f, config),
+      }));
+      const findingByComment = new Map(pairs.map((p) => [p.comment, p.finding]));
+      const partition = partitionByExisting(existing, pairs.map((p) => p.comment));
+
+      // `keep` findings post as a normal review below.
+      inline = partition.keep
+        .map((c) => findingByComment.get(c))
+        .filter((f): f is Finding => f !== undefined);
+
+      // `reply` findings are best-effort: each call is isolated; a failure is
+      // logged but never throws or retries, and only successes bump `replied`.
+      for (const { new: comment, target } of partition.reply) {
+        if (target.pull_request_review_id === null) {
+          // Standalone (non-review) comment — no owning review_id. Deliberate
+          // product policy: only reply into threads owned by a review, so drop
+          // this finding rather than auto-reply into a human-authored/standalone
+          // thread. (The reply endpoint accepts any comment_id; this is a policy
+          // choice, not an API constraint.)
+          log.warn(
+            {
+              code: "reply_no_review_id",
+              owner,
+              repo,
+              prNumber,
+              comment_id: target.id,
+              path: target.path,
+              line: target.line,
+            },
+            "existing comment has no review_id; dropping finding (no reply)",
+          );
+          continue;
+        }
+        try {
+          await octokit.rest.pulls.createReplyForReviewComment({
+            owner,
+            repo,
+            pull_number: prNumber,
+            comment_id: target.id,
+            // The NewComment body == the matched finding's rendered body.
+            body: comment.body,
+          });
+          replied += 1;
+        } catch (err) {
+          log.warn(
+            {
+              code: "reply_failed",
+              owner,
+              repo,
+              prNumber,
+              comment_id: target.id,
+              review_id: target.pull_request_review_id,
+            },
+            messageOf(err),
+          );
+        }
+      }
+    } else {
+      // Today's behavior: silently drop dedupe-matched inline findings.
+      const existingKeys = new Set(existing.map(commentKey));
+      inline = mapped.inline.filter((f) => {
+        const comment = buildInlineComment(f, config);
+        return !existingKeys.has(commentKey(comment));
+      });
+    }
   } catch (err) {
     log.warn({ code: "dedupe_fetch_failed", owner, repo, prNumber }, messageOf(err));
     inline = mapped.inline; // fetch failed — keep all inline findings
+    replied = 0;
   }
 
   // Degraded findings — starts with the mapper's degraded set, grows as inline
@@ -110,8 +182,9 @@ export async function publishReview(
   const degraded: Finding[] = [...mapped.degraded];
 
   // Nothing new to post after dedupe (all inline were duplicates, no degraded).
+  // `replied` may be non-zero here — replies were already sent above.
   if (inline.length === 0 && degraded.length === 0) {
-    return { posted: 0, degraded: 0, retried: 0 };
+    return { posted: 0, degraded: 0, retried: 0, replied };
   }
 
   let postedInline = 0;
@@ -198,7 +271,7 @@ export async function publishReview(
     }
   }
 
-  return { posted: postedInline, degraded: degraded.length, retried };
+  return { posted: postedInline, degraded: degraded.length, retried, replied };
 }
 /**
  * Create a GitHub PENDING review (visible only to the reviewer until submitted).

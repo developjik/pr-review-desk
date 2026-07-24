@@ -59,6 +59,14 @@ export const configSchema = z.object({
   // --- Review area toggle (G003 sprint-2) ---
   // Comma-separated subset of bug,style,structure,security to review. Empty/all = 4.
   reviewAreas: z.string().default("bug,style,structure,security"),
+  // --- Interactive review (#7 sprint-4) ---
+  // When true, dedupe-matched findings reply in the existing comment thread
+  // (auto mode) instead of being silently dropped. Default false = today's behavior.
+  replyToThreads: z.boolean().default(false),
+  // --- Concurrency (#14 sprint-4) ---
+  // Max PRs reviewed concurrently (overlaps LLM HTTP latency). Default 1 =
+  // today's serial behavior. At N>1 the budget gate is a bounded soft cap.
+  maxConcurrentReviews: z.number().int().positive().default(1),
   dbPath: z.string().min(1),
   logDir: z.string().min(1),
 });
@@ -85,6 +93,7 @@ export function configAffectsRuntime(a: Config, b: Config): boolean {
     a.llmModel !== b.llmModel ||
     a.monthlyBudgetUsd !== b.monthlyBudgetUsd ||
     a.incrementalReview !== b.incrementalReview ||
-    a.reviewAreas !== b.reviewAreas
+    a.reviewAreas !== b.reviewAreas ||
+    a.maxConcurrentReviews !== b.maxConcurrentReviews
   );
 }

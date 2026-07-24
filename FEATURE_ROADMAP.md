@@ -39,9 +39,6 @@
 
 ### 🟥 P0 — 핵심 경쟁력 / 사용자 가치 직결
 
-1. **GitHub App 인증 (PAT 외 추가 경로)** ⬜
-   - 현재 PAT 단일 경로(`secrets.rs`는 keychain 저장만). GitHub App 설치 → 더 높은 rate limit, 조직 단위 배포, 만료 걱정 없음.
-
 2. **auto-update 서명 활성화** 🟡 (human action)
    - 코드는 완성. `tauri signer generate` → pubkey를 `tauri.conf.json`에, private key를 repo secret(`TAURI_SIGNING_PRIVATE_KEY`)+`ENABLE_UPDATES` 변수 설정 후 태그 푸시.
 
@@ -59,8 +56,8 @@
 6. **리뷰 영역 토글 (bug/style/structure/security)** ✅ (G003)
    - ✅ 구현 완료: `buildAreasSection(areas)` 부분집합 on/off + `reviewAreas` config → llm-client → UI 체크박스. 5개 테스트 통과.
 
-7. **대화형 리뷰 (Reply-to-existing-comment)** ⬜
-   - GitHub `in_reply_to` 지원. 기존 코멘트 스레드에 응답. `publisher.ts`에 `pulls.createReviewReply` 통합.
+7. **대화형 리뷰 (Reply-to-existing-comment)** ✅
+   - ✅ 구현 완료: `partitionByExisting` + `ExistingComment` id/review_id 확장 → `publishReview` auto 모드에서 `createReplyForReviewComment`로 기존 스레드에 응답(dedupe drop → reply). best-effort 실패 처리, null review_id drop, `replyToThreads` config(기본 false=현재 동작). AC2.1-2.5 + partition 테스트.
 
 ### 🟨 P2 — 운영 / 관측성 (3차 스프린트 ✅ 완료)
 
@@ -80,11 +77,9 @@
 
 13. **Quiet Hours / 스케줄 일시정지** ⬜ — 폴링은 계속, 알림/리뷰 게시 야간/주말 억제.
 
-14. **동시성 제어 (병렬 리뷰)** ⬜ — 현재 `processQueue` 순차. N개 PR 동시 리뷰 (rate limit 내). ※ 예산 게이트는 현재 직렬 큐 전제로 race-free; 동시화 시 재검토 필요.
+14. **동시성 제어 (병렬 리뷰)** ✅ — `processQueue` 직렬 → bounded lazy p-limit(N) 워커풀(`maxConcurrentReviews`, 기본 1=직렬 동일). claimNext atomic 유지 + 전용 try/catch(P2 claim-error clean-exit), reviewQueueItem try/catch 워커 내부 이동(에러 격리), `budget_concurrency_soft_limit` 경고. 예산 게이트는 ≤N review soft cap. AC3.1/3.2/3.3/3.4/3.9 테스트 통과.
 
 ### 🟩 P3 — 인증 / 보안 / 컴플라이언스
-
-15. **OAuth Device Flow (PAT 없는 온보딩)** ⬜ — 토큰 복붙 대신 브라우저 인증. Wizard UX 개선.
 
 16. **감사 로그 (Audit Log)** ⬜ — 누가 언제 approve/reject했는지, 설정 변경 이력.
 
@@ -132,12 +127,12 @@
 **3차 스프린트 (관측성) ✅ 완료**: #8 통계 대시보드 · #9 FP 피드백 루프 · #11 히스토리 검색/필터
 - migration v7 (`review_history` + `finding_feedback`) → data layer → IPC (3 events, 3 commands) → orchestrator 통합 → hooks (useReviewHistory, useStats) → UI (Monitoring 필터/차트, Pending 피드백)
 - 386/386 테스트 통과, tsc clean. 7명 executor 병렬 구현.
-- #7(대화형 리뷰, `createReviewReply`)은 P1 잔여 — publisher 확장만으로 가벼움.
+- #7(대화형 리뷰)은 4차 스프린트에서 구현 완료 — 아래 4차 스프린트 요약 참조.
 
 > 🟡 보류 2건(#2 서명활성화, #3 CI검증)은 사용자 액션만 남은 상태 — 다음 스프린트와 병행 가능.
 
-**4차 스프린트 후보 (검증 기준 잔여 최우선순위)**:
-- 🟡 **#2/#3 릴리스 파이프라인 활성화** — `tauri signer generate` 키페어 + repo secret 설정 후 `git tag` 푸시. 실사용자 배포를 여는 가장 낮은 비용·최대 효과.
-- ⬜ **#1 GitHub App 인증 (P0)** — PAT 단일 경로(`secrets.rs` keychain 저장)에 설치형 App 경로 추가. 높은 rate limit + 조직 단위 배포 + 토큰 만료 제거. 남은 P0 중 유일한 코드 작업.
-- ⬜ **#7 대화형 리뷰** — publisher에 `pulls.createReviewReply`(`in_reply_to`)만 추가하면 되는 가벼운 P1 잔여. 위 두 작업과 병행 가능.
-- ⬜ **#14 동시성 제어** — 현재 `processQueue` 직렬 전제(예산 게이트 race-free). 병렬화 시 예산 게이트 재검토가 선행 조건이므로 관측성(sprint 3) 이후가 적기.
+**4차 스프린트 (리뷰 상호작용 + 동시성) ✅ 완료**: #7 대화형 리뷰 · #14 동시성 제어 (+ GitHub 인증 #1/#15 로드맵에서 영구 제거)
+- #7(대화형 리뷰): `partitionByExisting` + `ExistingComment` id/review_id 확장 → `publishReview` auto 모드에서 `createReplyForReviewComment`로 기존 스레드 응답(dedupe drop → reply), best-effort 실패, `replyToThreads`(기본 false=현재 동작). AC2.1-2.5 + partition 테스트.
+- #14(동시성): `processQueue` 직렬 → bounded lazy p-limit(N) 워커풀(`maxConcurrentReviews`, 기본 1=직렬 동일); claimNext atomic 유지 + P2 claim-error clean-exit + 에러 격리 + `budget_concurrency_soft_limit` 경고. 예산 게이트는 ≤N review soft cap. AC3.1/3.2/3.3/3.4/3.9.
+- 411/411 테스트 통과, tsc clean. ralplan 합의(2패스) → config→daemon→shared→UI 전 레이어 구현.
+- ⚠️ `maxConcurrentReviews>1` + 월 예산 설정 시 예산은 pause-on-exceed soft cap으로 ≤N review까지 초과 가능(기본 N=1이면 추가 초과 없음).
