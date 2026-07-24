@@ -23,9 +23,9 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "PLACEHOLDER_RUN_tauri_signer_generate_AND_PASTE_PUBKEY",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlERDAzMDQ1Njk1OTNCNEUKUldST08xbHBSVERRblNIMW13MU5vVWJ2MjRqN1VKU2J1aFdWSmZPazIyeU5CRmlISlFLUklDQlAK",
       "endpoints": [
-        "https://github.com/OWNER/REPO/releases/latest/download/latest.json"
+        "https://github.com/developjik/pr-review-desk/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"
